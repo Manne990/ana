@@ -9,31 +9,41 @@ Ge ANA den centrala XNA/MonoGame-kanslan: spelkod beskriver initiering, laddning
 - Enkel game loop i C.
 - Fast 50 Hz update-loop.
 - Separata callbacks for init, load, update, draw och shutdown.
+- Enkel konfiguration av skarmstorlek, fps, fargantal och screen mode i `ANA_Game`.
 - Kontrollerad avslutning fran spelkod.
 - Grundlaggande felkoder.
 
 ## Foreslaget API
 
 ```c
+typedef struct ANA_Time {
+    int tick;
+    int fps;
+} ANA_Time;
+
+typedef enum ANA_ScreenMode {
+    ANA_SCREEN_PAL_LORES
+} ANA_ScreenMode;
+
 typedef struct ANA_Game {
     void (*init)(void);
     void (*load)(void);
-    void (*update)(void);
+    void (*update)(ANA_Time time);
     void (*draw)(void);
     void (*shutdown)(void);
+
+    int width;
+    int height;
+    int fps;
+    int colors;
+    ANA_ScreenMode screen_mode;
 } ANA_Game;
 
 int ana_run(const ANA_Game* game);
 void ana_quit(void);
 ```
 
-Senare kan `update` fa en tidsparameter om det visar sig praktiskt:
-
-```c
-void (*update)(ANA_Time time);
-```
-
-For 0.1 ar en strikt 50 Hz-loop sannolikt enklare och mer Amiga-vanlig.
+For 0.1 ar `ANA_Time` fortfarande baserad pa en strikt fixed timestep. Den finns for att gora koden tydlig och framtidssaker, inte for att introducera variabel timestep.
 
 ## Runtime-ansvar
 
@@ -42,6 +52,7 @@ For 0.1 ar en strikt 50 Hz-loop sannolikt enklare och mer Amiga-vanlig.
 - initiera ANA:s subsystem i korrekt ordning
 - anropa callbacks i korrekt ordning
 - driva update/draw-loop
+- satta upp skarm enligt `ANA_Game`-konfiguration
 - hantera quit-flagga
 - stanga ner subsystem i korrekt ordning
 - returnera felkod vid initieringsfel
@@ -70,4 +81,3 @@ Spelkoden ansvarar for:
 - `update` anropas stabilt i 50 Hz pa malprofilen.
 - Spelet kan anropa `ana_quit()` for att avsluta.
 - Runtime gor inga dolda allokeringar i den lopande `update`/`draw`-fasen.
-

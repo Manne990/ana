@@ -49,8 +49,9 @@ Kort guide med praktiska regler:
 
 - allokera inte i `update`/`draw`
 - forkonvertera assets
-- hall antal BOBs realistiskt for OCS/ECS
+- hall antal ritade images realistiskt for OCS/ECS
 - anvand palett och bitplanes medvetet
+- optimera hot paths med lag-niva C eller assembler nar ramverkets standardvag inte racker
 - mata verklig prestanda i emulator och pa hardvara nar mojligt
 
 ## Inte i 0.1

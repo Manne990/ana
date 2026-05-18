@@ -12,7 +12,7 @@ Spelet ska demonstrera:
 
 - game loop
 - input
-- BOB-rendering
+- image-rendering
 - animation
 - text/score
 - ljudeffekter
@@ -58,7 +58,8 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 
 - anvand ANA:s publika API for runtime, grafik, input, text och ljud
 - hall speciallogik i spelet, inte i ramverket
-- undvik att skriva runt ANA med direkt hardvarukod om det inte dokumenteras som en lucka
+- anvand de vanliga hog-niva API:erna i forsta hand, exempelvis `ana_draw_image` och `ana_play_sound`
+- direkt hardvarukod, egen C eller assembler far anvandas nar det ar en medveten optimering och dokumenteras som en escape hatch
 - hall state och regler tillrackligt tydliga for lasare
 
 ## Inte i 0.1
@@ -75,4 +76,3 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 - Spelet anvander ANA for de centrala systemen.
 - Spelet kanns tillrackligt komplett for en publik 0.1-demo.
 - Kodbasen fungerar som larande exempel for nya ANA-anvandare.
-

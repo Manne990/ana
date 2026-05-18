@@ -15,13 +15,13 @@ Ge ANA 0.1 tillrackligt ljudstod for korta ljudeffekter i Invaders: skott, explo
 ## Foreslaget API
 
 ```c
-typedef struct ANA_Sound ANA_Sound;
+typedef struct ANA_SoundData* ANA_Sound;
 
-ANA_Sound* ana_sound_load(const char* path);
-void ana_sound_free(ANA_Sound* sound);
-void ana_sound_play(ANA_Sound* sound);
-void ana_sound_stop_all(void);
-void ana_sound_set_volume(int volume);
+ANA_Sound ana_load_sound(const char* path);
+void ana_free_sound(ANA_Sound sound);
+void ana_play_sound(ANA_Sound sound);
+void ana_stop_all_sounds(void);
+void ana_set_sound_volume(int volume);
 ```
 
 ## Kanalstrategi
@@ -57,4 +57,3 @@ Ljudassets ska vara forkonverterade till ett runtime-vanligt format:
 - Invaders kan spela explosionsljud.
 - Enemy step/game over-ljud kan spelas utan att spelkod hanterar kanaler direkt.
 - Ljud-API:t allokerar inte i normal playback.
-

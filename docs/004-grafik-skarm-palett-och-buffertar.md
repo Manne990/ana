@@ -16,18 +16,22 @@ Gora det enkelt for spelkod att oppna en Amiga-skarm, satta palett, rensa ritbuf
 ## Foreslaget API
 
 ```c
+typedef enum ANA_ScreenMode {
+    ANA_SCREEN_PAL_LORES
+} ANA_ScreenMode;
+
 typedef struct ANA_Color {
     unsigned char r;
     unsigned char g;
     unsigned char b;
 } ANA_Color;
 
-int ana_gfx_open(void);
-void ana_gfx_close(void);
-void ana_gfx_set_palette(const ANA_Color* colors, int count);
-void ana_gfx_clear(unsigned char color_index);
-void ana_gfx_present(void);
+void ana_set_palette(const ANA_Color* colors, int count);
+void ana_clear(unsigned char color_index);
+void ana_present(void);
 ```
+
+Skarmoppning och stangning sker normalt via `ana_run` och `ANA_Game`. Lagre `ana_gfx_*`-funktioner kan finnas internt eller som advanced-API senare, men basexempel ska inte behova anropa dem.
 
 ## Buffertstrategi
 
@@ -40,8 +44,8 @@ Valet ska dokumenteras eftersom det paverkar vilka renderingstekniker exempelspe
 
 ## Prestandakrav
 
-- `ana_gfx_clear` ska vara forutsagbar och billig nog for Invaders.
-- `ana_gfx_present` ska inte gora ovantat tungt arbete.
+- `ana_clear` ska vara forutsagbar och billig nog for Invaders.
+- `ana_present` ska inte gora ovantat tungt arbete.
 - Ingen konvertering av pixeldata far ske per frame.
 
 ## Inte i 0.1
@@ -57,4 +61,3 @@ Valet ska dokumenteras eftersom det paverkar vilka renderingstekniker exempelspe
 - Paletten kan sattas och syns korrekt.
 - Skarmen kan rensas varje frame.
 - `hello` kan visa en enkel rorlig form eller bild utan flicker som stor huvudflodet.
-

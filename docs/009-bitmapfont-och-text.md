@@ -15,13 +15,13 @@ Ge ANA ett enkelt textsystem for score, high score, lives, title screen och game
 ## Foreslaget API
 
 ```c
-typedef struct ANA_Font ANA_Font;
+typedef struct ANA_FontData* ANA_Font;
 
-ANA_Font* ana_font_load(const char* path);
-void ana_font_free(ANA_Font* font);
-void ana_text_draw(ANA_Font* font, int x, int y, const char* text);
-void ana_text_draw_int(ANA_Font* font, int x, int y, int value);
-int ana_text_width(ANA_Font* font, const char* text);
+ANA_Font ana_load_font(const char* path);
+void ana_free_font(ANA_Font font);
+void ana_draw_text(ANA_Font font, int x, int y, const char* text);
+void ana_draw_int(ANA_Font font, int x, int y, int value);
+int ana_text_width(ANA_Font font, const char* text);
 ```
 
 ## Fontformat
@@ -55,4 +55,3 @@ For Invaders racker ett begransat tecken-set.
 - Invaders kan visa lives, title och game over.
 - Numeriska varden kan ritas utan att spelkod maste bygga komplex textlogik.
 - Text-rendering fungerar inom samma palett och buffertstrategi som ovrig grafik.
-

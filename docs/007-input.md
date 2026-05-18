@@ -15,20 +15,20 @@ Ge spelkod en enkel och stabil inputmodell for joystick och tangentbord, utan at
 ## Foreslaget API
 
 ```c
-typedef enum ANA_Button {
-    ANA_BUTTON_LEFT,
-    ANA_BUTTON_RIGHT,
-    ANA_BUTTON_UP,
-    ANA_BUTTON_DOWN,
-    ANA_BUTTON_FIRE,
-    ANA_BUTTON_START,
-    ANA_BUTTON_QUIT
-} ANA_Button;
+typedef enum ANA_JoyButton {
+    ANA_JOY_LEFT,
+    ANA_JOY_RIGHT,
+    ANA_JOY_UP,
+    ANA_JOY_DOWN,
+    ANA_JOY_FIRE,
+    ANA_JOY_START
+} ANA_JoyButton;
 
 void ana_input_update(void);
-int ana_input_down(ANA_Button button);
-int ana_input_pressed(ANA_Button button);
-int ana_input_released(ANA_Button button);
+int ana_joy_down(int port, ANA_JoyButton button);
+int ana_joy_pressed(int port, ANA_JoyButton button);
+int ana_joy_released(int port, ANA_JoyButton button);
+int ana_quit_requested(void);
 ```
 
 `ana_input_update` kan anropas internt av runtime-loop. Det publika API:t behover bara exponera funktionen om det ar anvandbart for tester eller specialfall.
@@ -37,12 +37,12 @@ int ana_input_released(ANA_Button button);
 
 0.1 bor definiera en standardmapping:
 
-- joystick vanster/hoger till `ANA_BUTTON_LEFT` och `ANA_BUTTON_RIGHT`
-- joystick fire till `ANA_BUTTON_FIRE`
+- joystick vanster/hoger till `ANA_JOY_LEFT` och `ANA_JOY_RIGHT`
+- joystick fire till `ANA_JOY_FIRE`
 - tangentbordspilar eller A/D som utvecklingsalternativ
 - Space eller Ctrl som fire
-- Escape som quit
-- Return som start
+- Escape som quit via `ana_quit_requested()`
+- Return som `ANA_JOY_START` i tangentbordsmappning
 
 Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 
@@ -67,4 +67,3 @@ Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 - Invaders kan testas i emulator med tangentbord.
 - `pressed` och `released` fungerar deterministiskt i 50 Hz-loop.
 - Spelkod behover inte lasa joystick- eller tangentbordshardvara direkt.
-
