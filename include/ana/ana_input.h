@@ -26,6 +26,27 @@ typedef enum ANA_InputAction {
     ANA_ACTION_4
 } ANA_InputAction;
 
+typedef enum ANA_Key {
+    ANA_KEY_UNKNOWN = 0,
+    ANA_KEY_LEFT,
+    ANA_KEY_RIGHT,
+    ANA_KEY_UP,
+    ANA_KEY_DOWN,
+    ANA_KEY_SPACE,
+    ANA_KEY_RETURN,
+    ANA_KEY_ESCAPE,
+    ANA_KEY_A,
+    ANA_KEY_D,
+    ANA_KEY_W,
+    ANA_KEY_S,
+    ANA_KEY_Z,
+    ANA_KEY_X,
+    ANA_KEY_C,
+    ANA_KEY_V,
+    ANA_KEY_CTRL,
+    ANA_KEY_COUNT
+} ANA_Key;
+
 void ana_input_update(void);
 int ana_input_direction(ANA_InputDevice device, ANA_InputDirection direction);
 int ana_input_direction_pressed(ANA_InputDevice device, ANA_InputDirection direction);
@@ -34,6 +55,18 @@ int ana_input_action(ANA_InputDevice device, ANA_InputAction action);
 int ana_input_action_pressed(ANA_InputDevice device, ANA_InputAction action);
 int ana_input_action_released(ANA_InputDevice device, ANA_InputAction action);
 int ana_quit_requested(void);
+
+void ana_input_clear_key_map(void);
+void ana_input_map_key_to_direction(
+    ANA_Key key,
+    ANA_InputDevice device,
+    ANA_InputDirection direction);
+void ana_input_map_key_to_action(
+    ANA_Key key,
+    ANA_InputDevice device,
+    ANA_InputAction action);
+void ana_input_map_key_to_quit(ANA_Key key);
+void ana_input_map_default_keys(ANA_InputDevice device);
 
 #ifdef __cplusplus
 }

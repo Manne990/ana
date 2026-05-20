@@ -21,6 +21,7 @@ unsigned char ana_gfx_draw_pixel(int x, int y);
 
 void ana_input_reset(void);
 void ana_input_set_pending_state(ANA_InputDevice device, unsigned int state);
+void ana_input_set_pending_key_state(ANA_Key key, int is_down);
 void ana_input_set_pending_quit(int requested);
 
 #endif

@@ -1,5 +1,7 @@
 #include "ana.h"
 
+#include <stdio.h>
+
 static int hello_ticks = 0;
 
 static void hello_update(ANA_Time time)
@@ -19,6 +21,7 @@ static void hello_draw(void)
 int main(void)
 {
     ANA_Game game;
+    int result;
 
     game.init = 0;
     game.load = 0;
@@ -31,6 +34,13 @@ int main(void)
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
 
-    return ana_run(&game);
-}
+    printf("ANA hello started.\n");
+    printf("Current Amiga graphics backend is still a stub.\n");
 
+    result = ana_run(&game);
+
+    printf("ANA hello finished with %s.\n", ana_result_name((ANA_Result)result));
+    printf("Type hello to run it again.\n");
+
+    return result;
+}

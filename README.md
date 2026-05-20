@@ -45,6 +45,15 @@ static ANA_Image player;
 static int player_x = 100;
 static int player_y = 80;
 
+void game_init(void) {
+    ana_input_clear_key_map();
+    ana_input_map_key_to_direction(ANA_KEY_LEFT, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
+    ana_input_map_key_to_direction(ANA_KEY_A, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
+    ana_input_map_key_to_direction(ANA_KEY_RIGHT, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
+    ana_input_map_key_to_direction(ANA_KEY_D, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
+    ana_input_map_key_to_action(ANA_KEY_SPACE, ANA_INPUT_DEVICE_0, ANA_ACTION_1);
+}
+
 void game_load(void) {
     player = ana_load_image("player.anaimg");
 }
@@ -66,6 +75,7 @@ void game_draw(void) {
 
 int main(void) {
     ANA_Game game = {
+        .init = game_init,
         .load = game_load,
         .update = game_update,
         .draw = game_draw,

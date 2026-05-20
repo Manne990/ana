@@ -47,6 +47,68 @@ static void test_action_transitions(void)
     assert(ana_input_action_released(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
 }
 
+static void test_default_keyboard_mapping(void)
+{
+    ana_input_reset();
+
+    ana_input_set_pending_key_state(ANA_KEY_LEFT, 1);
+    ana_input_set_pending_key_state(ANA_KEY_SPACE, 1);
+    ana_input_update();
+    assert(ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(ana_input_direction_pressed(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+
+    ana_input_set_pending_key_state(ANA_KEY_LEFT, 0);
+    ana_input_set_pending_key_state(ANA_KEY_SPACE, 0);
+    ana_input_update();
+    assert(!ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(ana_input_direction_released(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(!ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(ana_input_action_released(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+}
+
+static void test_custom_keyboard_mapping(void)
+{
+    ana_input_reset();
+    ana_input_clear_key_map();
+
+    ana_input_set_pending_key_state(ANA_KEY_A, 1);
+    ana_input_update();
+    assert(!ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+
+    ana_input_map_key_to_direction(ANA_KEY_A, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
+    ana_input_map_key_to_action(ANA_KEY_X, ANA_INPUT_DEVICE_0, ANA_ACTION_2);
+
+    ana_input_update();
+    assert(ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT));
+    assert(!ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_2));
+
+    ana_input_set_pending_key_state(ANA_KEY_X, 1);
+    ana_input_update();
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_2));
+    assert(ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_2));
+}
+
+static void test_keyboard_quit_mapping(void)
+{
+    ana_input_reset();
+
+    ana_input_set_pending_key_state(ANA_KEY_ESCAPE, 1);
+    ana_input_update();
+    assert(ana_quit_requested());
+
+    ana_input_reset();
+    ana_input_clear_key_map();
+    ana_input_set_pending_key_state(ANA_KEY_ESCAPE, 1);
+    ana_input_update();
+    assert(!ana_quit_requested());
+
+    ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
+    ana_input_update();
+    assert(ana_quit_requested());
+}
+
 static void test_invalid_inputs_are_safe(void)
 {
     ana_input_reset();
@@ -58,6 +120,11 @@ static void test_invalid_inputs_are_safe(void)
     assert(!ana_input_action_released((ANA_InputDevice)3, ANA_ACTION_1));
     assert(!ana_input_direction(ANA_INPUT_DEVICE_0, (ANA_InputDirection)99));
     assert(!ana_input_action(ANA_INPUT_DEVICE_0, (ANA_InputAction)99));
+
+    ana_input_map_key_to_direction(ANA_KEY_UNKNOWN, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
+    ana_input_map_key_to_action((ANA_Key)99, ANA_INPUT_DEVICE_0, ANA_ACTION_1);
+    ana_input_map_key_to_quit((ANA_Key)99);
+    ana_input_set_pending_key_state((ANA_Key)99, 1);
 }
 
 static void test_quit_request(void)
@@ -78,6 +145,9 @@ int main(void)
 {
     test_direction_transitions();
     test_action_transitions();
+    test_default_keyboard_mapping();
+    test_custom_keyboard_mapping();
+    test_keyboard_quit_mapping();
     test_invalid_inputs_are_safe();
     test_quit_request();
 
