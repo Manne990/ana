@@ -5,21 +5,34 @@
 extern "C" {
 #endif
 
-#define ANA_JOY_PORTS 2
+#define ANA_INPUT_DEVICES 2
 
-typedef enum ANA_JoyButton {
-    ANA_JOY_LEFT = 0,
-    ANA_JOY_RIGHT,
-    ANA_JOY_UP,
-    ANA_JOY_DOWN,
-    ANA_JOY_FIRE,
-    ANA_JOY_START
-} ANA_JoyButton;
+typedef enum ANA_InputDevice {
+    ANA_INPUT_DEVICE_0 = 0,
+    ANA_INPUT_DEVICE_1 = 1
+} ANA_InputDevice;
+
+typedef enum ANA_InputDirection {
+    ANA_INPUT_LEFT = 0,
+    ANA_INPUT_RIGHT,
+    ANA_INPUT_UP,
+    ANA_INPUT_DOWN
+} ANA_InputDirection;
+
+typedef enum ANA_InputAction {
+    ANA_ACTION_1 = 0,
+    ANA_ACTION_2,
+    ANA_ACTION_3,
+    ANA_ACTION_4
+} ANA_InputAction;
 
 void ana_input_update(void);
-int ana_joy_down(int port, ANA_JoyButton button);
-int ana_joy_pressed(int port, ANA_JoyButton button);
-int ana_joy_released(int port, ANA_JoyButton button);
+int ana_input_direction(ANA_InputDevice device, ANA_InputDirection direction);
+int ana_input_direction_pressed(ANA_InputDevice device, ANA_InputDirection direction);
+int ana_input_direction_released(ANA_InputDevice device, ANA_InputDirection direction);
+int ana_input_action(ANA_InputDevice device, ANA_InputAction action);
+int ana_input_action_pressed(ANA_InputDevice device, ANA_InputAction action);
+int ana_input_action_released(ANA_InputDevice device, ANA_InputAction action);
 int ana_quit_requested(void);
 
 #ifdef __cplusplus
@@ -27,4 +40,3 @@ int ana_quit_requested(void);
 #endif
 
 #endif
-

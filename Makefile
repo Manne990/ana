@@ -1,10 +1,17 @@
 CC ?= cc
 AR ?= ar
+AMIGA_CC ?= m68k-amigaos-gcc
+AMIGA_AR ?= m68k-amigaos-ar
+ADFTOOL ?= gadf
 RM = rm -rf
 
 CFLAGS ?= -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc
 LDFLAGS ?=
+AMIGA_CFLAGS ?= -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc -m68000
+AMIGA_LDFLAGS ?= -mcrt=nix13
 BUILD_DIR ?= build
+AMIGA_BUILD_DIR ?= $(BUILD_DIR)/amiga
+ADF_DIR ?= $(BUILD_DIR)/adf
 
 ANA_SRCS := \
 	src/core/ana_core.c \
@@ -27,7 +34,18 @@ EXAMPLE_BINS := \
 
 TOOL_BINS := $(BUILD_DIR)/tools/ana-convert/ana-convert
 
-.PHONY: all lib examples tools test clean
+AMIGA_OBJS := $(ANA_SRCS:%.c=$(AMIGA_BUILD_DIR)/%.o)
+AMIGA_LIBANA := $(AMIGA_BUILD_DIR)/libana.a
+
+AMIGA_EXAMPLE_BINS := \
+	$(AMIGA_BUILD_DIR)/examples/hello/hello \
+	$(AMIGA_BUILD_DIR)/examples/invaders/invaders
+
+ADF_FILES := \
+	$(ADF_DIR)/hello.adf \
+	$(ADF_DIR)/invaders.adf
+
+.PHONY: all lib examples tools test amiga-lib amiga-examples adfs clean
 
 all: lib examples tools
 
@@ -36,6 +54,12 @@ lib: $(LIBANA)
 examples: $(EXAMPLE_BINS)
 
 tools: $(TOOL_BINS)
+
+amiga-lib: $(AMIGA_LIBANA)
+
+amiga-examples: $(AMIGA_EXAMPLE_BINS)
+
+adfs: $(ADF_FILES)
 
 $(LIBANA): $(ANA_OBJS)
 	mkdir -p $(@D)
@@ -56,6 +80,30 @@ $(BUILD_DIR)/examples/invaders/invaders: examples/invaders/main.c $(LIBANA)
 $(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c $(LIBANA)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
+
+$(AMIGA_LIBANA): $(AMIGA_OBJS)
+	mkdir -p $(@D)
+	$(AMIGA_AR) rcs $@ $^
+
+$(AMIGA_BUILD_DIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_CFLAGS) -c $< -o $@
+
+$(AMIGA_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_LIBANA)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_CFLAGS) $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
+$(AMIGA_BUILD_DIR)/examples/invaders/invaders: examples/invaders/main.c $(AMIGA_LIBANA)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_CFLAGS) $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
+$(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l ANAHello
+
+$(ADF_DIR)/invaders.adf: $(AMIGA_BUILD_DIR)/examples/invaders/invaders
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l ANAInvaders
 
 $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)

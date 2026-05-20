@@ -1,6 +1,6 @@
 .DS_Store
 build/
+*.adf
 *.a
 *.o
 *.out
-

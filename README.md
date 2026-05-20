@@ -50,11 +50,11 @@ void game_load(void) {
 }
 
 void game_update(ANA_Time time) {
-    if (ana_joy_down(0, ANA_JOY_RIGHT)) {
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
         player_x++;
     }
 
-    if (ana_joy_down(0, ANA_JOY_LEFT)) {
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT)) {
         player_x--;
     }
 }
@@ -116,6 +116,15 @@ make test
 This builds `libana.a`, the host-side `ana-convert` placeholder, and the current example programs under `build/`.
 
 The CI pipeline builds and tests the code as strict C89 with both GCC and Clang.
+
+The CI pipeline also builds Amiga-targeted example executables and packages them as ADF images. Download the `ana-example-adfs` artifact from a successful workflow run to try the current examples in an emulator.
+
+For local ADF builds you need `m68k-amigaos-gcc`, `m68k-amigaos-ar`, and `gadf` available on your path:
+
+```sh
+make amiga-examples
+make adfs
+```
 
 ## License
 

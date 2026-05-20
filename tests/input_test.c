@@ -3,37 +3,61 @@
 
 #include <assert.h>
 
-static void test_joy_transitions(void)
+static void test_direction_transitions(void)
 {
     ana_input_reset();
 
-    ana_input_set_pending_joy_state(0, ANA_INPUT_JOY_LEFT_MASK);
+    ana_input_set_pending_state(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT_MASK);
     ana_input_update();
-    assert(ana_joy_down(0, ANA_JOY_LEFT));
-    assert(ana_joy_pressed(0, ANA_JOY_LEFT));
-    assert(!ana_joy_released(0, ANA_JOY_LEFT));
+    assert(ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(ana_input_direction_pressed(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(!ana_input_direction_released(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
 
     ana_input_update();
-    assert(ana_joy_down(0, ANA_JOY_LEFT));
-    assert(!ana_joy_pressed(0, ANA_JOY_LEFT));
-    assert(!ana_joy_released(0, ANA_JOY_LEFT));
+    assert(ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(!ana_input_direction_pressed(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(!ana_input_direction_released(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
 
-    ana_input_set_pending_joy_state(0, 0u);
+    ana_input_set_pending_state(ANA_INPUT_DEVICE_0, 0u);
     ana_input_update();
-    assert(!ana_joy_down(0, ANA_JOY_LEFT));
-    assert(!ana_joy_pressed(0, ANA_JOY_LEFT));
-    assert(ana_joy_released(0, ANA_JOY_LEFT));
+    assert(!ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(!ana_input_direction_pressed(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+    assert(ana_input_direction_released(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT));
+}
+
+static void test_action_transitions(void)
+{
+    ana_input_reset();
+
+    ana_input_set_pending_state(ANA_INPUT_DEVICE_0, ANA_ACTION_1_MASK);
+    ana_input_update();
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(!ana_input_action_released(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+
+    ana_input_update();
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(!ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(!ana_input_action_released(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+
+    ana_input_set_pending_state(ANA_INPUT_DEVICE_0, 0u);
+    ana_input_update();
+    assert(!ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(!ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(ana_input_action_released(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
 }
 
 static void test_invalid_inputs_are_safe(void)
 {
     ana_input_reset();
-    ana_input_set_pending_joy_state(3, ANA_INPUT_JOY_FIRE_MASK);
+    ana_input_set_pending_state((ANA_InputDevice)3, ANA_ACTION_1_MASK);
     ana_input_update();
 
-    assert(!ana_joy_down(3, ANA_JOY_FIRE));
-    assert(!ana_joy_pressed(3, ANA_JOY_FIRE));
-    assert(!ana_joy_released(3, ANA_JOY_FIRE));
+    assert(!ana_input_action((ANA_InputDevice)3, ANA_ACTION_1));
+    assert(!ana_input_action_pressed((ANA_InputDevice)3, ANA_ACTION_1));
+    assert(!ana_input_action_released((ANA_InputDevice)3, ANA_ACTION_1));
+    assert(!ana_input_direction(ANA_INPUT_DEVICE_0, (ANA_InputDirection)99));
+    assert(!ana_input_action(ANA_INPUT_DEVICE_0, (ANA_InputAction)99));
 }
 
 static void test_quit_request(void)
@@ -52,10 +76,10 @@ static void test_quit_request(void)
 
 int main(void)
 {
-    test_joy_transitions();
+    test_direction_transitions();
+    test_action_transitions();
     test_invalid_inputs_are_safe();
     test_quit_request();
 
     return 0;
 }
-

@@ -2,47 +2,64 @@
 
 ## Syfte
 
-Ge spelkod en enkel och stabil inputmodell for joystick och tangentbord, utan att varje spel laser Amiga-hardvara direkt.
+Ge spelkod en enkel och stabil inputmodell for joystick, gamepad och tangentbord, utan att varje spel laser hardvara direkt.
 
 ## Mal for 0.1
 
-- Joystickstyrning for Invaders.
+- Joystick- eller gamepadstyrning for Invaders.
 - Tangentbordsstyrning for emulator och utveckling.
 - Current/down-state.
 - Pressed/released-state per frame.
-- Enkel knappmodell som passar actionspel.
+- Enkel kontrollmodell som passar actionspel.
 
 ## Foreslaget API
 
 ```c
-typedef enum ANA_JoyButton {
-    ANA_JOY_LEFT,
-    ANA_JOY_RIGHT,
-    ANA_JOY_UP,
-    ANA_JOY_DOWN,
-    ANA_JOY_FIRE,
-    ANA_JOY_START
-} ANA_JoyButton;
+typedef enum ANA_InputDevice {
+    ANA_INPUT_DEVICE_0,
+    ANA_INPUT_DEVICE_1
+} ANA_InputDevice;
+
+typedef enum ANA_InputDirection {
+    ANA_INPUT_LEFT,
+    ANA_INPUT_RIGHT,
+    ANA_INPUT_UP,
+    ANA_INPUT_DOWN
+} ANA_InputDirection;
+
+typedef enum ANA_InputAction {
+    ANA_ACTION_1,
+    ANA_ACTION_2,
+    ANA_ACTION_3,
+    ANA_ACTION_4
+} ANA_InputAction;
 
 void ana_input_update(void);
-int ana_joy_down(int port, ANA_JoyButton button);
-int ana_joy_pressed(int port, ANA_JoyButton button);
-int ana_joy_released(int port, ANA_JoyButton button);
+int ana_input_direction(ANA_InputDevice device, ANA_InputDirection direction);
+int ana_input_direction_pressed(ANA_InputDevice device, ANA_InputDirection direction);
+int ana_input_direction_released(ANA_InputDevice device, ANA_InputDirection direction);
+int ana_input_action(ANA_InputDevice device, ANA_InputAction action);
+int ana_input_action_pressed(ANA_InputDevice device, ANA_InputAction action);
+int ana_input_action_released(ANA_InputDevice device, ANA_InputAction action);
 int ana_quit_requested(void);
 ```
 
 `ana_input_update` kan anropas internt av runtime-loop. Det publika API:t behover bara exponera funktionen om det ar anvandbart for tester eller specialfall.
 
+`ANA_InputDirection` beskriver digitala riktningar. `ANA_INPUT_LEFT` kan komma fran en klassisk joystick-riktning, en gamepad-dpad, en analog stick som oversatts till digital riktning eller tangentbordsmappning.
+
+`ANA_InputAction` beskriver ovriga actionknappar. Pa en klassisk Amiga-joystick mappar fire normalt till `ANA_ACTION_1`. Gamepads kan senare mappa fler knappar till `ANA_ACTION_2`, `ANA_ACTION_3` och `ANA_ACTION_4`.
+
 ## Standardmapping
 
 0.1 bor definiera en standardmapping:
 
-- joystick vanster/hoger till `ANA_JOY_LEFT` och `ANA_JOY_RIGHT`
-- joystick fire till `ANA_JOY_FIRE`
+- joystick/gamepad vanster/hoger till `ANA_INPUT_LEFT` och `ANA_INPUT_RIGHT`
+- joystick fire eller gamepad primary button till `ANA_ACTION_1`
 - tangentbordspilar eller A/D som utvecklingsalternativ
-- Space eller Ctrl som fire
+- Space eller Ctrl som `ANA_ACTION_1`
 - Escape som quit via `ana_quit_requested()`
-- Return som `ANA_JOY_START` i tangentbordsmappning
+- Return kan senare mappas till en action, exempelvis `ANA_ACTION_4`
 
 Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 
@@ -63,7 +80,7 @@ Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 
 ## Acceptanskriterier
 
-- Invaders kan spelas med joystick.
+- Invaders kan spelas med joystick eller gamepad dar plattformen stoder det.
 - Invaders kan testas i emulator med tangentbord.
 - `pressed` och `released` fungerar deterministiskt i 50 Hz-loop.
-- Spelkod behover inte lasa joystick- eller tangentbordshardvara direkt.
+- Spelkod behover inte lasa joystick-, gamepad- eller tangentbordshardvara direkt.

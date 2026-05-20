@@ -7,11 +7,11 @@ static void invaders_update(ANA_Time time)
 {
     demo_ticks = time.tick;
 
-    if (ana_joy_down(0, ANA_JOY_LEFT)) {
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT)) {
         player_x--;
     }
 
-    if (ana_joy_down(0, ANA_JOY_RIGHT)) {
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
         player_x++;
     }
 
@@ -45,4 +45,3 @@ int main(void)
 
     return ana_run(&game);
 }
-

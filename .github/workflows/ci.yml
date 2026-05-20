@@ -38,3 +38,38 @@ jobs:
 
       - name: Run tests
         run: make test CC=${{ matrix.compiler }}
+
+  amiga-adfs:
+    name: Amiga example ADFs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install ADF builder
+        run: go install github.com/sphair/gadf/cmd/gadf@v1.0.0
+
+      - name: Build Amiga examples
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/work" \
+            -w /work \
+            amigadev/crosstools:m68k-amigaos-gcc10_amd64 \
+            make clean amiga-examples
+
+      - name: Build ADF images
+        run: make adfs ADFTOOL="$HOME/go/bin/gadf"
+
+      - name: Upload ADF artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ana-example-adfs
+          path: build/adf/*.adf
+          if-no-files-found: error
