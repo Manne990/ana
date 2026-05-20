@@ -125,7 +125,7 @@ make test
 
 This builds `libana.a`, the host-side `ana-convert` placeholder, and the current example programs under `build/`.
 
-The CI pipeline builds and tests the code as strict C89 with both GCC and Clang.
+The CI pipeline builds and tests the host code as strict C89 with both GCC and Clang. The Amiga-target build uses GNU89 mode because the m68k Amiga toolchain headers use GCC extensions.
 
 The CI pipeline also builds Amiga-targeted example executables and packages them as ADF images. Download the `ana-example-adfs` artifact from a successful workflow run to try the current examples in an emulator.
 
