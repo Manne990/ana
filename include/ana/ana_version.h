@@ -1,0 +1,10 @@
+#ifndef ANA_VERSION_H
+#define ANA_VERSION_H
+
+#define ANA_VERSION_MAJOR 0
+#define ANA_VERSION_MINOR 1
+#define ANA_VERSION_PATCH 0
+#define ANA_VERSION_STRING "0.1.0-dev"
+
+#endif
+

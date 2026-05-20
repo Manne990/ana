@@ -1,0 +1,43 @@
+#ifndef ANA_PLATFORM_H
+#define ANA_PLATFORM_H
+
+#include "ana_result.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define ANA_DEFAULT_WIDTH 320
+#define ANA_DEFAULT_HEIGHT 256
+#define ANA_DEFAULT_FPS 50
+#define ANA_DEFAULT_COLORS 16
+#define ANA_DEFAULT_BITPLANES 4
+
+#define ANA_TARGET_OCS 0x01u
+#define ANA_TARGET_ECS 0x02u
+#define ANA_TARGET_OCS_ECS (ANA_TARGET_OCS | ANA_TARGET_ECS)
+
+typedef enum ANA_ScreenMode {
+    ANA_SCREEN_PAL_LORES = 1
+} ANA_ScreenMode;
+
+typedef struct ANA_Profile {
+    int width;
+    int height;
+    int fps;
+    int colors;
+    int bitplanes;
+    ANA_ScreenMode screen_mode;
+    unsigned int target_flags;
+} ANA_Profile;
+
+const ANA_Profile* ana_default_profile(void);
+ANA_Result ana_validate_profile(const ANA_Profile* profile);
+int ana_profile_is_supported(const ANA_Profile* profile);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+
