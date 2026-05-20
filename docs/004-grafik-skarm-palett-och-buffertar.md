@@ -42,6 +42,22 @@ Skarmoppning och stangning sker normalt via `ana_run` och `ANA_Game`. Lagre `ana
 
 Valet ska dokumenteras eftersom det paverkar vilka renderingstekniker exempelspelen bor anvanda.
 
+## Implementerad Amiga-backend
+
+Amiga-bygget anvander en Intuition custom screen i PAL lores:
+
+- 320x256
+- 4 bitplanes / 16 farger
+- en borderless window ovanpa screenen for raw-key input
+- `WaitTOF()` i `ana_present`
+- defaultpalett sa `ana_clear` syns aven utan explicit palett
+- software-present fran ANA:s draw-buffer till screenens bitplanes
+
+Den publika spelkoden ritar fortfarande med `ana_clear` och `ana_draw_image`.
+Den forsta backend-implementationen prioriterar korrekt synlig output och enkel
+debuggning. Direktritning till planar buffers eller blitteroptimerade paths kan
+laggas under samma API nar vi borjar pressa Invaders-prestanda.
+
 ## Prestandakrav
 
 - `ana_clear` ska vara forutsagbar och billig nog for Invaders.

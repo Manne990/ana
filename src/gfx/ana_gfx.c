@@ -7,6 +7,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef ANA_TARGET_AMIGA
+#include <exec/types.h>
+#include <graphics/gfx.h>
+#include <graphics/gfxbase.h>
+#include <graphics/view.h>
+#include <intuition/intuition.h>
+#include <intuition/intuitionbase.h>
+#include <proto/exec.h>
+#include <proto/graphics.h>
+#include <proto/intuition.h>
+#endif
+
 #define ANA_FRAMEBUFFER_PIXELS (ANA_DEFAULT_WIDTH * ANA_DEFAULT_HEIGHT)
 #define ANA_FRAMEBUFFER_COUNT 2
 #define ANA_IMAGE_HEADER_SIZE 20
@@ -15,12 +27,66 @@
 #define ANA_IMAGE_MAX_HEIGHT ANA_DEFAULT_HEIGHT
 #define ANA_IMAGE_MAX_FRAMES 256
 
+#ifdef ANA_TARGET_AMIGA
+#ifdef BORDERLESS
+#define ANA_AMIGA_WINDOW_BORDERLESS BORDERLESS
+#else
+#define ANA_AMIGA_WINDOW_BORDERLESS WFLG_BORDERLESS
+#endif
+
+#ifdef ACTIVATE
+#define ANA_AMIGA_WINDOW_ACTIVATE ACTIVATE
+#else
+#define ANA_AMIGA_WINDOW_ACTIVATE WFLG_ACTIVATE
+#endif
+
+#ifdef RMBTRAP
+#define ANA_AMIGA_WINDOW_RMBTRAP RMBTRAP
+#else
+#define ANA_AMIGA_WINDOW_RMBTRAP WFLG_RMBTRAP
+#endif
+
+#ifdef SIMPLE_REFRESH
+#define ANA_AMIGA_WINDOW_REFRESH SIMPLE_REFRESH
+#else
+#define ANA_AMIGA_WINDOW_REFRESH WFLG_SIMPLE_REFRESH
+#endif
+#endif
+
 static unsigned char ana_framebuffers[ANA_FRAMEBUFFER_COUNT][ANA_FRAMEBUFFER_PIXELS];
 static ANA_Color ana_palette[ANA_DEFAULT_COLORS];
 static int ana_gfx_opened = 0;
 static int ana_draw_buffer = 0;
 static int ana_front_buffer = 1;
 static int ana_presented_frames = 0;
+
+static const ANA_Color ana_default_palette[ANA_DEFAULT_COLORS] = {
+    { 0, 0, 0 },
+    { 255, 255, 255 },
+    { 255, 0, 0 },
+    { 0, 255, 0 },
+    { 0, 0, 255 },
+    { 255, 255, 0 },
+    { 0, 255, 255 },
+    { 255, 0, 255 },
+    { 136, 136, 136 },
+    { 68, 68, 68 },
+    { 255, 136, 0 },
+    { 136, 255, 0 },
+    { 0, 136, 255 },
+    { 136, 0, 255 },
+    { 255, 136, 136 },
+    { 136, 255, 255 }
+};
+
+#ifdef ANA_TARGET_AMIGA
+struct GfxBase* GfxBase = NULL;
+struct IntuitionBase* IntuitionBase = NULL;
+
+static struct Screen* ana_amiga_screen = NULL;
+static struct Window* ana_amiga_window = NULL;
+static unsigned short ana_amiga_rgb4[ANA_DEFAULT_COLORS];
+#endif
 
 struct ANA_ImageData {
     int width;
@@ -180,6 +246,223 @@ static int ana_image_compute_sizes(ANA_Image image)
         image->data_size > 0L;
 }
 
+static void ana_gfx_load_default_palette(void)
+{
+    int i;
+
+    for (i = 0; i < ANA_DEFAULT_COLORS; i++) {
+        ana_palette[i] = ana_default_palette[i];
+    }
+}
+
+#ifdef ANA_TARGET_AMIGA
+static unsigned short ana_amiga_color_to_rgb4(ANA_Color color)
+{
+    unsigned short r;
+    unsigned short g;
+    unsigned short b;
+
+    r = (unsigned short)((color.r >> 4) & 0x0f);
+    g = (unsigned short)((color.g >> 4) & 0x0f);
+    b = (unsigned short)((color.b >> 4) & 0x0f);
+
+    return (unsigned short)((r << 8) | (g << 4) | b);
+}
+
+static void ana_amiga_apply_palette(void)
+{
+    int i;
+
+    if (ana_amiga_screen == NULL) {
+        return;
+    }
+
+    for (i = 0; i < ANA_DEFAULT_COLORS; i++) {
+        ana_amiga_rgb4[i] = ana_amiga_color_to_rgb4(ana_palette[i]);
+    }
+
+    LoadRGB4(&ana_amiga_screen->ViewPort, ana_amiga_rgb4, ANA_DEFAULT_COLORS);
+}
+
+static int ana_amiga_open_libraries(void)
+{
+    if (GfxBase == NULL) {
+        GfxBase = (struct GfxBase*)OpenLibrary(
+            (const unsigned char*)"graphics.library",
+            0L);
+    }
+
+    if (IntuitionBase == NULL) {
+        IntuitionBase =
+            (struct IntuitionBase*)OpenLibrary(
+                (const unsigned char*)"intuition.library",
+                0L);
+    }
+
+    return GfxBase != NULL && IntuitionBase != NULL;
+}
+
+static void ana_amiga_close_libraries(void)
+{
+    if (IntuitionBase != NULL) {
+        CloseLibrary((struct Library*)IntuitionBase);
+        IntuitionBase = NULL;
+    }
+
+    if (GfxBase != NULL) {
+        CloseLibrary((struct Library*)GfxBase);
+        GfxBase = NULL;
+    }
+}
+
+static int ana_amiga_open_window(void)
+{
+    struct NewWindow window;
+
+    memset(&window, 0, sizeof(window));
+
+    window.LeftEdge = 0;
+    window.TopEdge = 0;
+    window.Width = ANA_DEFAULT_WIDTH;
+    window.Height = ANA_DEFAULT_HEIGHT;
+    window.DetailPen = 0;
+    window.BlockPen = 1;
+    window.IDCMPFlags = IDCMP_RAWKEY;
+    window.Flags = ANA_AMIGA_WINDOW_BORDERLESS |
+        ANA_AMIGA_WINDOW_ACTIVATE |
+        ANA_AMIGA_WINDOW_RMBTRAP |
+        ANA_AMIGA_WINDOW_REFRESH;
+    window.Screen = ana_amiga_screen;
+    window.Type = CUSTOMSCREEN;
+
+    ana_amiga_window = OpenWindow(&window);
+    if (ana_amiga_window == NULL) {
+        return 0;
+    }
+
+    ActivateWindow(ana_amiga_window);
+    return 1;
+}
+
+static int ana_amiga_open_display(void)
+{
+    struct NewScreen screen;
+
+    if (!ana_amiga_open_libraries()) {
+        ana_amiga_close_libraries();
+        return 0;
+    }
+
+    memset(&screen, 0, sizeof(screen));
+
+    screen.LeftEdge = 0;
+    screen.TopEdge = 0;
+    screen.Width = ANA_DEFAULT_WIDTH;
+    screen.Height = ANA_DEFAULT_HEIGHT;
+    screen.Depth = ANA_DEFAULT_BITPLANES;
+    screen.DetailPen = 0;
+    screen.BlockPen = 1;
+    screen.ViewModes = 0;
+    screen.Type = CUSTOMSCREEN;
+    screen.DefaultTitle = (unsigned char*)"ANA";
+
+    ana_amiga_screen = OpenScreen(&screen);
+    if (ana_amiga_screen == NULL) {
+        ana_amiga_close_libraries();
+        return 0;
+    }
+
+    ana_amiga_apply_palette();
+
+    if (!ana_amiga_open_window()) {
+        CloseScreen(ana_amiga_screen);
+        ana_amiga_screen = NULL;
+        ana_amiga_close_libraries();
+        return 0;
+    }
+
+    ScreenToFront(ana_amiga_screen);
+    return 1;
+}
+
+static void ana_amiga_close_display(void)
+{
+    if (ana_amiga_window != NULL) {
+        CloseWindow(ana_amiga_window);
+        ana_amiga_window = NULL;
+    }
+
+    if (ana_amiga_screen != NULL) {
+        CloseScreen(ana_amiga_screen);
+        ana_amiga_screen = NULL;
+    }
+
+    ana_amiga_close_libraries();
+}
+
+static void ana_amiga_copy_chunky_to_bitplanes(const unsigned char* chunky)
+{
+    struct BitMap* bitmap;
+    int y;
+    int byte_x;
+    int bit;
+    int plane;
+    int pixel_x;
+    int color;
+    unsigned char plane_bytes[ANA_DEFAULT_BITPLANES];
+    unsigned long row_offset;
+
+    if (ana_amiga_screen == NULL || chunky == NULL) {
+        return;
+    }
+
+    bitmap = ana_amiga_screen->RastPort.BitMap;
+    if (bitmap == NULL) {
+        return;
+    }
+
+    for (y = 0; y < ANA_DEFAULT_HEIGHT; y++) {
+        row_offset = (unsigned long)y * bitmap->BytesPerRow;
+
+        for (byte_x = 0; byte_x < ANA_DEFAULT_WIDTH / 8; byte_x++) {
+            for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+                plane_bytes[plane] = 0u;
+            }
+
+            for (bit = 0; bit < 8; bit++) {
+                pixel_x = (byte_x * 8) + bit;
+                color = chunky[(y * ANA_DEFAULT_WIDTH) + pixel_x] & 0x0f;
+
+                for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+                    if ((color & (1 << plane)) != 0) {
+                        plane_bytes[plane] = (unsigned char)(
+                            plane_bytes[plane] | (1u << (7 - bit)));
+                    }
+                }
+            }
+
+            for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+                if (bitmap->Planes[plane] != NULL) {
+                    ((unsigned char*)bitmap->Planes[plane])
+                        [row_offset + (unsigned long)byte_x] =
+                        plane_bytes[plane];
+                }
+            }
+        }
+    }
+}
+
+static void ana_amiga_present_buffer(const unsigned char* chunky)
+{
+    if (ana_amiga_screen == NULL) {
+        return;
+    }
+
+    WaitTOF();
+    ana_amiga_copy_chunky_to_bitplanes(chunky);
+}
+#endif
+
 ANA_Result ana_gfx_open(const ANA_Profile* profile)
 {
     ANA_Result result;
@@ -190,12 +473,19 @@ ANA_Result ana_gfx_open(const ANA_Profile* profile)
     }
 
     memset(ana_framebuffers, 0, sizeof(ana_framebuffers));
-    memset(ana_palette, 0, sizeof(ana_palette));
+    ana_gfx_load_default_palette();
 
     ana_gfx_opened = 1;
     ana_draw_buffer = 0;
     ana_front_buffer = 1;
     ana_presented_frames = 0;
+
+#ifdef ANA_TARGET_AMIGA
+    if (!ana_amiga_open_display()) {
+        ana_gfx_opened = 0;
+        return ANA_ERROR_NOT_IMPLEMENTED;
+    }
+#endif
 
     return ANA_OK;
 }
@@ -380,6 +670,10 @@ int ana_image_frame_count(ANA_Image image)
 
 void ana_gfx_close(void)
 {
+#ifdef ANA_TARGET_AMIGA
+    ana_amiga_close_display();
+#endif
+
     ana_gfx_opened = 0;
     ana_presented_frames = 0;
 }
@@ -404,6 +698,10 @@ void ana_set_palette(const ANA_Color* colors, int count)
     for (i = 0; i < count; i++) {
         ana_palette[i] = colors[i];
     }
+
+#ifdef ANA_TARGET_AMIGA
+    ana_amiga_apply_palette();
+#endif
 }
 
 void ana_clear(unsigned char color_index)
@@ -428,6 +726,10 @@ void ana_present(void)
     ana_front_buffer = ana_draw_buffer;
     ana_draw_buffer = previous_front;
     ana_presented_frames++;
+
+#ifdef ANA_TARGET_AMIGA
+    ana_amiga_present_buffer(ana_framebuffers[ana_front_buffer]);
+#endif
 }
 
 int ana_gfx_present_count(void)
@@ -459,4 +761,13 @@ unsigned char ana_gfx_draw_pixel(int x, int y)
     }
 
     return ana_framebuffers[ana_draw_buffer][(y * ANA_DEFAULT_WIDTH) + x];
+}
+
+void* ana_gfx_native_window(void)
+{
+#ifdef ANA_TARGET_AMIGA
+    return ana_amiga_window;
+#else
+    return NULL;
+#endif
 }

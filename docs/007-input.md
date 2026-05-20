@@ -98,6 +98,24 @@ ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
 
 Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 
+## Implementerad Amiga-backend
+
+Amiga-bygget oppnar ett borderless window pa ANA-screenen och laser
+`IDCMP_RAWKEY` varje frame. Raw key events uppdaterar samma key-state som
+host/test-backenden, sa spelets mapping fungerar likadant:
+
+- cursor left/right/up/down
+- A/D/W/S
+- Space
+- Return
+- Escape
+- Z/X/C/V
+- Ctrl
+
+Joystick/gamepad ligger fortfarande pa samma direction/action-API, men den
+forsta hardvarubackenden ar tangentbordet eftersom det gor emulator-testning
+direkt mojlig.
+
 ## Prestanda och beteende
 
 - Input-state ska uppdateras en gang per frame.

@@ -2,6 +2,16 @@
 
 #include "ana_internal.h"
 
+#ifdef ANA_TARGET_AMIGA
+#include <exec/types.h>
+#include <intuition/intuition.h>
+#include <proto/exec.h>
+#endif
+
+#ifdef ANA_TARGET_AMIGA
+#define ANA_AMIGA_RAWKEY_RELEASE 0x80
+#endif
+
 static unsigned int ana_current_input[ANA_INPUT_DEVICES];
 static unsigned int ana_previous_input[ANA_INPUT_DEVICES];
 static unsigned int ana_pending_input[ANA_INPUT_DEVICES];
@@ -113,6 +123,80 @@ static int ana_input_mapped_quit_requested(void)
     return 0;
 }
 
+#ifdef ANA_TARGET_AMIGA
+static ANA_Key ana_amiga_key_from_raw_code(int code)
+{
+    switch (code) {
+    case 0x4f:
+        return ANA_KEY_LEFT;
+    case 0x4e:
+        return ANA_KEY_RIGHT;
+    case 0x4c:
+        return ANA_KEY_UP;
+    case 0x4d:
+        return ANA_KEY_DOWN;
+    case 0x40:
+        return ANA_KEY_SPACE;
+    case 0x44:
+        return ANA_KEY_RETURN;
+    case 0x45:
+        return ANA_KEY_ESCAPE;
+    case 0x20:
+        return ANA_KEY_A;
+    case 0x22:
+        return ANA_KEY_D;
+    case 0x11:
+        return ANA_KEY_W;
+    case 0x21:
+        return ANA_KEY_S;
+    case 0x31:
+        return ANA_KEY_Z;
+    case 0x32:
+        return ANA_KEY_X;
+    case 0x33:
+        return ANA_KEY_C;
+    case 0x34:
+        return ANA_KEY_V;
+    case 0x63:
+        return ANA_KEY_CTRL;
+    default:
+        return ANA_KEY_UNKNOWN;
+    }
+}
+
+static void ana_input_poll_backend(void)
+{
+    struct Window* window;
+    struct IntuiMessage* message;
+    ANA_Key key;
+    int code;
+    int is_down;
+
+    window = (struct Window*)ana_gfx_native_window();
+    if (window == NULL || window->UserPort == NULL) {
+        return;
+    }
+
+    while ((message = (struct IntuiMessage*)GetMsg(window->UserPort)) != NULL) {
+        if (message->Class == IDCMP_RAWKEY) {
+            code = (int)(message->Code & 0x7f);
+            is_down = (message->Code & ANA_AMIGA_RAWKEY_RELEASE) == 0;
+            key = ana_amiga_key_from_raw_code(code);
+
+            if (ana_valid_key(key)) {
+                ana_pending_key_state[key] = is_down;
+            }
+        }
+
+        ReplyMsg((struct Message*)message);
+    }
+}
+#else
+static void ana_input_poll_backend(void)
+{
+}
+#endif
+
 void ana_input_reset(void)
 {
     int i;
@@ -137,6 +221,8 @@ void ana_input_reset(void)
 void ana_input_update(void)
 {
     int i;
+
+    ana_input_poll_backend();
 
     for (i = 0; i < ANA_INPUT_DEVICES; i++) {
         ana_previous_input[i] = ana_current_input[i];

@@ -32,7 +32,7 @@ static void invaders_update(ANA_Time time)
         ana_quit();
     }
 
-    if (time.tick >= 50) {
+    if (time.tick >= 250) {
         ana_quit();
     }
 }
@@ -63,8 +63,7 @@ int main(void)
 
     printf("ANA invaders started.\n");
     printf("Keyboard mapping: cursor/A-D movement, Space action, Esc quit.\n");
-    printf("Current Amiga graphics and keyboard backends are still stubs.\n");
-    printf("Running a short game-loop smoke test...\n");
+    printf("Opening ANA PAL lores screen for a visible smoke test.\n");
 
     result = ana_run(&game);
 

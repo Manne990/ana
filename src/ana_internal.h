@@ -18,6 +18,7 @@ int ana_gfx_is_open(void);
 int ana_gfx_present_count(void);
 unsigned char ana_gfx_front_pixel(int x, int y);
 unsigned char ana_gfx_draw_pixel(int x, int y);
+void* ana_gfx_native_window(void);
 
 void ana_input_reset(void);
 void ana_input_set_pending_state(ANA_InputDevice device, unsigned int state);

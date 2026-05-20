@@ -8,7 +8,7 @@ static void hello_update(ANA_Time time)
 {
     hello_ticks = time.tick;
 
-    if (time.tick >= 2) {
+    if (time.tick >= 250) {
         ana_quit();
     }
 }
@@ -35,7 +35,7 @@ int main(void)
     game.screen_mode = ANA_SCREEN_PAL_LORES;
 
     printf("ANA hello started.\n");
-    printf("Current Amiga graphics backend is still a stub.\n");
+    printf("Opening ANA PAL lores screen for about five seconds.\n");
 
     result = ana_run(&game);
 
