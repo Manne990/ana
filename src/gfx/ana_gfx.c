@@ -85,7 +85,12 @@ struct IntuitionBase* IntuitionBase = NULL;
 
 static struct Screen* ana_amiga_screen = NULL;
 static struct Window* ana_amiga_window = NULL;
+static struct BitMap ana_amiga_hidden_bitmap;
+static struct BitMap* ana_amiga_original_bitmap = NULL;
+static struct BitMap* ana_amiga_visible_bitmap = NULL;
+static struct BitMap* ana_amiga_draw_bitmap = NULL;
 static unsigned short ana_amiga_rgb4[ANA_DEFAULT_COLORS];
+static int ana_amiga_hidden_bitmap_ready = 0;
 #endif
 
 struct ANA_ImageData {
@@ -315,6 +320,88 @@ static void ana_amiga_close_libraries(void)
     }
 }
 
+static void ana_amiga_clear_bitmap(struct BitMap* bitmap)
+{
+    int plane;
+    unsigned long plane_size;
+
+    if (bitmap == NULL) {
+        return;
+    }
+
+    plane_size = (unsigned long)bitmap->BytesPerRow * ANA_DEFAULT_HEIGHT;
+
+    for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+        if (bitmap->Planes[plane] != NULL) {
+            memset(bitmap->Planes[plane], 0, (size_t)plane_size);
+        }
+    }
+}
+
+static void ana_amiga_free_hidden_bitmap(void)
+{
+    int plane;
+
+    if (!ana_amiga_hidden_bitmap_ready) {
+        return;
+    }
+
+    for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+        if (ana_amiga_hidden_bitmap.Planes[plane] != NULL) {
+            FreeRaster(
+                ana_amiga_hidden_bitmap.Planes[plane],
+                ANA_DEFAULT_WIDTH,
+                ANA_DEFAULT_HEIGHT);
+            ana_amiga_hidden_bitmap.Planes[plane] = NULL;
+        }
+    }
+
+    ana_amiga_hidden_bitmap_ready = 0;
+}
+
+static int ana_amiga_alloc_hidden_bitmap(void)
+{
+    int plane;
+
+    memset(&ana_amiga_hidden_bitmap, 0, sizeof(ana_amiga_hidden_bitmap));
+    InitBitMap(
+        &ana_amiga_hidden_bitmap,
+        ANA_DEFAULT_BITPLANES,
+        ANA_DEFAULT_WIDTH,
+        ANA_DEFAULT_HEIGHT);
+
+    for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+        ana_amiga_hidden_bitmap.Planes[plane] =
+            AllocRaster(ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT);
+
+        if (ana_amiga_hidden_bitmap.Planes[plane] == NULL) {
+            ana_amiga_hidden_bitmap_ready = 1;
+            ana_amiga_free_hidden_bitmap();
+            return 0;
+        }
+    }
+
+    ana_amiga_hidden_bitmap_ready = 1;
+    ana_amiga_clear_bitmap(&ana_amiga_hidden_bitmap);
+
+    return 1;
+}
+
+static void ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
+{
+    if (ana_amiga_screen == NULL || bitmap == NULL) {
+        return;
+    }
+
+    ana_amiga_screen->RastPort.BitMap = bitmap;
+    if (ana_amiga_screen->ViewPort.RasInfo != NULL) {
+        ana_amiga_screen->ViewPort.RasInfo->BitMap = bitmap;
+    }
+
+    MakeScreen(ana_amiga_screen);
+    RethinkDisplay();
+}
+
 static int ana_amiga_open_window(void)
 {
     struct NewWindow window;
@@ -372,11 +459,30 @@ static int ana_amiga_open_display(void)
         return 0;
     }
 
+    ana_amiga_original_bitmap = ana_amiga_screen->RastPort.BitMap;
+    ana_amiga_visible_bitmap = ana_amiga_original_bitmap;
+    ana_amiga_draw_bitmap = &ana_amiga_hidden_bitmap;
+
+    if (!ana_amiga_alloc_hidden_bitmap()) {
+        CloseScreen(ana_amiga_screen);
+        ana_amiga_screen = NULL;
+        ana_amiga_original_bitmap = NULL;
+        ana_amiga_visible_bitmap = NULL;
+        ana_amiga_draw_bitmap = NULL;
+        ana_amiga_close_libraries();
+        return 0;
+    }
+
+    ana_amiga_clear_bitmap(ana_amiga_original_bitmap);
     ana_amiga_apply_palette();
 
     if (!ana_amiga_open_window()) {
+        ana_amiga_free_hidden_bitmap();
         CloseScreen(ana_amiga_screen);
         ana_amiga_screen = NULL;
+        ana_amiga_original_bitmap = NULL;
+        ana_amiga_visible_bitmap = NULL;
+        ana_amiga_draw_bitmap = NULL;
         ana_amiga_close_libraries();
         return 0;
     }
@@ -387,6 +493,11 @@ static int ana_amiga_open_display(void)
 
 static void ana_amiga_close_display(void)
 {
+    if (ana_amiga_screen != NULL && ana_amiga_original_bitmap != NULL) {
+        ana_amiga_set_screen_bitmap(ana_amiga_original_bitmap);
+        WaitTOF();
+    }
+
     if (ana_amiga_window != NULL) {
         CloseWindow(ana_amiga_window);
         ana_amiga_window = NULL;
@@ -397,12 +508,18 @@ static void ana_amiga_close_display(void)
         ana_amiga_screen = NULL;
     }
 
+    ana_amiga_free_hidden_bitmap();
+    ana_amiga_original_bitmap = NULL;
+    ana_amiga_visible_bitmap = NULL;
+    ana_amiga_draw_bitmap = NULL;
+
     ana_amiga_close_libraries();
 }
 
-static void ana_amiga_copy_chunky_to_bitplanes(const unsigned char* chunky)
+static void ana_amiga_copy_chunky_to_bitplanes(
+    struct BitMap* bitmap,
+    const unsigned char* chunky)
 {
-    struct BitMap* bitmap;
     int y;
     int byte_x;
     int bit;
@@ -412,12 +529,7 @@ static void ana_amiga_copy_chunky_to_bitplanes(const unsigned char* chunky)
     unsigned char plane_bytes[ANA_DEFAULT_BITPLANES];
     unsigned long row_offset;
 
-    if (ana_amiga_screen == NULL || chunky == NULL) {
-        return;
-    }
-
-    bitmap = ana_amiga_screen->RastPort.BitMap;
-    if (bitmap == NULL) {
+    if (bitmap == NULL || chunky == NULL) {
         return;
     }
 
@@ -454,12 +566,27 @@ static void ana_amiga_copy_chunky_to_bitplanes(const unsigned char* chunky)
 
 static void ana_amiga_present_buffer(const unsigned char* chunky)
 {
+    struct BitMap* next_visible;
+    struct BitMap* previous_visible;
+
     if (ana_amiga_screen == NULL) {
         return;
     }
 
+    next_visible = ana_amiga_draw_bitmap;
+    previous_visible = ana_amiga_visible_bitmap;
+
+    if (next_visible == NULL || previous_visible == NULL) {
+        return;
+    }
+
+    ana_amiga_copy_chunky_to_bitplanes(next_visible, chunky);
+
     WaitTOF();
-    ana_amiga_copy_chunky_to_bitplanes(chunky);
+    ana_amiga_set_screen_bitmap(next_visible);
+
+    ana_amiga_visible_bitmap = next_visible;
+    ana_amiga_draw_bitmap = previous_visible;
 }
 #endif
 

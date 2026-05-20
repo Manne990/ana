@@ -51,7 +51,8 @@ Amiga-bygget anvander en Intuition custom screen i PAL lores:
 - en borderless window ovanpa screenen for raw-key input
 - `WaitTOF()` i `ana_present`
 - defaultpalett sa `ana_clear` syns aven utan explicit palett
-- software-present fran ANA:s draw-buffer till screenens bitplanes
+- software-present fran ANA:s draw-buffer till Amiga bitplanes
+- dubbelbuffrad screen-bitmap sa kopieringen sker mot dold frame
 
 Den publika spelkoden ritar fortfarande med `ana_clear` och `ana_draw_image`.
 Den forsta backend-implementationen prioriterar korrekt synlig output och enkel
