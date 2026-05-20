@@ -1,5 +1,7 @@
 #include "ana.h"
 
+#include <stdio.h>
+
 static int player_x = 152;
 static int demo_ticks = 0;
 
@@ -29,6 +31,10 @@ static void invaders_update(ANA_Time time)
     if (ana_quit_requested()) {
         ana_quit();
     }
+
+    if (time.tick >= 50) {
+        ana_quit();
+    }
 }
 
 static void invaders_draw(void)
@@ -42,6 +48,7 @@ static void invaders_draw(void)
 int main(void)
 {
     ANA_Game game;
+    int result;
 
     game.init = invaders_init;
     game.load = 0;
@@ -54,5 +61,17 @@ int main(void)
     game.colors = 16;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
 
-    return ana_run(&game);
+    printf("ANA invaders started.\n");
+    printf("Keyboard mapping: cursor/A-D movement, Space action, Esc quit.\n");
+    printf("Current Amiga graphics and keyboard backends are still stubs.\n");
+    printf("Running a short game-loop smoke test...\n");
+
+    result = ana_run(&game);
+
+    printf("ANA invaders finished with %s.\n", ana_result_name((ANA_Result)result));
+    printf("Frames simulated: %d\n", demo_ticks + 1);
+    printf("Player X: %d\n", player_x);
+    printf("Type invaders to run it again.\n");
+
+    return result;
 }
