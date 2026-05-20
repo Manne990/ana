@@ -54,6 +54,14 @@ static void write_u16_le(FILE* file, int value)
     fputc((value >> 8) & 0xff, file);
 }
 
+static const unsigned char memory_test_image_bytes[] = {
+    0x41, 0x4e, 0x41, 0x49, 0x4d, 0x47, 0x30, 0x31,
+    0x03, 0x00, 0x02, 0x00, 0x02, 0x00, 0x02, 0x01,
+    0x00, 0x00, 0x00, 0x00,
+    0xc0, 0x60, 0xa0, 0xc0, 0x60, 0x40,
+    0xe0, 0xe0, 0x00, 0xe0, 0xe0, 0xe0
+};
+
 static void write_test_image_file(const char* path)
 {
     FILE* file;
@@ -93,6 +101,7 @@ static void test_image_loading_and_drawing(void)
 {
     const char* path;
     ANA_Image image;
+    ANA_Image memory_image;
 
     path = "build/tests/gfx_test_image.anaimg";
     write_test_image_file(path);
@@ -126,7 +135,25 @@ static void test_image_loading_and_drawing(void)
     ana_draw_image(image, 400, 400);
     assert(ana_gfx_draw_pixel(0, 0) == 3);
 
+    memory_image = ana_load_image_data(
+        memory_test_image_bytes,
+        (long)sizeof(memory_test_image_bytes));
+    assert(memory_image != 0);
+    assert(ana_image_width(memory_image) == 3);
+    assert(ana_image_height(memory_image) == 2);
+    assert(ana_image_frame_count(memory_image) == 2);
+
+    ana_clear(8);
+    ana_draw_image_frame(memory_image, 1, 1, 1);
+    assert(ana_gfx_draw_pixel(1, 1) == 2);
+    assert(ana_gfx_draw_pixel(2, 1) == 2);
+    assert(ana_gfx_draw_pixel(3, 1) == 2);
+    assert(ana_gfx_draw_pixel(1, 2) == 3);
+    assert(ana_gfx_draw_pixel(2, 2) == 3);
+    assert(ana_gfx_draw_pixel(3, 2) == 3);
+
     ana_gfx_close();
+    ana_free_image(memory_image);
     ana_free_image(image);
     remove(path);
 }
@@ -145,6 +172,8 @@ static void test_image_rejects_invalid_files(void)
     assert(ana_load_image(0) == 0);
     assert(ana_load_image("build/tests/missing_image.anaimg") == 0);
     assert(ana_load_image(path) == 0);
+    assert(ana_load_image_data(0, 0L) == 0);
+    assert(ana_load_image_data(memory_test_image_bytes, 4L) == 0);
     assert(ana_image_width(0) == 0);
     assert(ana_image_height(0) == 0);
     assert(ana_image_frame_count(0) == 0);

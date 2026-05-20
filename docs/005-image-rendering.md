@@ -19,6 +19,7 @@ Gora det enkelt att rita bilder och rorliga objekt, tillrackligt snabbt for Inva
 typedef struct ANA_ImageData* ANA_Image;
 
 ANA_Image ana_load_image(const char* path);
+ANA_Image ana_load_image_data(const unsigned char* bytes, long size);
 void ana_free_image(ANA_Image image);
 
 void ana_draw_image(ANA_Image image, int x, int y);
@@ -29,6 +30,10 @@ int ana_image_frame_count(ANA_Image image);
 ```
 
 `ANA_Image` ar ett publikt handle-begrepp. Implementationens datarepresentation kan vara pekare, id-tabeller, BOB-data eller annan Amiga-anpassad layout.
+
+`ana_load_image_data` laser samma `.anaimg`-format fran en inbaddad byte-array.
+Det ar praktiskt for sma exempel och smoke tests dar en asset ska folja med i
+executable utan separat fil pa ADF:en.
 
 ## Assetkrav
 

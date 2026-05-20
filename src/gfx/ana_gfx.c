@@ -251,6 +251,48 @@ static int ana_image_compute_sizes(ANA_Image image)
         image->data_size > 0L;
 }
 
+static ANA_Image ana_image_create_from_payload(
+    int width,
+    int height,
+    int frame_count,
+    int bitplanes,
+    unsigned int flags,
+    const unsigned char* payload,
+    long payload_size)
+{
+    struct ANA_ImageData* image;
+
+    image = (struct ANA_ImageData*)malloc(sizeof(struct ANA_ImageData));
+    if (image == NULL) {
+        return NULL;
+    }
+
+    image->width = width;
+    image->height = height;
+    image->frame_count = frame_count;
+    image->bitplanes = bitplanes;
+    image->flags = flags;
+    image->data = NULL;
+
+    if (!ana_image_compute_sizes(image) ||
+            (payload != NULL && payload_size < image->data_size)) {
+        free(image);
+        return NULL;
+    }
+
+    image->data = (unsigned char*)malloc((size_t)image->data_size);
+    if (image->data == NULL) {
+        free(image);
+        return NULL;
+    }
+
+    if (payload != NULL) {
+        memcpy(image->data, payload, (size_t)image->data_size);
+    }
+
+    return image;
+}
+
 static void ana_gfx_load_default_palette(void)
 {
     int i;
@@ -621,7 +663,7 @@ ANA_Image ana_load_image(const char* path)
 {
     FILE* file;
     unsigned char header[ANA_IMAGE_HEADER_SIZE];
-    struct ANA_ImageData* image;
+    ANA_Image image;
     size_t bytes_read;
     int width;
     int height;
@@ -655,28 +697,16 @@ ANA_Image ana_load_image(const char* path)
         return NULL;
     }
 
-    image = (struct ANA_ImageData*)malloc(sizeof(struct ANA_ImageData));
+    image = ana_image_create_from_payload(
+        width,
+        height,
+        frame_count,
+        bitplanes,
+        flags,
+        NULL,
+        0L);
+
     if (image == NULL) {
-        fclose(file);
-        return NULL;
-    }
-
-    image->width = width;
-    image->height = height;
-    image->frame_count = frame_count;
-    image->bitplanes = bitplanes;
-    image->flags = flags;
-    image->data = NULL;
-
-    if (!ana_image_compute_sizes(image)) {
-        free(image);
-        fclose(file);
-        return NULL;
-    }
-
-    image->data = (unsigned char*)malloc((size_t)image->data_size);
-    if (image->data == NULL) {
-        free(image);
         fclose(file);
         return NULL;
     }
@@ -690,6 +720,38 @@ ANA_Image ana_load_image(const char* path)
     }
 
     return image;
+}
+
+ANA_Image ana_load_image_data(const unsigned char* bytes, long size)
+{
+    int width;
+    int height;
+    int frame_count;
+    int bitplanes;
+    unsigned int flags;
+
+    if (bytes == NULL || size < ANA_IMAGE_HEADER_SIZE) {
+        return NULL;
+    }
+
+    if (!ana_image_validate_header(
+            bytes,
+            &width,
+            &height,
+            &frame_count,
+            &bitplanes,
+            &flags)) {
+        return NULL;
+    }
+
+    return ana_image_create_from_payload(
+        width,
+        height,
+        frame_count,
+        bitplanes,
+        flags,
+        bytes + ANA_IMAGE_HEADER_SIZE,
+        size - ANA_IMAGE_HEADER_SIZE);
 }
 
 void ana_free_image(ANA_Image image)

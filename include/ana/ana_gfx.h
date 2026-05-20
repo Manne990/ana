@@ -18,6 +18,7 @@ void ana_clear(unsigned char color_index);
 void ana_present(void);
 
 ANA_Image ana_load_image(const char* path);
+ANA_Image ana_load_image_data(const unsigned char* bytes, long size);
 void ana_free_image(ANA_Image image);
 void ana_draw_image(ANA_Image image, int x, int y);
 void ana_draw_image_frame(ANA_Image image, int frame, int x, int y);
