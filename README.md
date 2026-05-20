@@ -112,7 +112,7 @@ The initial 0.1 work is split into focused specs:
 
 ## Current Status
 
-ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, graphics clear/present support, input state handling, example skeletons, and a placeholder asset tool.
+ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, graphics clear/present support, image loading/rendering, input state handling, example skeletons, and the first host-side asset conversion flow.
 
 ## Build
 
@@ -123,7 +123,18 @@ make all
 make test
 ```
 
-This builds `libana.a`, the host-side `ana-convert` placeholder, and the current example programs under `build/`.
+This builds `libana.a`, the host-side `ana-convert` tool, and the current example programs under `build/`.
+
+## Asset Conversion
+
+The first `ana-convert` implementation converts PPM P3/P6 images into ANA's preconverted `.anaimg` format:
+
+```sh
+build/tools/ana-convert/ana-convert image player.ppm --out player.anaimg --colors 16 --transparent 255,0,255
+build/tools/ana-convert/ana-convert image explosion_sheet.ppm --out explosion.anaimg --colors 16 --frame-width 16 --frame-height 16
+```
+
+PNG support is still planned, but PPM keeps the current pipeline dependency-free while the runtime and asset format settle.
 
 The CI pipeline builds and tests the host code as strict C89 with both GCC and Clang. The Amiga-target build uses GNU89 mode because the m68k Amiga toolchain headers use GCC extensions.
 

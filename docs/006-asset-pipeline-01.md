@@ -21,6 +21,30 @@ ana-convert image player.png --palette game.pal --out player.anaimg
 ana-convert image explosion.png --frame-width 16 --frame-height 16 --out explosion.anaimg
 ```
 
+## Initial implementation
+
+For att fa ett komplett flode utan externa dependencies borjar `ana-convert`
+med PPM som inputformat:
+
+```bash
+ana-convert image invader.ppm --out invader.anaimg --colors 16
+ana-convert image explosion_sheet.ppm --out explosion.anaimg --colors 16 --frame-width 16 --frame-height 16
+ana-convert image player.ppm --out player.anaimg --transparent 255,0,255
+ana-convert image player.ppm --out player.anaimg --transparent '#ff00ff'
+```
+
+Stodet ar avsiktligt smalt:
+
+- PPM P3 och P6 kan lasas.
+- Unika RGB-farger samlas i encounter order upp till `--colors`, max 16.
+- `--transparent` skapar maskdata i `.anaimg`.
+- `--frame-width` och `--frame-height` delar en spritesheet i frames radvis.
+- Output skrivs i `.anaimg`-formatet som dokumenteras i Spec 005.
+
+PNG ar fortfarande malformatet for ett bekvamare 0.1-flode, men PPM-flodet
+gor att runtime, image-rendering och CI kan validera pipeline-beteendet redan
+nu.
+
 ## Bildkonvertering
 
 Verktyget ska kunna:
@@ -64,4 +88,3 @@ Ljudkonvertering far inte blockera grafikpipeline for 0.1.
 - Runtime kan ladda outputfiler utan extra konvertering.
 - Fel i assetformat eller palett upptacks i verktyget dar det ar rimligt.
 - Outputformatet ar dokumenterat i repo:t.
-

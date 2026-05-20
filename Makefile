@@ -28,6 +28,9 @@ TEST_BINS := \
 	$(BUILD_DIR)/tests/gfx_test \
 	$(BUILD_DIR)/tests/input_test
 
+TOOL_TEST_HELPERS := \
+	$(BUILD_DIR)/tests/ana_convert_image_test
+
 EXAMPLE_BINS := \
 	$(BUILD_DIR)/examples/hello/hello \
 	$(BUILD_DIR)/examples/invaders/invaders
@@ -109,8 +112,9 @@ $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
 
-test: $(TEST_BINS)
+test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS)
 	set -e; for test_bin in $(TEST_BINS); do $$test_bin; done
+	ANA_CONVERT=$(BUILD_DIR)/tools/ana-convert/ana-convert ANA_CONVERT_PROBE=$(BUILD_DIR)/tests/ana_convert_image_test sh tests/ana_convert_test.sh
 
 clean:
 	$(RM) $(BUILD_DIR)
