@@ -41,6 +41,31 @@ ANA image-formatet for 0.1 ska innehalla:
 - maskdata om bilden ska ritas transparent
 - planar bilddata i Amiga-vanlig layout
 
+## Initialt `.anaimg`-format
+
+0.1-runtime kan lasa ett litet binart format med forkonverterad planar data.
+Formatet ar avsiktligt enkelt tills `ana-convert` ar redo:
+
+- 8 bytes magic: `ANAIMG01`
+- 16-bit little-endian bredd
+- 16-bit little-endian hojd
+- 16-bit little-endian antal frames
+- 8-bit antal bitplanes, 1-4
+- 8-bit flags, dar bit 0 betyder maskdata
+- 4 reserverade bytes, maste vara 0
+
+Efter headern ligger data per frame:
+
+- maskplan om flags bit 0 ar satt
+- bitplane 0
+- bitplane 1
+- bitplane 2
+- bitplane 3, om bilden anvander 4 bitplanes
+
+Varje plan ar radvis, 1 bit per pixel, MSB forst i varje byte. Rader paddas
+till hel byte. Fargindex byggs av bitplane-bitarna, sa bitplane 0 ar lagsta
+biten i fargindexet.
+
 ## Renderingregler
 
 - Bilddata ska vara forberedd for den aktuella bitplane-profilen.

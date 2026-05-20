@@ -1,6 +1,8 @@
 #ifndef ANA_GFX_H
 #define ANA_GFX_H
 
+#include "ana_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,9 +17,16 @@ void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
 void ana_present(void);
 
+ANA_Image ana_load_image(const char* path);
+void ana_free_image(ANA_Image image);
+void ana_draw_image(ANA_Image image, int x, int y);
+void ana_draw_image_frame(ANA_Image image, int frame, int x, int y);
+int ana_image_width(ANA_Image image);
+int ana_image_height(ANA_Image image);
+int ana_image_frame_count(ANA_Image image);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif
-

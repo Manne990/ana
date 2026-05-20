@@ -2,6 +2,7 @@
 #include "ana_internal.h"
 
 #include <assert.h>
+#include <stdio.h>
 
 static void test_clear_and_present(void)
 {
@@ -47,11 +48,116 @@ static void test_palette_accepts_supported_colors(void)
     ana_gfx_close();
 }
 
+static void write_u16_le(FILE* file, int value)
+{
+    fputc(value & 0xff, file);
+    fputc((value >> 8) & 0xff, file);
+}
+
+static void write_test_image_file(const char* path)
+{
+    FILE* file;
+
+    file = fopen(path, "wb");
+    assert(file != 0);
+
+    fwrite("ANAIMG01", 1u, 8u, file);
+    write_u16_le(file, 3);
+    write_u16_le(file, 2);
+    write_u16_le(file, 2);
+    fputc(2, file);
+    fputc(1, file);
+    fputc(0, file);
+    fputc(0, file);
+    fputc(0, file);
+    fputc(0, file);
+
+    fputc(0xc0, file);
+    fputc(0x60, file);
+    fputc(0xa0, file);
+    fputc(0xc0, file);
+    fputc(0x60, file);
+    fputc(0x40, file);
+
+    fputc(0xe0, file);
+    fputc(0xe0, file);
+    fputc(0x00, file);
+    fputc(0xe0, file);
+    fputc(0xe0, file);
+    fputc(0xe0, file);
+
+    fclose(file);
+}
+
+static void test_image_loading_and_drawing(void)
+{
+    const char* path;
+    ANA_Image image;
+
+    path = "build/tests/gfx_test_image.anaimg";
+    write_test_image_file(path);
+
+    image = ana_load_image(path);
+    assert(image != 0);
+    assert(ana_image_width(image) == 3);
+    assert(ana_image_height(image) == 2);
+    assert(ana_image_frame_count(image) == 2);
+
+    assert(ana_gfx_open(ana_default_profile()) == ANA_OK);
+    ana_clear(9);
+
+    ana_draw_image(image, 5, 6);
+    assert(ana_gfx_draw_pixel(5, 6) == 1);
+    assert(ana_gfx_draw_pixel(6, 6) == 2);
+    assert(ana_gfx_draw_pixel(7, 6) == 9);
+    assert(ana_gfx_draw_pixel(5, 7) == 9);
+    assert(ana_gfx_draw_pixel(6, 7) == 3);
+    assert(ana_gfx_draw_pixel(7, 7) == 0);
+
+    ana_clear(4);
+    ana_draw_image_frame(image, 1, -1, -1);
+    assert(ana_gfx_draw_pixel(0, 0) == 3);
+    assert(ana_gfx_draw_pixel(1, 0) == 3);
+    assert(ana_gfx_draw_pixel(2, 0) == 4);
+
+    ana_draw_image_frame(image, 99, 0, 0);
+    assert(ana_gfx_draw_pixel(0, 0) == 3);
+
+    ana_draw_image(image, 400, 400);
+    assert(ana_gfx_draw_pixel(0, 0) == 3);
+
+    ana_gfx_close();
+    ana_free_image(image);
+    remove(path);
+}
+
+static void test_image_rejects_invalid_files(void)
+{
+    const char* path;
+    FILE* file;
+
+    path = "build/tests/gfx_invalid_image.anaimg";
+    file = fopen(path, "wb");
+    assert(file != 0);
+    fwrite("NOPE", 1u, 4u, file);
+    fclose(file);
+
+    assert(ana_load_image(0) == 0);
+    assert(ana_load_image("build/tests/missing_image.anaimg") == 0);
+    assert(ana_load_image(path) == 0);
+    assert(ana_image_width(0) == 0);
+    assert(ana_image_height(0) == 0);
+    assert(ana_image_frame_count(0) == 0);
+
+    remove(path);
+}
+
 int main(void)
 {
     test_clear_and_present();
     test_palette_accepts_supported_colors();
+    test_image_loading_and_drawing();
+    test_image_rejects_invalid_files();
 
     return 0;
 }
-
