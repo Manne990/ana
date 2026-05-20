@@ -5,6 +5,8 @@
 #include "ana/ana_result.h"
 #include "ana/ana_platform.h"
 #include "ana/ana_types.h"
+#include "ana/ana_core.h"
+#include "ana/ana_gfx.h"
+#include "ana/ana_input.h"
 
 #endif
-

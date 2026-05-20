@@ -102,7 +102,20 @@ The initial 0.1 work is split into focused specs:
 
 ## Current Status
 
-ANA is currently in the planning/specification phase. The repository contains the initial 0.1 specification documents, and implementation order will be planned from those specs.
+ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, graphics clear/present support, input state handling, example skeletons, and a placeholder asset tool.
+
+## Build
+
+The current development build uses a simple Makefile:
+
+```sh
+make all
+make test
+```
+
+This builds `libana.a`, the host-side `ana-convert` placeholder, and the current example programs under `build/`.
+
+The CI pipeline builds and tests the code as strict C89 with both GCC and Clang.
 
 ## License
 
