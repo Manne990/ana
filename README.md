@@ -1,5 +1,7 @@
 # ANA
 
+[![CI](https://github.com/Manne990/ana/actions/workflows/ci.yml/badge.svg)](https://github.com/Manne990/ana/actions/workflows/ci.yml)
+
 ANA, short for "ANA's Now on Amiga", is an early-stage C game framework for the Amiga.
 
 The goal is to bring some of the approachable workflow from XNA and MonoGame to Amiga development, while staying close to the hardware and keeping runtime overhead predictable. ANA is not intended to be a direct XNA clone. It should feel familiar in structure, but be designed around C, Amiga constraints, and preconverted assets.
