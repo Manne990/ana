@@ -112,8 +112,9 @@ $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
 
-test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS)
+test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS) $(EXAMPLE_BINS)
 	set -e; for test_bin in $(TEST_BINS); do $$test_bin; done
+	set -e; for example_bin in $(EXAMPLE_BINS); do $$example_bin >/dev/null; done
 	ANA_CONVERT=$(BUILD_DIR)/tools/ana-convert/ana-convert ANA_CONVERT_PROBE=$(BUILD_DIR)/tests/ana_convert_image_test sh tests/ana_convert_test.sh
 
 clean:
