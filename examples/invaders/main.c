@@ -23,13 +23,32 @@ static const unsigned char player_image_data[] = {
     0x00, 0x00, 0x00, 0x00
 };
 
+static const unsigned char bullet_image_data[] = {
+    0x41, 0x4e, 0x41, 0x49, 0x4d, 0x47, 0x30, 0x31,
+    0x02, 0x00, 0x06, 0x00, 0x01, 0x00, 0x01, 0x01,
+    0x00, 0x00, 0x00, 0x00,
+    0xc0, 0xc0, 0xc0, 0xc0, 0xc0, 0xc0,
+    0xc0, 0xc0, 0xc0, 0xc0, 0xc0, 0xc0
+};
+
 static ANA_Image player_image = 0;
+static ANA_Image bullet_image = 0;
 static int player_x = 152;
 static int player_y = 220;
+static int bullet_x = 0;
+static int bullet_y = 0;
+static int bullet_active = 0;
 static int demo_ticks = 0;
 
 static void invaders_init(void)
 {
+    player_x = 152;
+    player_y = 220;
+    bullet_x = 0;
+    bullet_y = 0;
+    bullet_active = 0;
+    demo_ticks = 0;
+
     ana_input_clear_key_map();
     ana_input_map_key_to_direction(ANA_KEY_LEFT, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
     ana_input_map_key_to_direction(ANA_KEY_A, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
@@ -44,14 +63,21 @@ static void invaders_load(void)
     player_image = ana_load_image_data(
         player_image_data,
         (long)sizeof(player_image_data));
+    bullet_image = ana_load_image_data(
+        bullet_image_data,
+        (long)sizeof(bullet_image_data));
 }
 
 static void invaders_update(ANA_Time time)
 {
     int player_width;
+    int bullet_width;
+    int bullet_height;
 
     demo_ticks = time.tick;
     player_width = player_image != 0 ? ana_image_width(player_image) : 16;
+    bullet_width = bullet_image != 0 ? ana_image_width(bullet_image) : 2;
+    bullet_height = bullet_image != 0 ? ana_image_height(bullet_image) : 6;
 
     if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT)) {
         player_x -= 2;
@@ -67,6 +93,20 @@ static void invaders_update(ANA_Time time)
 
     if (player_x > ANA_DEFAULT_WIDTH - player_width) {
         player_x = ANA_DEFAULT_WIDTH - player_width;
+    }
+
+    if (ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1) &&
+            !bullet_active) {
+        bullet_active = 1;
+        bullet_x = player_x + (player_width / 2) - (bullet_width / 2);
+        bullet_y = player_y - bullet_height;
+    }
+
+    if (bullet_active) {
+        bullet_y -= 4;
+        if (bullet_y <= -bullet_height) {
+            bullet_active = 0;
+        }
     }
 
     if (ana_quit_requested()) {
@@ -85,11 +125,17 @@ static void invaders_draw(void)
     if (player_image != 0) {
         ana_draw_image(player_image, player_x, player_y);
     }
+
+    if (bullet_active && bullet_image != 0) {
+        ana_draw_image(bullet_image, bullet_x, bullet_y);
+    }
 }
 
 static void invaders_shutdown(void)
 {
+    ana_free_image(bullet_image);
     ana_free_image(player_image);
+    bullet_image = 0;
     player_image = 0;
 }
 
@@ -111,7 +157,7 @@ int main(void)
 
     printf("ANA invaders started.\n");
     printf("Keyboard mapping: cursor/A-D movement, Space action, Esc quit.\n");
-    printf("Move the player sprite left and right.\n");
+    printf("Move left/right and press Space/fire to shoot.\n");
 
     result = ana_run(&game);
 

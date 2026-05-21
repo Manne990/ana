@@ -39,6 +39,11 @@ Miniminiva for 0.1:
 - game over
 - restart
 
+Nuvarande tidiga exempel har en styrbar spelarsprite och ett enkelt
+spelarskott pa `ANA_ACTION_1`/Space/fire. Det ar fortfarande ett smoke-test
+for runtime, image-rendering och input; fiendeformation, kollisioner, ljud och
+game states byggs vidare separat.
+
 ## Grafik och ljud
 
 Showcaset ska ha hyfsad polish:
