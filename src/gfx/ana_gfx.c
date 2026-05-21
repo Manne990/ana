@@ -8,6 +8,7 @@
 #include <string.h>
 
 #ifdef ANA_TARGET_AMIGA
+#include <exec/ports.h>
 #include <exec/types.h>
 #include <graphics/gfx.h>
 #include <graphics/gfxbase.h>
@@ -94,6 +95,7 @@ static struct BitMap* ana_amiga_original_bitmap = NULL;
 static struct BitMap* ana_amiga_visible_bitmap = NULL;
 static struct BitMap* ana_amiga_draw_bitmap = NULL;
 static struct ScreenBuffer* ana_amiga_screen_buffers[2];
+static struct MsgPort* ana_amiga_safe_port = NULL;
 static unsigned short ana_amiga_rgb4[ANA_DEFAULT_COLORS];
 static int ana_amiga_hidden_bitmap_ready = 0;
 static int ana_amiga_screen_buffers_ready = 0;
@@ -1191,6 +1193,27 @@ static void ana_amiga_reset_screen_buffers(void)
     ana_amiga_screen_buffers_ready = 0;
 }
 
+static void ana_amiga_drain_safe_port(void)
+{
+    if (ana_amiga_safe_port == NULL) {
+        return;
+    }
+
+    while (GetMsg(ana_amiga_safe_port) != NULL) {
+    }
+}
+
+static void ana_amiga_free_safe_port(void)
+{
+    if (ana_amiga_safe_port == NULL) {
+        return;
+    }
+
+    ana_amiga_drain_safe_port();
+    DeleteMsgPort(ana_amiga_safe_port);
+    ana_amiga_safe_port = NULL;
+}
+
 static int ana_amiga_supports_screen_buffers(void)
 {
     return IntuitionBase != NULL &&
@@ -1202,9 +1225,20 @@ static void ana_amiga_free_screen_buffers(void)
     int i;
 
     if (ana_amiga_screen == NULL) {
+        ana_amiga_free_safe_port();
         ana_amiga_reset_screen_buffers();
         return;
     }
+
+    for (i = 0; i < 2; i++) {
+        if (ana_amiga_screen_buffers[i] != NULL &&
+                ana_amiga_screen_buffers[i]->sb_DBufInfo != NULL) {
+            ana_amiga_screen_buffers[i]->sb_DBufInfo->
+                dbi_SafeMessage.mn_ReplyPort = NULL;
+        }
+    }
+
+    ana_amiga_free_safe_port();
 
     for (i = 1; i >= 0; i--) {
         if (ana_amiga_screen_buffers[i] != NULL) {
@@ -1214,6 +1248,30 @@ static void ana_amiga_free_screen_buffers(void)
     }
 
     ana_amiga_screen_buffers_ready = 0;
+}
+
+static int ana_amiga_prepare_screen_buffer_messages(void)
+{
+    int i;
+
+    ana_amiga_free_safe_port();
+    ana_amiga_safe_port = CreateMsgPort();
+    if (ana_amiga_safe_port == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < 2; i++) {
+        if (ana_amiga_screen_buffers[i] == NULL ||
+                ana_amiga_screen_buffers[i]->sb_DBufInfo == NULL) {
+            ana_amiga_free_safe_port();
+            return 0;
+        }
+
+        ana_amiga_screen_buffers[i]->sb_DBufInfo->
+            dbi_SafeMessage.mn_ReplyPort = ana_amiga_safe_port;
+    }
+
+    return 1;
 }
 
 static int ana_amiga_alloc_screen_buffers(void)
@@ -1240,6 +1298,11 @@ static int ana_amiga_alloc_screen_buffers(void)
         return 0;
     }
 
+    if (!ana_amiga_prepare_screen_buffer_messages()) {
+        ana_amiga_free_screen_buffers();
+        return 0;
+    }
+
     ana_amiga_screen_buffers_ready = 1;
     return 1;
 }
@@ -1261,6 +1324,30 @@ static struct ScreenBuffer* ana_amiga_screen_buffer_for(
     }
 
     return NULL;
+}
+
+static void ana_amiga_wait_screen_buffer_safe(struct ScreenBuffer* screen_buffer)
+{
+    struct Message* expected;
+    struct Message* message;
+
+    if (ana_amiga_safe_port == NULL ||
+            screen_buffer == NULL ||
+            screen_buffer->sb_DBufInfo == NULL) {
+        return;
+    }
+
+    expected = &screen_buffer->sb_DBufInfo->dbi_SafeMessage;
+
+    for (;;) {
+        while ((message = GetMsg(ana_amiga_safe_port)) != NULL) {
+            if (message == expected) {
+                return;
+            }
+        }
+
+        WaitPort(ana_amiga_safe_port);
+    }
 }
 
 static int ana_amiga_alloc_hidden_bitmap(void)
@@ -1319,6 +1406,7 @@ static int ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
     screen_buffer = ana_amiga_screen_buffer_for(bitmap);
     if (screen_buffer != NULL &&
             ChangeScreenBuffer(ana_amiga_screen, screen_buffer)) {
+        ana_amiga_wait_screen_buffer_safe(screen_buffer);
         return 1;
     }
 
