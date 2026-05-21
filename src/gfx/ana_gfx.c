@@ -110,7 +110,9 @@ struct ANA_ImageData {
     long planes_size;
     long frame_size;
     long data_size;
+    long pixels_size;
     unsigned char* data;
+    unsigned char* pixels;
 };
 
 struct ANA_FontData {
@@ -224,6 +226,16 @@ static const unsigned char* ana_image_planes_base(ANA_Image image, int frame)
     return base;
 }
 
+static const unsigned char* ana_image_pixels_base(ANA_Image image, int frame)
+{
+    if (image->pixels == NULL) {
+        return NULL;
+    }
+
+    return image->pixels +
+        ((long)frame * image->width * image->height);
+}
+
 static int ana_image_bit_at(const unsigned char* bytes, int row_bytes, int x, int y)
 {
     int offset;
@@ -235,7 +247,11 @@ static int ana_image_bit_at(const unsigned char* bytes, int row_bytes, int x, in
     return ((bytes[offset] >> shift) & 1u) != 0u;
 }
 
-static unsigned char ana_image_pixel_at(ANA_Image image, int frame, int x, int y)
+static unsigned char ana_image_plane_pixel_at(
+    ANA_Image image,
+    int frame,
+    int x,
+    int y)
 {
     const unsigned char* planes;
     unsigned char color;
@@ -255,6 +271,18 @@ static unsigned char ana_image_pixel_at(ANA_Image image, int frame, int x, int y
     }
 
     return (unsigned char)(color & 0x0f);
+}
+
+static unsigned char ana_image_pixel_at(ANA_Image image, int frame, int x, int y)
+{
+    const unsigned char* pixels;
+
+    pixels = ana_image_pixels_base(image, frame);
+    if (pixels != NULL) {
+        return pixels[(y * image->width) + x];
+    }
+
+    return ana_image_plane_pixel_at(image, frame, x, y);
 }
 
 static int ana_image_validate_header(
@@ -350,12 +378,48 @@ static int ana_image_compute_sizes(ANA_Image image)
     image->planes_size = image->plane_size * image->bitplanes;
     image->frame_size = image->mask_size + image->planes_size;
     image->data_size = image->frame_size * image->frame_count;
+    image->pixels_size =
+        (long)image->width * image->height * image->frame_count;
 
     return image->row_bytes > 0 &&
         image->plane_size > 0L &&
         image->planes_size > 0L &&
         image->frame_size > 0L &&
-        image->data_size > 0L;
+        image->data_size > 0L &&
+        image->pixels_size > 0L;
+}
+
+static int ana_image_decode_pixels(ANA_Image image)
+{
+    int frame;
+    int x;
+    int y;
+    unsigned char* out;
+
+    if (image == NULL || image->data == NULL) {
+        return 0;
+    }
+
+    if (image->pixels != NULL) {
+        free(image->pixels);
+        image->pixels = NULL;
+    }
+
+    image->pixels = (unsigned char*)malloc((size_t)image->pixels_size);
+    if (image->pixels == NULL) {
+        return 0;
+    }
+
+    out = image->pixels;
+    for (frame = 0; frame < image->frame_count; frame++) {
+        for (y = 0; y < image->height; y++) {
+            for (x = 0; x < image->width; x++) {
+                *out++ = ana_image_plane_pixel_at(image, frame, x, y);
+            }
+        }
+    }
+
+    return 1;
 }
 
 static ANA_Image ana_image_create_from_payload(
@@ -380,6 +444,7 @@ static ANA_Image ana_image_create_from_payload(
     image->bitplanes = bitplanes;
     image->flags = flags;
     image->data = NULL;
+    image->pixels = NULL;
 
     if (!ana_image_compute_sizes(image) ||
             (payload != NULL && payload_size < image->data_size)) {
@@ -1521,11 +1586,17 @@ ANA_Image ana_load_image(const char* path)
         return NULL;
     }
 
+    if (!ana_image_decode_pixels(image)) {
+        ana_free_image(image);
+        return NULL;
+    }
+
     return image;
 }
 
 ANA_Image ana_load_image_data(const unsigned char* bytes, long size)
 {
+    ANA_Image image;
     int width;
     int height;
     int frame_count;
@@ -1546,7 +1617,7 @@ ANA_Image ana_load_image_data(const unsigned char* bytes, long size)
         return NULL;
     }
 
-    return ana_image_create_from_payload(
+    image = ana_image_create_from_payload(
         width,
         height,
         frame_count,
@@ -1554,6 +1625,17 @@ ANA_Image ana_load_image_data(const unsigned char* bytes, long size)
         flags,
         bytes + ANA_IMAGE_HEADER_SIZE,
         size - ANA_IMAGE_HEADER_SIZE);
+
+    if (image == NULL) {
+        return NULL;
+    }
+
+    if (!ana_image_decode_pixels(image)) {
+        ana_free_image(image);
+        return NULL;
+    }
+
+    return image;
 }
 
 ANA_Font ana_load_font(const char* path)
@@ -1694,6 +1776,10 @@ static void ana_draw_font_glyph(ANA_Font font, int frame, int x, int y)
     int src_y;
     int draw_pixel;
     const unsigned char* mask;
+    const unsigned char* mask_row;
+    const unsigned char* pixels;
+    const unsigned char* source_row;
+    unsigned char* dest_row;
 
     if (!ana_gfx_opened || font == NULL || font->image == NULL) {
         return;
@@ -1728,26 +1814,35 @@ static void ana_draw_font_glyph(ANA_Font font, int frame, int x, int y)
     }
 
     mask = ana_image_mask_base(image, frame);
+    pixels = ana_image_pixels_base(image, frame);
 
     for (dest_y = start_y; dest_y < end_y; dest_y++) {
         src_y = dest_y - y;
+        mask_row = mask != NULL ?
+            mask + ((long)src_y * image->row_bytes) :
+            NULL;
+        source_row = pixels != NULL ?
+            pixels + ((long)src_y * image->width) :
+            NULL;
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)dest_y * ANA_DEFAULT_WIDTH);
 
         for (dest_x = start_x; dest_x < end_x; dest_x++) {
             src_x = dest_x - x;
 
-            if (mask != NULL) {
+            if (mask_row != NULL) {
                 draw_pixel = (
-                    mask[(src_y * image->row_bytes) + (src_x >> 3)] &
+                    mask_row[src_x >> 3] &
                         (0x80u >> (src_x & 7))) != 0u;
             } else {
-                draw_pixel =
+                draw_pixel = source_row != NULL ?
+                    source_row[src_x] != 0u :
                     ana_image_pixel_at(image, frame, src_x, src_y) != 0u;
             }
 
             if (draw_pixel) {
-                ana_framebuffers[ana_draw_buffer]
-                    [(dest_y * ANA_DEFAULT_WIDTH) + dest_x] =
-                    font->color_index;
+                dest_row[dest_x] = font->color_index;
             }
         }
     }
@@ -1846,6 +1941,8 @@ void ana_free_image(ANA_Image image)
 
     free(image->data);
     image->data = NULL;
+    free(image->pixels);
+    image->pixels = NULL;
     free(image);
 }
 
@@ -1875,6 +1972,9 @@ static void ana_draw_image_frame_internal(
     int src_x;
     int src_y;
     const unsigned char* mask;
+    const unsigned char* pixels;
+    const unsigned char* source_row;
+    unsigned char* dest_row;
 
     if (!ana_gfx_opened || image == NULL || image->data == NULL) {
         return;
@@ -1915,17 +2015,24 @@ static void ana_draw_image_frame_internal(
 #endif
 
     mask = ana_image_mask_base(image, frame);
+    pixels = ana_image_pixels_base(image, frame);
 
     for (dest_y = start_y; dest_y < end_y; dest_y++) {
         src_y = dest_y - y;
+        source_row = pixels != NULL ?
+            pixels + ((long)src_y * image->width) :
+            NULL;
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)dest_y * ANA_DEFAULT_WIDTH);
 
         for (dest_x = start_x; dest_x < end_x; dest_x++) {
             src_x = dest_x - x;
 
             if (mask == NULL ||
                     ana_image_bit_at(mask, image->row_bytes, src_x, src_y)) {
-                ana_framebuffers[ana_draw_buffer]
-                    [(dest_y * ANA_DEFAULT_WIDTH) + dest_x] =
+                dest_row[dest_x] = source_row != NULL ?
+                    source_row[src_x] :
                     ana_image_pixel_at(image, frame, src_x, src_y);
             }
         }
