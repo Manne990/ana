@@ -606,6 +606,22 @@ static int ana_amiga_rects_overlap(
         b->min_y < a->max_y;
 }
 
+static int ana_amiga_rect_contained_by_any(
+    const struct ANA_AmigaDirtyRect* rect,
+    const struct ANA_AmigaDirtyRect* rects,
+    int rect_count)
+{
+    int i;
+
+    for (i = 0; i < rect_count; i++) {
+        if (ana_amiga_rect_contains(&rects[i], rect)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static int ana_amiga_rects_should_merge(
     const struct ANA_AmigaDirtyRect* a,
     const struct ANA_AmigaDirtyRect* b)
@@ -1452,10 +1468,17 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
                 next_state->clear_color = ana_amiga_clear_color;
             }
         } else {
-            ana_gfx_record_planar_clear_rects(
-                next_state->dirty_rects,
-                next_state->dirty_count);
             for (i = 0; i < next_state->dirty_count; i++) {
+                if (ana_amiga_rect_contained_by_any(
+                        &next_state->dirty_rects[i],
+                        ana_amiga_dirty_rects,
+                        ana_amiga_dirty_count)) {
+                    continue;
+                }
+
+                ana_gfx_record_planar_clear_rects(
+                    &next_state->dirty_rects[i],
+                    1);
                 ana_amiga_fill_bitmap_rect(
                     next_visible,
                     ana_amiga_clear_color,
