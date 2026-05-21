@@ -151,6 +151,9 @@ struct ANA_AmigaFramebufferState {
 static struct ANA_AmigaBitmapState ana_amiga_bitmap_states[2];
 static struct ANA_AmigaFramebufferState
     ana_amiga_framebuffer_states[ANA_FRAMEBUFFER_COUNT];
+static unsigned char
+    ana_amiga_planar_pair_lut[4][256][ANA_DEFAULT_BITPLANES];
+static int ana_amiga_planar_pair_lut_ready = 0;
 #endif
 
 static void ana_draw_image_frame_internal(
@@ -515,6 +518,46 @@ static void ana_amiga_reset_framebuffer_states(void)
         ana_amiga_framebuffer_states[i].clear_color_valid = 1;
         ana_amiga_framebuffer_states[i].clear_color = 0u;
     }
+}
+
+static void ana_amiga_init_planar_pair_lut(void)
+{
+    int slot;
+    int index;
+    int plane;
+    int color0;
+    int color1;
+    int shift;
+    unsigned char value;
+
+    if (ana_amiga_planar_pair_lut_ready) {
+        return;
+    }
+
+    for (slot = 0; slot < 4; slot++) {
+        shift = 6 - (slot * 2);
+
+        for (index = 0; index < 256; index++) {
+            color0 = (index >> 4) & 0x0f;
+            color1 = index & 0x0f;
+
+            for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+                value = 0u;
+
+                if ((color0 & (1 << plane)) != 0) {
+                    value = (unsigned char)(value | (1u << (shift + 1)));
+                }
+
+                if ((color1 & (1 << plane)) != 0) {
+                    value = (unsigned char)(value | (1u << shift));
+                }
+
+                ana_amiga_planar_pair_lut[slot][index][plane] = value;
+            }
+        }
+    }
+
+    ana_amiga_planar_pair_lut_ready = 1;
 }
 
 static struct ANA_AmigaBitmapState* ana_amiga_bitmap_state_for(
@@ -1054,11 +1097,20 @@ static void ana_amiga_copy_chunky_rect_to_bitplanes(
     int byte_x;
     int start_byte_x;
     int end_byte_x;
-    int bit;
-    int plane;
-    int pixel_x;
-    int color;
-    unsigned char plane_bytes[ANA_DEFAULT_BITPLANES];
+    int byte_count;
+    int index0;
+    int index1;
+    int index2;
+    int index3;
+    unsigned char* plane0;
+    unsigned char* plane1;
+    unsigned char* plane2;
+    unsigned char* plane3;
+    unsigned char* out0;
+    unsigned char* out1;
+    unsigned char* out2;
+    unsigned char* out3;
+    const unsigned char* in;
     unsigned long row_offset;
 
     if (bitmap == NULL || chunky == NULL) {
@@ -1087,34 +1139,57 @@ static void ana_amiga_copy_chunky_rect_to_bitplanes(
 
     start_byte_x = min_x / 8;
     end_byte_x = (max_x + 7) / 8;
+    byte_count = end_byte_x - start_byte_x;
+
+    plane0 = (unsigned char*)bitmap->Planes[0];
+    plane1 = (unsigned char*)bitmap->Planes[1];
+    plane2 = (unsigned char*)bitmap->Planes[2];
+    plane3 = (unsigned char*)bitmap->Planes[3];
+
+    if (plane0 == NULL || plane1 == NULL || plane2 == NULL ||
+            plane3 == NULL) {
+        return;
+    }
+
+    ana_amiga_init_planar_pair_lut();
 
     for (y = min_y; y < max_y; y++) {
         row_offset = (unsigned long)y * bitmap->BytesPerRow;
+        in = chunky + ((unsigned long)y * ANA_DEFAULT_WIDTH) +
+            (start_byte_x * 8);
+        out0 = plane0 + row_offset + start_byte_x;
+        out1 = plane1 + row_offset + start_byte_x;
+        out2 = plane2 + row_offset + start_byte_x;
+        out3 = plane3 + row_offset + start_byte_x;
 
-        for (byte_x = start_byte_x; byte_x < end_byte_x; byte_x++) {
-            for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-                plane_bytes[plane] = 0u;
-            }
+        for (byte_x = 0; byte_x < byte_count; byte_x++) {
+            index0 = ((in[0] & 0x0f) << 4) | (in[1] & 0x0f);
+            index1 = ((in[2] & 0x0f) << 4) | (in[3] & 0x0f);
+            index2 = ((in[4] & 0x0f) << 4) | (in[5] & 0x0f);
+            index3 = ((in[6] & 0x0f) << 4) | (in[7] & 0x0f);
 
-            for (bit = 0; bit < 8; bit++) {
-                pixel_x = (byte_x * 8) + bit;
-                color = chunky[(y * ANA_DEFAULT_WIDTH) + pixel_x] & 0x0f;
+            out0[byte_x] = (unsigned char)(
+                ana_amiga_planar_pair_lut[0][index0][0] |
+                ana_amiga_planar_pair_lut[1][index1][0] |
+                ana_amiga_planar_pair_lut[2][index2][0] |
+                ana_amiga_planar_pair_lut[3][index3][0]);
+            out1[byte_x] = (unsigned char)(
+                ana_amiga_planar_pair_lut[0][index0][1] |
+                ana_amiga_planar_pair_lut[1][index1][1] |
+                ana_amiga_planar_pair_lut[2][index2][1] |
+                ana_amiga_planar_pair_lut[3][index3][1]);
+            out2[byte_x] = (unsigned char)(
+                ana_amiga_planar_pair_lut[0][index0][2] |
+                ana_amiga_planar_pair_lut[1][index1][2] |
+                ana_amiga_planar_pair_lut[2][index2][2] |
+                ana_amiga_planar_pair_lut[3][index3][2]);
+            out3[byte_x] = (unsigned char)(
+                ana_amiga_planar_pair_lut[0][index0][3] |
+                ana_amiga_planar_pair_lut[1][index1][3] |
+                ana_amiga_planar_pair_lut[2][index2][3] |
+                ana_amiga_planar_pair_lut[3][index3][3]);
 
-                for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-                    if ((color & (1 << plane)) != 0) {
-                        plane_bytes[plane] = (unsigned char)(
-                            plane_bytes[plane] | (1u << (7 - bit)));
-                    }
-                }
-            }
-
-            for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-                if (bitmap->Planes[plane] != NULL) {
-                    ((unsigned char*)bitmap->Planes[plane])
-                        [row_offset + (unsigned long)byte_x] =
-                        plane_bytes[plane];
-                }
-            }
+            in += 8;
         }
     }
 }
@@ -1196,6 +1271,7 @@ ANA_Result ana_gfx_open(const ANA_Profile* profile)
 
 #ifdef ANA_TARGET_AMIGA
     ana_amiga_reset_framebuffer_states();
+    ana_amiga_init_planar_pair_lut();
 #endif
 
     ana_gfx_opened = 1;
