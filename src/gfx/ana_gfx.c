@@ -14,6 +14,7 @@
 #include <graphics/view.h>
 #include <intuition/intuition.h>
 #include <intuition/intuitionbase.h>
+#include <intuition/screens.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
@@ -92,8 +93,10 @@ static struct BitMap ana_amiga_hidden_bitmap;
 static struct BitMap* ana_amiga_original_bitmap = NULL;
 static struct BitMap* ana_amiga_visible_bitmap = NULL;
 static struct BitMap* ana_amiga_draw_bitmap = NULL;
+static struct ScreenBuffer* ana_amiga_screen_buffers[2];
 static unsigned short ana_amiga_rgb4[ANA_DEFAULT_COLORS];
 static int ana_amiga_hidden_bitmap_ready = 0;
+static int ana_amiga_screen_buffers_ready = 0;
 static int ana_amiga_clear_requested = 0;
 static unsigned char ana_amiga_clear_color = 0;
 #endif
@@ -1158,6 +1161,83 @@ static void ana_amiga_free_hidden_bitmap(void)
     ana_amiga_hidden_bitmap_ready = 0;
 }
 
+static void ana_amiga_reset_screen_buffers(void)
+{
+    ana_amiga_screen_buffers[0] = NULL;
+    ana_amiga_screen_buffers[1] = NULL;
+    ana_amiga_screen_buffers_ready = 0;
+}
+
+static int ana_amiga_supports_screen_buffers(void)
+{
+    return IntuitionBase != NULL &&
+        IntuitionBase->LibNode.lib_Version >= 39u;
+}
+
+static void ana_amiga_free_screen_buffers(void)
+{
+    int i;
+
+    if (ana_amiga_screen == NULL) {
+        ana_amiga_reset_screen_buffers();
+        return;
+    }
+
+    for (i = 1; i >= 0; i--) {
+        if (ana_amiga_screen_buffers[i] != NULL) {
+            FreeScreenBuffer(ana_amiga_screen, ana_amiga_screen_buffers[i]);
+            ana_amiga_screen_buffers[i] = NULL;
+        }
+    }
+
+    ana_amiga_screen_buffers_ready = 0;
+}
+
+static int ana_amiga_alloc_screen_buffers(void)
+{
+    if (ana_amiga_screen == NULL ||
+            ana_amiga_original_bitmap == NULL ||
+            !ana_amiga_hidden_bitmap_ready ||
+            !ana_amiga_supports_screen_buffers()) {
+        return 0;
+    }
+
+    ana_amiga_screen_buffers[0] =
+        AllocScreenBuffer(ana_amiga_screen, NULL, SB_SCREEN_BITMAP);
+    if (ana_amiga_screen_buffers[0] == NULL) {
+        ana_amiga_reset_screen_buffers();
+        return 0;
+    }
+
+    ana_amiga_screen_buffers[1] =
+        AllocScreenBuffer(ana_amiga_screen, &ana_amiga_hidden_bitmap, 0);
+    if (ana_amiga_screen_buffers[1] == NULL) {
+        ana_amiga_free_screen_buffers();
+        return 0;
+    }
+
+    ana_amiga_screen_buffers_ready = 1;
+    return 1;
+}
+
+static struct ScreenBuffer* ana_amiga_screen_buffer_for(
+    struct BitMap* bitmap)
+{
+    if (!ana_amiga_screen_buffers_ready || bitmap == NULL) {
+        return NULL;
+    }
+
+    if (bitmap == ana_amiga_original_bitmap) {
+        return ana_amiga_screen_buffers[0];
+    }
+
+    if (bitmap == &ana_amiga_hidden_bitmap) {
+        return ana_amiga_screen_buffers[1];
+    }
+
+    return NULL;
+}
+
 static int ana_amiga_alloc_hidden_bitmap(void)
 {
     int plane;
@@ -1186,7 +1266,7 @@ static int ana_amiga_alloc_hidden_bitmap(void)
     return 1;
 }
 
-static void ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
+static void ana_amiga_set_screen_bitmap_direct(struct BitMap* bitmap)
 {
     if (ana_amiga_screen == NULL || bitmap == NULL) {
         return;
@@ -1201,6 +1281,23 @@ static void ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
 
     MakeScreen(ana_amiga_screen);
     RethinkDisplay();
+}
+
+static void ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
+{
+    struct ScreenBuffer* screen_buffer;
+
+    if (ana_amiga_screen == NULL || bitmap == NULL) {
+        return;
+    }
+
+    screen_buffer = ana_amiga_screen_buffer_for(bitmap);
+    if (screen_buffer != NULL &&
+            ChangeScreenBuffer(ana_amiga_screen, screen_buffer)) {
+        return;
+    }
+
+    ana_amiga_set_screen_bitmap_direct(bitmap);
 }
 
 static int ana_amiga_open_window(void)
@@ -1235,6 +1332,8 @@ static int ana_amiga_open_window(void)
 static int ana_amiga_open_display(void)
 {
     struct NewScreen screen;
+
+    ana_amiga_reset_screen_buffers();
 
     if (!ana_amiga_open_libraries()) {
         ana_amiga_close_libraries();
@@ -1277,6 +1376,7 @@ static int ana_amiga_open_display(void)
 
     ana_amiga_clear_bitmap(ana_amiga_original_bitmap);
     ana_amiga_apply_palette();
+    ana_amiga_alloc_screen_buffers();
 
     ana_amiga_bitmap_states[0].bitmap = ana_amiga_original_bitmap;
     ana_amiga_bitmap_states[0].clear_color_valid = 1;
@@ -1286,6 +1386,7 @@ static int ana_amiga_open_display(void)
     ana_amiga_bitmap_states[1].clear_color = 0u;
 
     if (!ana_amiga_open_window()) {
+        ana_amiga_free_screen_buffers();
         ana_amiga_free_hidden_bitmap();
         CloseScreen(ana_amiga_screen);
         ana_amiga_screen = NULL;
@@ -1311,6 +1412,8 @@ static void ana_amiga_close_display(void)
         CloseWindow(ana_amiga_window);
         ana_amiga_window = NULL;
     }
+
+    ana_amiga_free_screen_buffers();
 
     if (ana_amiga_screen != NULL) {
         CloseScreen(ana_amiga_screen);
