@@ -7,7 +7,7 @@ RM = rm -rf
 
 CFLAGS ?= -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc
 LDFLAGS ?=
-AMIGA_CFLAGS ?= -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68000 -DANA_TARGET_AMIGA
+AMIGA_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68000 -DANA_TARGET_AMIGA
 AMIGA_LDFLAGS ?= -mcrt=nix13 -lamiga
 BUILD_DIR ?= build
 AMIGA_BUILD_DIR ?= $(BUILD_DIR)/amiga

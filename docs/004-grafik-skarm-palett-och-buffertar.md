@@ -53,6 +53,10 @@ Amiga-bygget anvander en Intuition custom screen i PAL lores:
 - defaultpalett sa `ana_clear` syns aven utan explicit palett
 - software-present fran ANA:s draw-buffer till Amiga bitplanes
 - dubbelbuffrad screen-bitmap sa kopieringen sker mot dold frame
+- dirty-rect-konvertering for ritade images, sa sma objekt inte tvingar en
+  helskarmskonvertering varje frame
+- Amiga-target byggs optimerat eftersom ooptimerad 68K-kod blir for langsam
+  for per-frame rendering
 
 Den publika spelkoden ritar fortfarande med `ana_clear` och `ana_draw_image`.
 Den forsta backend-implementationen prioriterar korrekt synlig output och enkel
@@ -63,7 +67,7 @@ laggas under samma API nar vi borjar pressa Invaders-prestanda.
 
 - `ana_clear` ska vara forutsagbar och billig nog for Invaders.
 - `ana_present` ska inte gora ovantat tungt arbete.
-- Ingen konvertering av pixeldata far ske per frame.
+- Per-frame konvertering ska begransas till de omraden som faktiskt ritats om.
 
 ## Inte i 0.1
 
