@@ -61,6 +61,7 @@ static int ana_gfx_opened = 0;
 static int ana_draw_buffer = 0;
 static int ana_front_buffer = 1;
 static int ana_presented_frames = 0;
+static ANA_RenderStats ana_gfx_stats;
 
 static const ANA_Color ana_default_palette[ANA_DEFAULT_COLORS] = {
     { 0, 0, 0 },
@@ -408,7 +409,118 @@ static void ana_gfx_load_default_palette(void)
     }
 }
 
+static void ana_gfx_reset_stats(void)
+{
+    memset(&ana_gfx_stats, 0, sizeof(ana_gfx_stats));
+}
+
 #ifdef ANA_TARGET_AMIGA
+static long ana_gfx_dirty_rect_area(const struct ANA_AmigaDirtyRect* rect)
+{
+    if (rect == NULL || rect->min_x >= rect->max_x ||
+            rect->min_y >= rect->max_y) {
+        return 0L;
+    }
+
+    return (long)(rect->max_x - rect->min_x) *
+        (long)(rect->max_y - rect->min_y);
+}
+
+static long ana_gfx_dirty_rects_area(
+    const struct ANA_AmigaDirtyRect* rects,
+    int rect_count)
+{
+    long area;
+    int i;
+
+    area = 0L;
+    for (i = 0; i < rect_count; i++) {
+        area += ana_gfx_dirty_rect_area(&rects[i]);
+    }
+
+    return area;
+}
+
+static void ana_gfx_record_chunky_clear_rects(
+    const struct ANA_AmigaDirtyRect* rects,
+    int rect_count)
+{
+    long pixels;
+
+    if (rect_count <= 0) {
+        return;
+    }
+
+    pixels = ana_gfx_dirty_rects_area(rects, rect_count);
+    ana_gfx_stats.chunky_clear_rects += (long)rect_count;
+    ana_gfx_stats.chunky_clear_pixels += pixels;
+
+    if (pixels > ana_gfx_stats.max_chunky_clear_pixels) {
+        ana_gfx_stats.max_chunky_clear_pixels = pixels;
+    }
+}
+
+static void ana_gfx_record_chunky_clear_fullscreen(void)
+{
+    ana_gfx_stats.chunky_clear_rects++;
+    ana_gfx_stats.chunky_clear_pixels += ANA_FRAMEBUFFER_PIXELS;
+
+    if (ANA_FRAMEBUFFER_PIXELS > ana_gfx_stats.max_chunky_clear_pixels) {
+        ana_gfx_stats.max_chunky_clear_pixels = ANA_FRAMEBUFFER_PIXELS;
+    }
+}
+
+static void ana_gfx_record_planar_clear_rects(
+    const struct ANA_AmigaDirtyRect* rects,
+    int rect_count)
+{
+    long pixels;
+
+    if (rect_count <= 0) {
+        return;
+    }
+
+    pixels = ana_gfx_dirty_rects_area(rects, rect_count);
+    ana_gfx_stats.planar_clear_rects += (long)rect_count;
+    ana_gfx_stats.planar_clear_pixels += pixels;
+
+    if (pixels > ana_gfx_stats.max_planar_clear_pixels) {
+        ana_gfx_stats.max_planar_clear_pixels = pixels;
+    }
+}
+
+static void ana_gfx_record_planar_clear_fullscreen(void)
+{
+    ana_gfx_stats.planar_clear_rects++;
+    ana_gfx_stats.planar_clear_pixels += ANA_FRAMEBUFFER_PIXELS;
+
+    if (ANA_FRAMEBUFFER_PIXELS > ana_gfx_stats.max_planar_clear_pixels) {
+        ana_gfx_stats.max_planar_clear_pixels = ANA_FRAMEBUFFER_PIXELS;
+    }
+}
+
+static void ana_gfx_record_present_dirty_rects(
+    const struct ANA_AmigaDirtyRect* rects,
+    int rect_count)
+{
+    long pixels;
+
+    if (rect_count <= 0) {
+        return;
+    }
+
+    pixels = ana_gfx_dirty_rects_area(rects, rect_count);
+    ana_gfx_stats.dirty_rects += (long)rect_count;
+    ana_gfx_stats.converted_pixels += pixels;
+
+    if ((long)rect_count > ana_gfx_stats.max_dirty_rects) {
+        ana_gfx_stats.max_dirty_rects = (long)rect_count;
+    }
+
+    if (pixels > ana_gfx_stats.max_converted_pixels) {
+        ana_gfx_stats.max_converted_pixels = pixels;
+    }
+}
 static int ana_amiga_rect_contains(
     const struct ANA_AmigaDirtyRect* outer,
     const struct ANA_AmigaDirtyRect* inner)
@@ -662,6 +774,7 @@ static void ana_amiga_clear_draw_framebuffer(unsigned char color)
             ana_framebuffers[ana_draw_buffer],
             color,
             ANA_FRAMEBUFFER_PIXELS);
+        ana_gfx_record_chunky_clear_fullscreen();
         state->dirty_count = 0;
         state->clear_color_valid = 1;
         state->clear_color = color;
@@ -669,11 +782,17 @@ static void ana_amiga_clear_draw_framebuffer(unsigned char color)
         return;
     }
 
+    ana_gfx_record_chunky_clear_rects(
+        state->dirty_rects,
+        state->dirty_count);
     ana_amiga_clear_chunky_rects(
         ana_draw_buffer,
         color,
         state->dirty_rects,
         state->dirty_count);
+    ana_gfx_record_chunky_clear_rects(
+        ana_amiga_dirty_rects,
+        ana_amiga_dirty_count);
     ana_amiga_clear_chunky_rects(
         ana_draw_buffer,
         color,
@@ -1219,12 +1338,16 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
                 !next_state->clear_color_valid ||
                 next_state->clear_color != ana_amiga_clear_color) {
             ana_amiga_fill_bitmap(next_visible, ana_amiga_clear_color);
+            ana_gfx_record_planar_clear_fullscreen();
             if (next_state != NULL) {
                 next_state->dirty_count = 0;
                 next_state->clear_color_valid = 1;
                 next_state->clear_color = ana_amiga_clear_color;
             }
         } else {
+            ana_gfx_record_planar_clear_rects(
+                next_state->dirty_rects,
+                next_state->dirty_count);
             for (i = 0; i < next_state->dirty_count; i++) {
                 ana_amiga_fill_bitmap_rect(
                     next_visible,
@@ -1233,6 +1356,10 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             }
         }
     }
+
+    ana_gfx_record_present_dirty_rects(
+        ana_amiga_dirty_rects,
+        ana_amiga_dirty_count);
 
     for (i = 0; i < ana_amiga_dirty_count; i++) {
         ana_amiga_copy_chunky_rect_to_bitplanes(
@@ -1268,6 +1395,7 @@ ANA_Result ana_gfx_open(const ANA_Profile* profile)
 
     memset(ana_framebuffers, 0, sizeof(ana_framebuffers));
     ana_gfx_load_default_palette();
+    ana_gfx_reset_stats();
 
 #ifdef ANA_TARGET_AMIGA
     ana_amiga_reset_framebuffer_states();
@@ -1854,6 +1982,7 @@ void ana_present(void)
     ana_front_buffer = ana_draw_buffer;
     ana_draw_buffer = previous_front;
     ana_presented_frames++;
+    ana_gfx_stats.frames = (long)ana_presented_frames;
 
 #ifdef ANA_TARGET_AMIGA
     ana_amiga_store_framebuffer_dirty_state(ana_front_buffer);
@@ -1864,6 +1993,11 @@ void ana_present(void)
 int ana_gfx_present_count(void)
 {
     return ana_presented_frames;
+}
+
+ANA_RenderStats ana_render_stats(void)
+{
+    return ana_gfx_stats;
 }
 
 unsigned char ana_gfx_front_pixel(int x, int y)

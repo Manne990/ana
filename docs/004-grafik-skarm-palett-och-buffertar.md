@@ -29,6 +29,7 @@ typedef struct ANA_Color {
 void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
 void ana_present(void);
+ANA_RenderStats ana_render_stats(void);
 ```
 
 Skarmoppning och stangning sker normalt via `ana_run` och `ANA_Game`. Lagre `ana_gfx_*`-funktioner kan finnas internt eller som advanced-API senare, men basexempel ska inte behova anropa dem.
@@ -68,6 +69,8 @@ laggas under samma API nar vi borjar pressa Invaders-prestanda.
 - `ana_clear` ska vara forutsagbar och billig nog for Invaders.
 - `ana_present` ska inte gora ovantat tungt arbete.
 - Per-frame konvertering ska begransas till de omraden som faktiskt ritats om.
+- `ana_render_stats()` ska kunna anvandas efter en korning for att logga
+  renderkostnad, till exempel dirty rects, konverterad yta och clear-yta.
 
 ## Inte i 0.1
 

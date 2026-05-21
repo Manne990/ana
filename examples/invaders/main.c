@@ -299,14 +299,35 @@ static void invaders_shutdown(void)
 static void invaders_print_run_stats(void)
 {
     ANA_RunStats stats;
+    ANA_RenderStats render_stats;
     long elapsed_seconds_x100;
+    long dirty_rects_per_frame_x100;
+    long converted_pixels_per_frame;
+    long planar_clear_pixels_per_frame;
+    long chunky_clear_pixels_per_frame;
 
     stats = ana_last_run_stats();
+    render_stats = ana_render_stats();
     elapsed_seconds_x100 = 0L;
+    dirty_rects_per_frame_x100 = 0L;
+    converted_pixels_per_frame = 0L;
+    planar_clear_pixels_per_frame = 0L;
+    chunky_clear_pixels_per_frame = 0L;
 
     if (stats.ticks_per_second > 0L) {
         elapsed_seconds_x100 =
             (stats.elapsed_ticks * 100L) / stats.ticks_per_second;
+    }
+
+    if (render_stats.frames > 0L) {
+        dirty_rects_per_frame_x100 =
+            (render_stats.dirty_rects * 100L) / render_stats.frames;
+        converted_pixels_per_frame =
+            render_stats.converted_pixels / render_stats.frames;
+        planar_clear_pixels_per_frame =
+            render_stats.planar_clear_pixels / render_stats.frames;
+        chunky_clear_pixels_per_frame =
+            render_stats.chunky_clear_pixels / render_stats.frames;
     }
 
     printf("Frames presented: %ld\n", stats.frames);
@@ -318,6 +339,23 @@ static void invaders_print_run_stats(void)
         "Average FPS: %ld.%02ld\n",
         stats.average_fps_x100 / 100L,
         stats.average_fps_x100 % 100L);
+    printf(
+        "Dirty rects/frame: %ld.%02ld (max %ld)\n",
+        dirty_rects_per_frame_x100 / 100L,
+        dirty_rects_per_frame_x100 % 100L,
+        render_stats.max_dirty_rects);
+    printf(
+        "Converted pixels/frame: %ld (max %ld)\n",
+        converted_pixels_per_frame,
+        render_stats.max_converted_pixels);
+    printf(
+        "Planar clear pixels/frame: %ld (max %ld)\n",
+        planar_clear_pixels_per_frame,
+        render_stats.max_planar_clear_pixels);
+    printf(
+        "Chunky clear pixels/frame: %ld (max %ld)\n",
+        chunky_clear_pixels_per_frame,
+        render_stats.max_chunky_clear_pixels);
 }
 
 int main(void)

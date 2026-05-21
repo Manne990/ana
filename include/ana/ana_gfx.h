@@ -13,9 +13,24 @@ typedef struct ANA_Color {
     unsigned char b;
 } ANA_Color;
 
+typedef struct ANA_RenderStats {
+    long frames;
+    long dirty_rects;
+    long converted_pixels;
+    long planar_clear_rects;
+    long planar_clear_pixels;
+    long chunky_clear_rects;
+    long chunky_clear_pixels;
+    long max_dirty_rects;
+    long max_converted_pixels;
+    long max_planar_clear_pixels;
+    long max_chunky_clear_pixels;
+} ANA_RenderStats;
+
 void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
 void ana_present(void);
+ANA_RenderStats ana_render_stats(void);
 
 ANA_Image ana_load_image(const char* path);
 ANA_Image ana_load_image_data(const unsigned char* bytes, long size);
