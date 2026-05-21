@@ -30,6 +30,8 @@ typedef struct ANA_RenderStats {
     long present_clear_perf_ticks;
     long present_convert_perf_ticks;
     long present_flip_perf_ticks;
+    long screen_buffer_flips;
+    long direct_flips;
 } ANA_RenderStats;
 
 void ana_set_palette(const ANA_Color* colors, int count);

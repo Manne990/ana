@@ -1214,7 +1214,6 @@ static int ana_amiga_alloc_screen_buffers(void)
 {
     if (ana_amiga_screen == NULL ||
             ana_amiga_original_bitmap == NULL ||
-            !ana_amiga_hidden_bitmap_ready ||
             !ana_amiga_supports_screen_buffers()) {
         return 0;
     }
@@ -1227,8 +1226,10 @@ static int ana_amiga_alloc_screen_buffers(void)
     }
 
     ana_amiga_screen_buffers[1] =
-        AllocScreenBuffer(ana_amiga_screen, &ana_amiga_hidden_bitmap, 0);
-    if (ana_amiga_screen_buffers[1] == NULL) {
+        AllocScreenBuffer(ana_amiga_screen, NULL, SB_COPY_BITMAP);
+    if (ana_amiga_screen_buffers[1] == NULL ||
+            ana_amiga_screen_buffers[0]->sb_BitMap == NULL ||
+            ana_amiga_screen_buffers[1]->sb_BitMap == NULL) {
         ana_amiga_free_screen_buffers();
         return 0;
     }
@@ -1240,16 +1241,17 @@ static int ana_amiga_alloc_screen_buffers(void)
 static struct ScreenBuffer* ana_amiga_screen_buffer_for(
     struct BitMap* bitmap)
 {
+    int i;
+
     if (!ana_amiga_screen_buffers_ready || bitmap == NULL) {
         return NULL;
     }
 
-    if (bitmap == ana_amiga_original_bitmap) {
-        return ana_amiga_screen_buffers[0];
-    }
-
-    if (bitmap == &ana_amiga_hidden_bitmap) {
-        return ana_amiga_screen_buffers[1];
+    for (i = 0; i < 2; i++) {
+        if (ana_amiga_screen_buffers[i] != NULL &&
+                ana_amiga_screen_buffers[i]->sb_BitMap == bitmap) {
+            return ana_amiga_screen_buffers[i];
+        }
     }
 
     return NULL;
@@ -1395,11 +1397,15 @@ static int ana_amiga_open_display(void)
     ana_amiga_clear_bitmap(ana_amiga_original_bitmap);
     ana_amiga_apply_palette();
     ana_amiga_alloc_screen_buffers();
+    if (ana_amiga_screen_buffers_ready) {
+        ana_amiga_original_bitmap = ana_amiga_screen_buffers[0]->sb_BitMap;
+        ana_amiga_draw_bitmap = ana_amiga_screen_buffers[1]->sb_BitMap;
+    }
 
     ana_amiga_bitmap_states[0].bitmap = ana_amiga_original_bitmap;
     ana_amiga_bitmap_states[0].clear_color_valid = 1;
     ana_amiga_bitmap_states[0].clear_color = 0u;
-    ana_amiga_bitmap_states[1].bitmap = &ana_amiga_hidden_bitmap;
+    ana_amiga_bitmap_states[1].bitmap = ana_amiga_draw_bitmap;
     ana_amiga_bitmap_states[1].clear_color_valid = 1;
     ana_amiga_bitmap_states[1].clear_color = 0u;
 
@@ -1642,7 +1648,10 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 
     stage_start = ana_platform_perf_ticks();
     if (!ana_amiga_set_screen_bitmap(next_visible)) {
+        ana_gfx_stats.direct_flips++;
         WaitTOF();
+    } else {
+        ana_gfx_stats.screen_buffer_flips++;
     }
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_flip_perf_ticks,

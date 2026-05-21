@@ -439,6 +439,10 @@ static void invaders_print_run_stats(void)
     printf("/");
     invaders_print_ms(present_total_us);
     printf("\n");
+    printf(
+        "Flip paths screen/direct: %ld/%ld\n",
+        render_stats.screen_buffer_flips,
+        render_stats.direct_flips);
 }
 
 int main(void)
