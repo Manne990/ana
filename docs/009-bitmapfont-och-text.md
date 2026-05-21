@@ -20,6 +20,7 @@ typedef struct ANA_FontData* ANA_Font;
 ANA_Font ana_load_font(const char* path);
 ANA_Font ana_load_font_data(const unsigned char* bytes, long size);
 void ana_free_font(ANA_Font font);
+void ana_set_font_color(ANA_Font font, unsigned char color_index);
 void ana_draw_text(ANA_Font font, int x, int y, const char* text);
 void ana_draw_int(ANA_Font font, int x, int y, int value);
 int ana_text_width(ANA_Font font, const char* text);
@@ -60,6 +61,8 @@ ADF:en.
 - Text ritas utan dynamisk layout.
 - Ingen radbrytning behovs i 0.1.
 - Okanda tecken kan hoppas over eller ritas som placeholder.
+- `ana_set_font_color` tintar fontens solida pixlar till en palettfarg.
+  Standardfargen ar palettindex 1.
 - Text ska inte allokera minne vid ritning.
 - `ana_draw_int` ska bygga sin text i stack-minne och inte allokera.
 

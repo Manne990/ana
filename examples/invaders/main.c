@@ -155,6 +155,9 @@ static void invaders_load(void)
     hud_font = ana_load_font_data(
         hud_font_data,
         (long)sizeof(hud_font_data));
+    if (hud_font != 0) {
+        ana_set_font_color(hud_font, 5);
+    }
 }
 
 static void invaders_update(ANA_Time time)

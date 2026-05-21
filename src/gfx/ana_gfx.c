@@ -118,6 +118,7 @@ struct ANA_FontData {
     int char_height;
     int first_char;
     int char_count;
+    unsigned char color_index;
 };
 
 #ifdef ANA_TARGET_AMIGA
@@ -1064,6 +1065,7 @@ ANA_Font ana_load_font_data(const unsigned char* bytes, long size)
     font->char_height = char_height;
     font->first_char = first_char;
     font->char_count = char_count;
+    font->color_index = 1u;
 
     return font;
 }
@@ -1077,6 +1079,93 @@ void ana_free_font(ANA_Font font)
     ana_free_image(font->image);
     font->image = NULL;
     free(font);
+}
+
+void ana_set_font_color(ANA_Font font, unsigned char color_index)
+{
+    if (font == NULL) {
+        return;
+    }
+
+    font->color_index = (unsigned char)(color_index & 0x0f);
+}
+
+static void ana_draw_font_glyph(ANA_Font font, int frame, int x, int y)
+{
+    ANA_Image image;
+    int start_x;
+    int start_y;
+    int end_x;
+    int end_y;
+    int dest_x;
+    int dest_y;
+    int src_x;
+    int src_y;
+    int draw_pixel;
+    const unsigned char* mask;
+
+    if (!ana_gfx_opened || font == NULL || font->image == NULL) {
+        return;
+    }
+
+    image = font->image;
+
+    if (frame < 0 || frame >= image->frame_count) {
+        return;
+    }
+
+    if (x >= ANA_DEFAULT_WIDTH || y >= ANA_DEFAULT_HEIGHT ||
+            x <= -image->width || y <= -image->height) {
+        return;
+    }
+
+    start_x = x < 0 ? 0 : x;
+    start_y = y < 0 ? 0 : y;
+    end_x = x + image->width;
+    end_y = y + image->height;
+
+    if (end_x > ANA_DEFAULT_WIDTH) {
+        end_x = ANA_DEFAULT_WIDTH;
+    }
+
+    if (end_y > ANA_DEFAULT_HEIGHT) {
+        end_y = ANA_DEFAULT_HEIGHT;
+    }
+
+    if (start_x >= end_x || start_y >= end_y) {
+        return;
+    }
+
+#ifdef ANA_TARGET_AMIGA
+    ana_amiga_mark_dirty_rect(start_x, start_y, end_x, end_y);
+#endif
+
+    mask = ana_image_mask_base(image, frame);
+
+    for (dest_y = start_y; dest_y < end_y; dest_y++) {
+        src_y = dest_y - y;
+
+        for (dest_x = start_x; dest_x < end_x; dest_x++) {
+            src_x = dest_x - x;
+
+            if (mask != NULL) {
+                draw_pixel = ana_image_bit_at(
+                    mask,
+                    image->row_bytes,
+                    src_x,
+                    src_y);
+            } else {
+                draw_pixel =
+                    ana_image_pixel_at(image, frame, src_x, src_y) != 0u;
+            }
+
+            if (draw_pixel) {
+                ana_framebuffers[ana_draw_buffer]
+                    [(dest_y * ANA_DEFAULT_WIDTH) + dest_x] =
+                    font->color_index;
+            }
+        }
+    }
 }
 
 void ana_draw_text(ANA_Font font, int x, int y, const char* text)
@@ -1105,7 +1194,7 @@ void ana_draw_text(ANA_Font font, int x, int y, const char* text)
         frame = (int)ch - font->first_char;
 
         if (frame >= 0 && frame < font->char_count) {
-            ana_draw_image_frame_internal(font->image, frame, pen_x, y, 0);
+            ana_draw_font_glyph(font, frame, pen_x, y);
         }
 
         pen_x += font->char_width;

@@ -218,6 +218,20 @@ static void test_font_loading_and_drawing(void)
     assert(ana_gfx_draw_pixel(6, 4) == 1);
     assert(ana_gfx_draw_pixel(7, 4) == 1);
 
+    ana_set_font_color(file_font, 5);
+    ana_clear(0);
+    ana_draw_text(file_font, 1, 1, "0");
+    assert(ana_gfx_draw_pixel(1, 1) == 5);
+    assert(ana_gfx_draw_pixel(2, 1) == 5);
+    assert(ana_gfx_draw_pixel(3, 1) == 5);
+
+    ana_set_font_color(file_font, 18);
+    ana_clear(0);
+    ana_draw_int(file_font, 2, 4, 2);
+    assert(ana_gfx_draw_pixel(2, 4) == 2);
+    assert(ana_gfx_draw_pixel(3, 4) == 0);
+    assert(ana_gfx_draw_pixel(4, 4) == 2);
+
     ana_gfx_close();
     ana_free_font(file_font);
     ana_free_font(font);
