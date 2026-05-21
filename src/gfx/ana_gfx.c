@@ -132,6 +132,16 @@ struct ANA_AmigaDirtyRect {
 static struct ANA_AmigaDirtyRect
     ana_amiga_dirty_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
 static int ana_amiga_dirty_count = 0;
+
+struct ANA_AmigaBitmapState {
+    struct BitMap* bitmap;
+    struct ANA_AmigaDirtyRect dirty_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
+    int dirty_count;
+    int clear_color_valid;
+    unsigned char clear_color;
+};
+
+static struct ANA_AmigaBitmapState ana_amiga_bitmap_states[2];
 #endif
 
 static void ana_draw_image_frame_internal(
@@ -482,6 +492,44 @@ static void ana_amiga_reset_frame_state(void)
     ana_amiga_clear_color = 0;
 }
 
+static void ana_amiga_reset_bitmap_states(void)
+{
+    memset(ana_amiga_bitmap_states, 0, sizeof(ana_amiga_bitmap_states));
+}
+
+static struct ANA_AmigaBitmapState* ana_amiga_bitmap_state_for(
+    struct BitMap* bitmap)
+{
+    int i;
+
+    if (bitmap == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < 2; i++) {
+        if (ana_amiga_bitmap_states[i].bitmap == bitmap) {
+            return &ana_amiga_bitmap_states[i];
+        }
+    }
+
+    return NULL;
+}
+
+static void ana_amiga_store_bitmap_dirty_state(
+    struct ANA_AmigaBitmapState* state)
+{
+    int i;
+
+    if (state == NULL) {
+        return;
+    }
+
+    state->dirty_count = ana_amiga_dirty_count;
+    for (i = 0; i < ana_amiga_dirty_count; i++) {
+        state->dirty_rects[i] = ana_amiga_dirty_rects[i];
+    }
+}
+
 static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
 {
     struct ANA_AmigaDirtyRect rect;
@@ -495,12 +543,23 @@ static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y
         min_y = 0;
     }
 
+    if (max_x < 0) {
+        max_x = 0;
+    }
+
     if (max_x > ANA_DEFAULT_WIDTH) {
         max_x = ANA_DEFAULT_WIDTH;
     }
 
     if (max_y > ANA_DEFAULT_HEIGHT) {
         max_y = ANA_DEFAULT_HEIGHT;
+    }
+
+    min_x &= ~7;
+    max_x = (max_x + 7) & ~7;
+
+    if (max_x > ANA_DEFAULT_WIDTH) {
+        max_x = ANA_DEFAULT_WIDTH;
     }
 
     if (min_x >= max_x || min_y >= max_y) {
@@ -637,6 +696,53 @@ static void ana_amiga_fill_bitmap(struct BitMap* bitmap, unsigned char color)
     }
 }
 
+static void ana_amiga_fill_bitmap_rect(
+    struct BitMap* bitmap,
+    unsigned char color,
+    const struct ANA_AmigaDirtyRect* rect)
+{
+    int y;
+    int plane;
+    int start_byte_x;
+    int end_byte_x;
+    int byte_width;
+    unsigned char fill;
+    unsigned long row_offset;
+
+    if (bitmap == NULL || rect == NULL) {
+        return;
+    }
+
+    if (rect->min_x >= rect->max_x || rect->min_y >= rect->max_y) {
+        return;
+    }
+
+    start_byte_x = rect->min_x / 8;
+    end_byte_x = (rect->max_x + 7) / 8;
+    byte_width = end_byte_x - start_byte_x;
+
+    if (byte_width <= 0) {
+        return;
+    }
+
+    for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+        if (bitmap->Planes[plane] == NULL) {
+            continue;
+        }
+
+        fill = (color & (1u << plane)) != 0u ? 0xffu : 0x00u;
+
+        for (y = rect->min_y; y < rect->max_y; y++) {
+            row_offset = (unsigned long)y * bitmap->BytesPerRow;
+            memset(
+                ((unsigned char*)bitmap->Planes[plane]) +
+                    row_offset + (unsigned long)start_byte_x,
+                fill,
+                (size_t)byte_width);
+        }
+    }
+}
+
 static void ana_amiga_free_hidden_bitmap(void)
 {
     int plane;
@@ -761,6 +867,7 @@ static int ana_amiga_open_display(void)
     ana_amiga_original_bitmap = ana_amiga_screen->RastPort.BitMap;
     ana_amiga_visible_bitmap = ana_amiga_original_bitmap;
     ana_amiga_draw_bitmap = &ana_amiga_hidden_bitmap;
+    ana_amiga_reset_bitmap_states();
 
     if (!ana_amiga_alloc_hidden_bitmap()) {
         CloseScreen(ana_amiga_screen);
@@ -774,6 +881,13 @@ static int ana_amiga_open_display(void)
 
     ana_amiga_clear_bitmap(ana_amiga_original_bitmap);
     ana_amiga_apply_palette();
+
+    ana_amiga_bitmap_states[0].bitmap = ana_amiga_original_bitmap;
+    ana_amiga_bitmap_states[0].clear_color_valid = 1;
+    ana_amiga_bitmap_states[0].clear_color = 0u;
+    ana_amiga_bitmap_states[1].bitmap = &ana_amiga_hidden_bitmap;
+    ana_amiga_bitmap_states[1].clear_color_valid = 1;
+    ana_amiga_bitmap_states[1].clear_color = 0u;
 
     if (!ana_amiga_open_window()) {
         ana_amiga_free_hidden_bitmap();
@@ -812,6 +926,7 @@ static void ana_amiga_close_display(void)
     ana_amiga_visible_bitmap = NULL;
     ana_amiga_draw_bitmap = NULL;
     ana_amiga_reset_frame_state();
+    ana_amiga_reset_bitmap_states();
 
     ana_amiga_close_libraries();
 }
@@ -897,6 +1012,7 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 {
     struct BitMap* next_visible;
     struct BitMap* previous_visible;
+    struct ANA_AmigaBitmapState* next_state;
     int i;
 
     if (ana_amiga_screen == NULL) {
@@ -910,8 +1026,26 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
         return;
     }
 
+    next_state = ana_amiga_bitmap_state_for(next_visible);
+
     if (ana_amiga_clear_requested) {
-        ana_amiga_fill_bitmap(next_visible, ana_amiga_clear_color);
+        if (next_state == NULL ||
+                !next_state->clear_color_valid ||
+                next_state->clear_color != ana_amiga_clear_color) {
+            ana_amiga_fill_bitmap(next_visible, ana_amiga_clear_color);
+            if (next_state != NULL) {
+                next_state->dirty_count = 0;
+                next_state->clear_color_valid = 1;
+                next_state->clear_color = ana_amiga_clear_color;
+            }
+        } else {
+            for (i = 0; i < next_state->dirty_count; i++) {
+                ana_amiga_fill_bitmap_rect(
+                    next_visible,
+                    ana_amiga_clear_color,
+                    &next_state->dirty_rects[i]);
+            }
+        }
     }
 
     for (i = 0; i < ana_amiga_dirty_count; i++) {
@@ -922,6 +1056,10 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             ana_amiga_dirty_rects[i].min_y,
             ana_amiga_dirty_rects[i].max_x,
             ana_amiga_dirty_rects[i].max_y);
+    }
+
+    if (ana_amiga_clear_requested) {
+        ana_amiga_store_bitmap_dirty_state(next_state);
     }
 
     WaitTOF();
