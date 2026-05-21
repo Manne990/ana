@@ -169,6 +169,12 @@ static void ana_draw_image_frame_internal(
     int y,
     int mark_dirty);
 
+static int ana_draw_image_frame_fast(
+    ANA_Image image,
+    int frame,
+    int x,
+    int y);
+
 static int ana_image_magic_is_valid(const unsigned char* header)
 {
     return header[0] == 'A' &&
@@ -2025,6 +2031,103 @@ static void ana_draw_font_glyph(ANA_Font font, int frame, int x, int y)
     }
 }
 
+static int ana_draw_text_fast_mask8(ANA_Font font, int x, int y, const char* text)
+{
+    ANA_Image image;
+    const unsigned char* mask;
+    unsigned char* dest_row;
+    unsigned char bits;
+    int width;
+    int pen_x;
+    int frame;
+    int row;
+    unsigned char ch;
+
+    image = font->image;
+    width = ana_text_width(font, text);
+
+    if (image == NULL ||
+            !ana_image_has_mask(image) ||
+            image->row_bytes != 1 ||
+            image->width > 8 ||
+            x < 0 ||
+            y < 0 ||
+            x + width > ANA_DEFAULT_WIDTH ||
+            y + image->height > ANA_DEFAULT_HEIGHT) {
+        return 0;
+    }
+
+    pen_x = x;
+    while (*text != '\0') {
+        ch = (unsigned char)*text;
+        frame = (int)ch - font->first_char;
+
+        if (frame >= 0 && frame < font->char_count) {
+            mask = ana_image_mask_base(image, frame);
+            for (row = 0; row < image->height; row++) {
+                bits = mask[row];
+                if (bits != 0u) {
+                    dest_row =
+                        ana_framebuffers[ana_draw_buffer] +
+                        ((long)(y + row) * ANA_DEFAULT_WIDTH) +
+                        pen_x;
+
+                    if (image->width == 6) {
+                        if ((bits & 0x80u) != 0u) {
+                            dest_row[0] = font->color_index;
+                        }
+                        if ((bits & 0x40u) != 0u) {
+                            dest_row[1] = font->color_index;
+                        }
+                        if ((bits & 0x20u) != 0u) {
+                            dest_row[2] = font->color_index;
+                        }
+                        if ((bits & 0x10u) != 0u) {
+                            dest_row[3] = font->color_index;
+                        }
+                        if ((bits & 0x08u) != 0u) {
+                            dest_row[4] = font->color_index;
+                        }
+                        if ((bits & 0x04u) != 0u) {
+                            dest_row[5] = font->color_index;
+                        }
+                    } else {
+                        if ((bits & 0x80u) != 0u) {
+                            dest_row[0] = font->color_index;
+                        }
+                        if (image->width > 1 && (bits & 0x40u) != 0u) {
+                            dest_row[1] = font->color_index;
+                        }
+                        if (image->width > 2 && (bits & 0x20u) != 0u) {
+                            dest_row[2] = font->color_index;
+                        }
+                        if (image->width > 3 && (bits & 0x10u) != 0u) {
+                            dest_row[3] = font->color_index;
+                        }
+                        if (image->width > 4 && (bits & 0x08u) != 0u) {
+                            dest_row[4] = font->color_index;
+                        }
+                        if (image->width > 5 && (bits & 0x04u) != 0u) {
+                            dest_row[5] = font->color_index;
+                        }
+                        if (image->width > 6 && (bits & 0x02u) != 0u) {
+                            dest_row[6] = font->color_index;
+                        }
+                        if (image->width > 7 && (bits & 0x01u) != 0u) {
+                            dest_row[7] = font->color_index;
+                        }
+                    }
+                }
+            }
+        }
+
+        pen_x += font->char_width;
+        text++;
+    }
+
+    return 1;
+}
+
 void ana_draw_text(ANA_Font font, int x, int y, const char* text)
 {
     int pen_x;
@@ -2043,6 +2146,10 @@ void ana_draw_text(ANA_Font font, int x, int y, const char* text)
     width = 0;
     (void)width;
 #endif
+
+    if (ana_draw_text_fast_mask8(font, x, y, text)) {
+        return;
+    }
 
     pen_x = x;
 
@@ -2191,6 +2298,10 @@ static void ana_draw_image_frame_internal(
     (void)mark_dirty;
 #endif
 
+    if (ana_draw_image_frame_fast(image, frame, x, y)) {
+        return;
+    }
+
     mask = ana_image_mask_base(image, frame);
     pixels = ana_image_pixels_base(image, frame);
 
@@ -2214,6 +2325,177 @@ static void ana_draw_image_frame_internal(
             }
         }
     }
+}
+
+static int ana_draw_image_frame_fast(
+    ANA_Image image,
+    int frame,
+    int x,
+    int y)
+{
+    const unsigned char* mask;
+    const unsigned char* pixels;
+    const unsigned char* source_row;
+    unsigned char* dest_row;
+    unsigned char bits;
+    int row;
+
+    if (image == NULL ||
+            frame < 0 ||
+            frame >= image->frame_count ||
+            x < 0 ||
+            y < 0 ||
+            x + image->width > ANA_DEFAULT_WIDTH ||
+            y + image->height > ANA_DEFAULT_HEIGHT) {
+        return 0;
+    }
+
+    pixels = ana_image_pixels_base(image, frame);
+    if (pixels == NULL) {
+        return 0;
+    }
+
+    mask = ana_image_mask_base(image, frame);
+    if (mask == NULL) {
+        for (row = 0; row < image->height; row++) {
+            memcpy(
+                ana_framebuffers[ana_draw_buffer] +
+                    ((long)(y + row) * ANA_DEFAULT_WIDTH) +
+                    x,
+                pixels + ((long)row * image->width),
+                (size_t)image->width);
+        }
+
+        return 1;
+    }
+
+    if (image->row_bytes == 1 && image->width == 2) {
+        for (row = 0; row < image->height; row++) {
+            bits = mask[row];
+            if (bits != 0u) {
+                source_row = pixels + ((long)row * image->width);
+                dest_row =
+                    ana_framebuffers[ana_draw_buffer] +
+                    ((long)(y + row) * ANA_DEFAULT_WIDTH) +
+                    x;
+
+                if ((bits & 0x80u) != 0u) {
+                    dest_row[0] = source_row[0];
+                }
+                if ((bits & 0x40u) != 0u) {
+                    dest_row[1] = source_row[1];
+                }
+            }
+        }
+
+        return 1;
+    }
+
+    if (image->row_bytes == 1 && image->width <= 8) {
+        for (row = 0; row < image->height; row++) {
+            bits = mask[row];
+            if (bits != 0u) {
+                source_row = pixels + ((long)row * image->width);
+                dest_row =
+                    ana_framebuffers[ana_draw_buffer] +
+                    ((long)(y + row) * ANA_DEFAULT_WIDTH) +
+                    x;
+
+                if ((bits & 0x80u) != 0u) {
+                    dest_row[0] = source_row[0];
+                }
+                if (image->width > 1 && (bits & 0x40u) != 0u) {
+                    dest_row[1] = source_row[1];
+                }
+                if (image->width > 2 && (bits & 0x20u) != 0u) {
+                    dest_row[2] = source_row[2];
+                }
+                if (image->width > 3 && (bits & 0x10u) != 0u) {
+                    dest_row[3] = source_row[3];
+                }
+                if (image->width > 4 && (bits & 0x08u) != 0u) {
+                    dest_row[4] = source_row[4];
+                }
+                if (image->width > 5 && (bits & 0x04u) != 0u) {
+                    dest_row[5] = source_row[5];
+                }
+                if (image->width > 6 && (bits & 0x02u) != 0u) {
+                    dest_row[6] = source_row[6];
+                }
+                if (image->width > 7 && (bits & 0x01u) != 0u) {
+                    dest_row[7] = source_row[7];
+                }
+            }
+        }
+
+        return 1;
+    }
+
+    if (image->row_bytes == 2 && image->width == 16) {
+        for (row = 0; row < image->height; row++) {
+            source_row = pixels + ((long)row * image->width);
+            dest_row =
+                ana_framebuffers[ana_draw_buffer] +
+                ((long)(y + row) * ANA_DEFAULT_WIDTH) +
+                x;
+
+            bits = mask[(row * 2)];
+            if ((bits & 0x80u) != 0u) {
+                dest_row[0] = source_row[0];
+            }
+            if ((bits & 0x40u) != 0u) {
+                dest_row[1] = source_row[1];
+            }
+            if ((bits & 0x20u) != 0u) {
+                dest_row[2] = source_row[2];
+            }
+            if ((bits & 0x10u) != 0u) {
+                dest_row[3] = source_row[3];
+            }
+            if ((bits & 0x08u) != 0u) {
+                dest_row[4] = source_row[4];
+            }
+            if ((bits & 0x04u) != 0u) {
+                dest_row[5] = source_row[5];
+            }
+            if ((bits & 0x02u) != 0u) {
+                dest_row[6] = source_row[6];
+            }
+            if ((bits & 0x01u) != 0u) {
+                dest_row[7] = source_row[7];
+            }
+
+            bits = mask[(row * 2) + 1];
+            if ((bits & 0x80u) != 0u) {
+                dest_row[8] = source_row[8];
+            }
+            if ((bits & 0x40u) != 0u) {
+                dest_row[9] = source_row[9];
+            }
+            if ((bits & 0x20u) != 0u) {
+                dest_row[10] = source_row[10];
+            }
+            if ((bits & 0x10u) != 0u) {
+                dest_row[11] = source_row[11];
+            }
+            if ((bits & 0x08u) != 0u) {
+                dest_row[12] = source_row[12];
+            }
+            if ((bits & 0x04u) != 0u) {
+                dest_row[13] = source_row[13];
+            }
+            if ((bits & 0x02u) != 0u) {
+                dest_row[14] = source_row[14];
+            }
+            if ((bits & 0x01u) != 0u) {
+                dest_row[15] = source_row[15];
+            }
+        }
+
+        return 1;
+    }
+
+    return 0;
 }
 
 int ana_image_width(ANA_Image image)
