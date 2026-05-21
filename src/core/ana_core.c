@@ -98,6 +98,27 @@ static void ana_runtime_record_stats(long start_ticks, long end_ticks)
     }
 }
 
+static void ana_runtime_wait_for_next_frame(
+    long start_ticks,
+    long frame,
+    long fps)
+{
+    long ticks_per_second;
+    long target_ticks;
+
+    if (fps <= 0L) {
+        return;
+    }
+
+    ticks_per_second = ana_platform_time_ticks_per_second();
+    if (ticks_per_second <= 0L) {
+        return;
+    }
+
+    target_ticks = start_ticks + ((frame * ticks_per_second) / fps);
+    ana_platform_wait_until_time_tick(target_ticks);
+}
+
 int ana_run(const ANA_Game* game)
 {
     ANA_Profile profile;
@@ -178,6 +199,13 @@ int ana_run(const ANA_Game* game)
                 &ana_runtime_last_stats.present_perf_ticks,
                 perf_start,
                 ana_platform_perf_ticks());
+        }
+
+        if (!ana_runtime_quit_requested) {
+            ana_runtime_wait_for_next_frame(
+                start_ticks,
+                time.tick + 1L,
+                (long)profile.fps);
         }
 
         time.tick++;

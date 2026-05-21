@@ -7,6 +7,7 @@
 #include <exec/types.h>
 #include <intuition/intuitionbase.h>
 #include <proto/dos.h>
+#include <proto/graphics.h>
 #include <proto/intuition.h>
 #else
 #include <time.h>
@@ -127,5 +128,16 @@ unsigned long ana_platform_perf_ticks_per_second(void)
     }
 
     return (unsigned long)CLOCKS_PER_SEC;
+#endif
+}
+
+void ana_platform_wait_until_time_tick(long target_tick)
+{
+#ifdef ANA_TARGET_AMIGA
+    while (ana_platform_time_ticks() < target_tick) {
+        WaitTOF();
+    }
+#else
+    (void)target_tick;
 #endif
 }

@@ -32,5 +32,6 @@ long ana_platform_time_ticks(void);
 long ana_platform_time_ticks_per_second(void);
 unsigned long ana_platform_perf_ticks(void);
 unsigned long ana_platform_perf_ticks_per_second(void);
+void ana_platform_wait_until_time_tick(long target_tick);
 
 #endif
