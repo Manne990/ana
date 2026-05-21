@@ -53,8 +53,8 @@ Amiga-bygget anvander en Intuition custom screen i PAL lores:
 - defaultpalett sa `ana_clear` syns aven utan explicit palett
 - software-present fran ANA:s draw-buffer till Amiga bitplanes
 - dubbelbuffrad screen-bitmap sa kopieringen sker mot dold frame
-- dirty-rect-konvertering for ritade images, sa sma objekt inte tvingar en
-  helskarmskonvertering varje frame
+- dirty-rect-konvertering for ritade images och text, med flera sma rects per
+  frame sa HUD-text och spelarsprite inte tvingar en stor gemensam konvertering
 - Amiga-target byggs optimerat eftersom ooptimerad 68K-kod blir for langsam
   for per-frame rendering
 

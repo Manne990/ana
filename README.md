@@ -112,7 +112,7 @@ The initial 0.1 work is split into focused specs:
 
 ## Current Status
 
-ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, visible Amiga PAL lores graphics, image loading/rendering, keyboard input mapping, example skeletons, and the first host-side asset conversion flow.
+ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, visible Amiga PAL lores graphics, image loading/rendering, bitmap font text, input mapping, example skeletons, and the first host-side asset conversion flow.
 
 ## Build
 

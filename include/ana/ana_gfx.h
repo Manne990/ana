@@ -26,6 +26,13 @@ int ana_image_width(ANA_Image image);
 int ana_image_height(ANA_Image image);
 int ana_image_frame_count(ANA_Image image);
 
+ANA_Font ana_load_font(const char* path);
+ANA_Font ana_load_font_data(const unsigned char* bytes, long size);
+void ana_free_font(ANA_Font font);
+void ana_draw_text(ANA_Font font, int x, int y, const char* text);
+void ana_draw_int(ANA_Font font, int x, int y, int value);
+int ana_text_width(ANA_Font font, const char* text);
+
 #ifdef __cplusplus
 }
 #endif

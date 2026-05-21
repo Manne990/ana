@@ -26,6 +26,8 @@
 #define ANA_IMAGE_MAX_WIDTH ANA_DEFAULT_WIDTH
 #define ANA_IMAGE_MAX_HEIGHT ANA_DEFAULT_HEIGHT
 #define ANA_IMAGE_MAX_FRAMES 256
+#define ANA_FONT_HEADER_SIZE 16
+#define ANA_AMIGA_MAX_DIRTY_RECTS 64
 
 #ifdef ANA_TARGET_AMIGA
 #ifdef BORDERLESS
@@ -91,11 +93,6 @@ static struct BitMap* ana_amiga_visible_bitmap = NULL;
 static struct BitMap* ana_amiga_draw_bitmap = NULL;
 static unsigned short ana_amiga_rgb4[ANA_DEFAULT_COLORS];
 static int ana_amiga_hidden_bitmap_ready = 0;
-static int ana_amiga_dirty_valid = 0;
-static int ana_amiga_dirty_min_x = 0;
-static int ana_amiga_dirty_min_y = 0;
-static int ana_amiga_dirty_max_x = 0;
-static int ana_amiga_dirty_max_y = 0;
 static int ana_amiga_clear_requested = 0;
 static unsigned char ana_amiga_clear_color = 0;
 #endif
@@ -115,6 +112,27 @@ struct ANA_ImageData {
     unsigned char* data;
 };
 
+struct ANA_FontData {
+    ANA_Image image;
+    int char_width;
+    int char_height;
+    int first_char;
+    int char_count;
+};
+
+#ifdef ANA_TARGET_AMIGA
+struct ANA_AmigaDirtyRect {
+    int min_x;
+    int min_y;
+    int max_x;
+    int max_y;
+};
+
+static struct ANA_AmigaDirtyRect
+    ana_amiga_dirty_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
+static int ana_amiga_dirty_count = 0;
+#endif
+
 static int ana_image_magic_is_valid(const unsigned char* header)
 {
     return header[0] == 'A' &&
@@ -123,6 +141,18 @@ static int ana_image_magic_is_valid(const unsigned char* header)
         header[3] == 'I' &&
         header[4] == 'M' &&
         header[5] == 'G' &&
+        header[6] == '0' &&
+        header[7] == '1';
+}
+
+static int ana_font_magic_is_valid(const unsigned char* header)
+{
+    return header[0] == 'A' &&
+        header[1] == 'N' &&
+        header[2] == 'A' &&
+        header[3] == 'F' &&
+        header[4] == 'N' &&
+        header[5] == 'T' &&
         header[6] == '0' &&
         header[7] == '1';
 }
@@ -242,6 +272,45 @@ static int ana_image_validate_header(
     return 1;
 }
 
+static int ana_font_validate_header(
+    const unsigned char* header,
+    int* char_width,
+    int* char_height,
+    int* first_char,
+    int* char_count)
+{
+    if (!ana_font_magic_is_valid(header)) {
+        return 0;
+    }
+
+    *char_width = ana_read_u16_le(header + 8);
+    *char_height = ana_read_u16_le(header + 10);
+    *first_char = (int)header[12];
+    *char_count = (int)header[13];
+
+    if (*char_width <= 0 || *char_width > ANA_IMAGE_MAX_WIDTH) {
+        return 0;
+    }
+
+    if (*char_height <= 0 || *char_height > ANA_IMAGE_MAX_HEIGHT) {
+        return 0;
+    }
+
+    if (*char_count <= 0 || *char_count > ANA_IMAGE_MAX_FRAMES) {
+        return 0;
+    }
+
+    if (*first_char < 0 || *first_char + *char_count > 128) {
+        return 0;
+    }
+
+    if (header[14] != 0u || header[15] != 0u) {
+        return 0;
+    }
+
+    return 1;
+}
+
 static int ana_image_compute_sizes(ANA_Image image)
 {
     image->row_bytes = (image->width + 7) / 8;
@@ -312,11 +381,7 @@ static void ana_gfx_load_default_palette(void)
 #ifdef ANA_TARGET_AMIGA
 static void ana_amiga_reset_frame_state(void)
 {
-    ana_amiga_dirty_valid = 0;
-    ana_amiga_dirty_min_x = 0;
-    ana_amiga_dirty_min_y = 0;
-    ana_amiga_dirty_max_x = 0;
-    ana_amiga_dirty_max_y = 0;
+    ana_amiga_dirty_count = 0;
     ana_amiga_clear_requested = 0;
     ana_amiga_clear_color = 0;
 }
@@ -343,29 +408,29 @@ static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y
         return;
     }
 
-    if (!ana_amiga_dirty_valid) {
-        ana_amiga_dirty_valid = 1;
-        ana_amiga_dirty_min_x = min_x;
-        ana_amiga_dirty_min_y = min_y;
-        ana_amiga_dirty_max_x = max_x;
-        ana_amiga_dirty_max_y = max_y;
+    if (ana_amiga_dirty_count < ANA_AMIGA_MAX_DIRTY_RECTS) {
+        ana_amiga_dirty_rects[ana_amiga_dirty_count].min_x = min_x;
+        ana_amiga_dirty_rects[ana_amiga_dirty_count].min_y = min_y;
+        ana_amiga_dirty_rects[ana_amiga_dirty_count].max_x = max_x;
+        ana_amiga_dirty_rects[ana_amiga_dirty_count].max_y = max_y;
+        ana_amiga_dirty_count++;
         return;
     }
 
-    if (min_x < ana_amiga_dirty_min_x) {
-        ana_amiga_dirty_min_x = min_x;
+    if (min_x < ana_amiga_dirty_rects[0].min_x) {
+        ana_amiga_dirty_rects[0].min_x = min_x;
     }
 
-    if (min_y < ana_amiga_dirty_min_y) {
-        ana_amiga_dirty_min_y = min_y;
+    if (min_y < ana_amiga_dirty_rects[0].min_y) {
+        ana_amiga_dirty_rects[0].min_y = min_y;
     }
 
-    if (max_x > ana_amiga_dirty_max_x) {
-        ana_amiga_dirty_max_x = max_x;
+    if (max_x > ana_amiga_dirty_rects[0].max_x) {
+        ana_amiga_dirty_rects[0].max_x = max_x;
     }
 
-    if (max_y > ana_amiga_dirty_max_y) {
-        ana_amiga_dirty_max_y = max_y;
+    if (max_y > ana_amiga_dirty_rects[0].max_y) {
+        ana_amiga_dirty_rects[0].max_y = max_y;
     }
 }
 
@@ -732,6 +797,7 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 {
     struct BitMap* next_visible;
     struct BitMap* previous_visible;
+    int i;
 
     if (ana_amiga_screen == NULL) {
         return;
@@ -748,14 +814,14 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
         ana_amiga_fill_bitmap(next_visible, ana_amiga_clear_color);
     }
 
-    if (ana_amiga_dirty_valid) {
+    for (i = 0; i < ana_amiga_dirty_count; i++) {
         ana_amiga_copy_chunky_rect_to_bitplanes(
             next_visible,
             chunky,
-            ana_amiga_dirty_min_x,
-            ana_amiga_dirty_min_y,
-            ana_amiga_dirty_max_x,
-            ana_amiga_dirty_max_y);
+            ana_amiga_dirty_rects[i].min_x,
+            ana_amiga_dirty_rects[i].min_y,
+            ana_amiga_dirty_rects[i].max_x,
+            ana_amiga_dirty_rects[i].max_y);
     }
 
     WaitTOF();
@@ -889,6 +955,197 @@ ANA_Image ana_load_image_data(const unsigned char* bytes, long size)
         flags,
         bytes + ANA_IMAGE_HEADER_SIZE,
         size - ANA_IMAGE_HEADER_SIZE);
+}
+
+ANA_Font ana_load_font(const char* path)
+{
+    FILE* file;
+    unsigned char* bytes;
+    long size;
+    size_t bytes_read;
+    ANA_Font font;
+
+    if (path == NULL) {
+        return NULL;
+    }
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return NULL;
+    }
+
+    if (fseek(file, 0L, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    size = ftell(file);
+    if (size <= 0L) {
+        fclose(file);
+        return NULL;
+    }
+
+    if (fseek(file, 0L, SEEK_SET) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    bytes = (unsigned char*)malloc((size_t)size);
+    if (bytes == NULL) {
+        fclose(file);
+        return NULL;
+    }
+
+    bytes_read = fread(bytes, 1u, (size_t)size, file);
+    fclose(file);
+
+    if (bytes_read != (size_t)size) {
+        free(bytes);
+        return NULL;
+    }
+
+    font = ana_load_font_data(bytes, size);
+    free(bytes);
+
+    return font;
+}
+
+ANA_Font ana_load_font_data(const unsigned char* bytes, long size)
+{
+    ANA_Font font;
+    ANA_Image image;
+    int char_width;
+    int char_height;
+    int first_char;
+    int char_count;
+
+    if (bytes == NULL || size < ANA_FONT_HEADER_SIZE + ANA_IMAGE_HEADER_SIZE) {
+        return NULL;
+    }
+
+    if (!ana_font_validate_header(
+            bytes,
+            &char_width,
+            &char_height,
+            &first_char,
+            &char_count)) {
+        return NULL;
+    }
+
+    image = ana_load_image_data(
+        bytes + ANA_FONT_HEADER_SIZE,
+        size - ANA_FONT_HEADER_SIZE);
+    if (image == NULL) {
+        return NULL;
+    }
+
+    if (ana_image_width(image) != char_width ||
+            ana_image_height(image) != char_height ||
+            ana_image_frame_count(image) < char_count) {
+        ana_free_image(image);
+        return NULL;
+    }
+
+    font = (ANA_Font)malloc(sizeof(struct ANA_FontData));
+    if (font == NULL) {
+        ana_free_image(image);
+        return NULL;
+    }
+
+    font->image = image;
+    font->char_width = char_width;
+    font->char_height = char_height;
+    font->first_char = first_char;
+    font->char_count = char_count;
+
+    return font;
+}
+
+void ana_free_font(ANA_Font font)
+{
+    if (font == NULL) {
+        return;
+    }
+
+    ana_free_image(font->image);
+    font->image = NULL;
+    free(font);
+}
+
+void ana_draw_text(ANA_Font font, int x, int y, const char* text)
+{
+    int pen_x;
+    int frame;
+    unsigned char ch;
+
+    if (font == NULL || font->image == NULL || text == NULL) {
+        return;
+    }
+
+    pen_x = x;
+
+    while (*text != '\0') {
+        ch = (unsigned char)*text;
+        frame = (int)ch - font->first_char;
+
+        if (frame >= 0 && frame < font->char_count) {
+            ana_draw_image_frame(font->image, frame, pen_x, y);
+        }
+
+        pen_x += font->char_width;
+        text++;
+    }
+}
+
+void ana_draw_int(ANA_Font font, int x, int y, int value)
+{
+    char text[16];
+    char reversed[16];
+    unsigned long magnitude;
+    int count;
+    int i;
+    int out;
+
+    if (value < 0) {
+        magnitude = (unsigned long)(-(value + 1)) + 1u;
+    } else {
+        magnitude = (unsigned long)value;
+    }
+
+    count = 0;
+    do {
+        reversed[count++] = (char)('0' + (magnitude % 10u));
+        magnitude /= 10u;
+    } while (magnitude != 0u && count < (int)sizeof(reversed));
+
+    out = 0;
+    if (value < 0 && out < (int)sizeof(text) - 1) {
+        text[out++] = '-';
+    }
+
+    for (i = count - 1; i >= 0 && out < (int)sizeof(text) - 1; i--) {
+        text[out++] = reversed[i];
+    }
+
+    text[out] = '\0';
+    ana_draw_text(font, x, y, text);
+}
+
+int ana_text_width(ANA_Font font, const char* text)
+{
+    int count;
+
+    if (font == NULL || text == NULL) {
+        return 0;
+    }
+
+    count = 0;
+    while (*text != '\0') {
+        count++;
+        text++;
+    }
+
+    return count * font->char_width;
 }
 
 void ana_free_image(ANA_Image image)

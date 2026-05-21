@@ -62,6 +62,17 @@ static const unsigned char memory_test_image_bytes[] = {
     0xe0, 0xe0, 0x00, 0xe0, 0xe0, 0xe0
 };
 
+static const unsigned char memory_test_font_bytes[] = {
+    0x41, 0x4e, 0x41, 0x46, 0x4e, 0x54, 0x30, 0x31,
+    0x03, 0x00, 0x02, 0x00, 0x30, 0x03, 0x00, 0x00,
+    0x41, 0x4e, 0x41, 0x49, 0x4d, 0x47, 0x30, 0x31,
+    0x03, 0x00, 0x02, 0x00, 0x03, 0x00, 0x01, 0x01,
+    0x00, 0x00, 0x00, 0x00,
+    0xe0, 0xe0, 0xe0, 0xe0,
+    0x40, 0x40, 0x40, 0x40,
+    0xa0, 0xa0, 0xa0, 0xa0
+};
+
 static void write_test_image_file(const char* path)
 {
     FILE* file;
@@ -158,6 +169,61 @@ static void test_image_loading_and_drawing(void)
     remove(path);
 }
 
+static void test_font_loading_and_drawing(void)
+{
+    ANA_Font font;
+    ANA_Font file_font;
+    FILE* file;
+    const char* path;
+
+    font = ana_load_font_data(
+        memory_test_font_bytes,
+        (long)sizeof(memory_test_font_bytes));
+    assert(font != 0);
+    assert(ana_text_width(font, "012") == 9);
+    assert(ana_text_width(font, 0) == 0);
+
+    path = "build/tests/gfx_test_font.anafnt";
+    file = fopen(path, "wb");
+    assert(file != 0);
+    fwrite(
+        memory_test_font_bytes,
+        1u,
+        sizeof(memory_test_font_bytes),
+        file);
+    fclose(file);
+
+    file_font = ana_load_font(path);
+    assert(file_font != 0);
+
+    assert(ana_gfx_open(ana_default_profile()) == ANA_OK);
+    ana_clear(0);
+    ana_draw_text(file_font, 1, 1, "012");
+    assert(ana_gfx_draw_pixel(1, 1) == 1);
+    assert(ana_gfx_draw_pixel(2, 1) == 1);
+    assert(ana_gfx_draw_pixel(3, 1) == 1);
+    assert(ana_gfx_draw_pixel(4, 1) == 0);
+    assert(ana_gfx_draw_pixel(5, 1) == 1);
+    assert(ana_gfx_draw_pixel(6, 1) == 0);
+    assert(ana_gfx_draw_pixel(7, 1) == 1);
+    assert(ana_gfx_draw_pixel(8, 1) == 0);
+    assert(ana_gfx_draw_pixel(9, 1) == 1);
+
+    ana_clear(0);
+    ana_draw_int(file_font, 2, 4, 20);
+    assert(ana_gfx_draw_pixel(2, 4) == 1);
+    assert(ana_gfx_draw_pixel(3, 4) == 0);
+    assert(ana_gfx_draw_pixel(4, 4) == 1);
+    assert(ana_gfx_draw_pixel(5, 4) == 1);
+    assert(ana_gfx_draw_pixel(6, 4) == 1);
+    assert(ana_gfx_draw_pixel(7, 4) == 1);
+
+    ana_gfx_close();
+    ana_free_font(file_font);
+    ana_free_font(font);
+    remove(path);
+}
+
 static void test_image_rejects_invalid_files(void)
 {
     const char* path;
@@ -174,6 +240,10 @@ static void test_image_rejects_invalid_files(void)
     assert(ana_load_image(path) == 0);
     assert(ana_load_image_data(0, 0L) == 0);
     assert(ana_load_image_data(memory_test_image_bytes, 4L) == 0);
+    assert(ana_load_font(0) == 0);
+    assert(ana_load_font("build/tests/missing_font.anafnt") == 0);
+    assert(ana_load_font_data(0, 0L) == 0);
+    assert(ana_load_font_data(memory_test_font_bytes, 4L) == 0);
     assert(ana_image_width(0) == 0);
     assert(ana_image_height(0) == 0);
     assert(ana_image_frame_count(0) == 0);
@@ -186,6 +256,7 @@ int main(void)
     test_clear_and_present();
     test_palette_accepts_supported_colors();
     test_image_loading_and_drawing();
+    test_font_loading_and_drawing();
     test_image_rejects_invalid_files();
 
     return 0;
