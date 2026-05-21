@@ -1300,21 +1300,22 @@ static void ana_amiga_set_screen_bitmap_direct(struct BitMap* bitmap)
     RethinkDisplay();
 }
 
-static void ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
+static int ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
 {
     struct ScreenBuffer* screen_buffer;
 
     if (ana_amiga_screen == NULL || bitmap == NULL) {
-        return;
+        return 0;
     }
 
     screen_buffer = ana_amiga_screen_buffer_for(bitmap);
     if (screen_buffer != NULL &&
             ChangeScreenBuffer(ana_amiga_screen, screen_buffer)) {
-        return;
+        return 1;
     }
 
     ana_amiga_set_screen_bitmap_direct(bitmap);
+    return 0;
 }
 
 static int ana_amiga_open_window(void)
@@ -1640,8 +1641,9 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
     }
 
     stage_start = ana_platform_perf_ticks();
-    WaitTOF();
-    ana_amiga_set_screen_bitmap(next_visible);
+    if (!ana_amiga_set_screen_bitmap(next_visible)) {
+        WaitTOF();
+    }
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_flip_perf_ticks,
         stage_start,
