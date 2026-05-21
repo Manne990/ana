@@ -76,6 +76,7 @@ static ANA_Game make_game(void)
 static void test_runtime_loop(void)
 {
     ANA_Game game;
+    ANA_RunStats stats;
 
     reset_counts();
     game = make_game();
@@ -88,11 +89,16 @@ static void test_runtime_loop(void)
     assert(shutdown_count == 1);
     assert(first_tick_fps == ANA_DEFAULT_FPS);
     assert(!ana_gfx_is_open());
+
+    stats = ana_last_run_stats();
+    assert(stats.frames == 2);
+    assert(stats.ticks_per_second > 0);
 }
 
 static void test_runtime_rejects_bad_profile(void)
 {
     ANA_Game game;
+    ANA_RunStats stats;
 
     reset_counts();
     game = make_game();
@@ -104,6 +110,9 @@ static void test_runtime_rejects_bad_profile(void)
     assert(update_count == 0);
     assert(draw_count == 0);
     assert(shutdown_count == 0);
+
+    stats = ana_last_run_stats();
+    assert(stats.frames == 0);
 }
 
 static void test_runtime_uses_default_profile_values(void)

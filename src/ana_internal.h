@@ -28,4 +28,7 @@ void ana_input_set_pending_state(ANA_InputDevice device, unsigned int state);
 void ana_input_set_pending_key_state(ANA_Key key, int is_down);
 void ana_input_set_pending_quit(int requested);
 
+long ana_platform_time_ticks(void);
+long ana_platform_time_ticks_per_second(void);
+
 #endif

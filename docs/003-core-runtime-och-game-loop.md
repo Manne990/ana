@@ -41,6 +41,7 @@ typedef struct ANA_Game {
 
 int ana_run(const ANA_Game* game);
 void ana_quit(void);
+ANA_RunStats ana_last_run_stats(void);
 ```
 
 For 0.1 ar `ANA_Time` fortfarande baserad pa en strikt fixed timestep. Den finns for att gora koden tydlig och framtidssaker, inte for att introducera variabel timestep.
@@ -56,6 +57,16 @@ For 0.1 ar `ANA_Time` fortfarande baserad pa en strikt fixed timestep. Den finns
 - hantera quit-flagga
 - stanga ner subsystem i korrekt ordning
 - returnera felkod vid initieringsfel
+
+Efter `ana_run` kan spelet hamta `ANA_RunStats` med
+`ana_last_run_stats()`. I 0.1 anvands det framfor allt for enkel
+prestandalogging i emulator eller pa riktig Amiga:
+
+- `frames`: antal presenterade frames
+- `elapsed_ticks`: uppmatt tid i plattformens ticks
+- `ticks_per_second`: upplosning for tidskallan
+- `average_fps_x100`: genomsnittlig FPS multiplicerad med 100, sa spelkod kan
+  skriva `50.00` utan floating point
 
 ## Spelkodens ansvar
 

@@ -296,6 +296,30 @@ static void invaders_shutdown(void)
     player_image = 0;
 }
 
+static void invaders_print_run_stats(void)
+{
+    ANA_RunStats stats;
+    long elapsed_seconds_x100;
+
+    stats = ana_last_run_stats();
+    elapsed_seconds_x100 = 0L;
+
+    if (stats.ticks_per_second > 0L) {
+        elapsed_seconds_x100 =
+            (stats.elapsed_ticks * 100L) / stats.ticks_per_second;
+    }
+
+    printf("Frames presented: %ld\n", stats.frames);
+    printf(
+        "Elapsed time: %ld.%02ld sec\n",
+        elapsed_seconds_x100 / 100L,
+        elapsed_seconds_x100 % 100L);
+    printf(
+        "Average FPS: %ld.%02ld\n",
+        stats.average_fps_x100 / 100L,
+        stats.average_fps_x100 % 100L);
+}
+
 int main(void)
 {
     ANA_Game game;
@@ -320,6 +344,7 @@ int main(void)
 
     printf("ANA invaders finished with %s.\n", ana_result_name((ANA_Result)result));
     printf("Frames simulated: %d\n", demo_ticks + 1);
+    invaders_print_run_stats();
     printf("Player X: %d\n", player_x);
     printf("Score: %d\n", score);
     printf("Assets loaded: %s\n", invaders_assets_loaded ? "yes" : "no");

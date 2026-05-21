@@ -2,6 +2,13 @@
 
 #include <stddef.h>
 
+#ifdef ANA_TARGET_AMIGA
+#include <dos/dos.h>
+#include <proto/dos.h>
+#else
+#include <time.h>
+#endif
+
 static const ANA_Profile ana_ocs_ecs_pal_lores_profile = {
     ANA_DEFAULT_WIDTH,
     ANA_DEFAULT_HEIGHT,
@@ -63,3 +70,29 @@ int ana_profile_is_supported(const ANA_Profile* profile)
     return ana_validate_profile(profile) == ANA_OK;
 }
 
+long ana_platform_time_ticks(void)
+{
+#ifdef ANA_TARGET_AMIGA
+    struct DateStamp stamp;
+
+    DateStamp(&stamp);
+    return (stamp.ds_Days * 24L * 60L * 50L) +
+        (stamp.ds_Minute * 60L * 50L) +
+        stamp.ds_Tick;
+#else
+    return (long)clock();
+#endif
+}
+
+long ana_platform_time_ticks_per_second(void)
+{
+#ifdef ANA_TARGET_AMIGA
+    return 50L;
+#else
+    if ((long)CLOCKS_PER_SEC <= 0L) {
+        return 1L;
+    }
+
+    return (long)CLOCKS_PER_SEC;
+#endif
+}
