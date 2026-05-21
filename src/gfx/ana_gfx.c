@@ -480,9 +480,26 @@ static void ana_gfx_load_default_palette(void)
 static void ana_gfx_reset_stats(void)
 {
     memset(&ana_gfx_stats, 0, sizeof(ana_gfx_stats));
+    ana_gfx_stats.perf_ticks_per_second =
+        (long)ana_platform_perf_ticks_per_second();
 }
 
 #ifdef ANA_TARGET_AMIGA
+static void ana_gfx_record_perf_ticks(
+    long* total,
+    unsigned long start_ticks,
+    unsigned long end_ticks)
+{
+    unsigned long elapsed;
+
+    if (total == NULL) {
+        return;
+    }
+
+    elapsed = end_ticks - start_ticks;
+    *total += (long)elapsed;
+}
+
 static long ana_gfx_dirty_rect_area(const struct ANA_AmigaDirtyRect* rect)
 {
     if (rect == NULL || rect->min_x >= rect->max_x ||
@@ -1544,11 +1561,15 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
     struct BitMap* next_visible;
     struct BitMap* previous_visible;
     struct ANA_AmigaBitmapState* next_state;
+    unsigned long total_start;
+    unsigned long stage_start;
     int i;
 
     if (ana_amiga_screen == NULL) {
         return;
     }
+
+    total_start = ana_platform_perf_ticks();
 
     next_visible = ana_amiga_draw_bitmap;
     previous_visible = ana_amiga_visible_bitmap;
@@ -1559,6 +1580,7 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 
     next_state = ana_amiga_bitmap_state_for(next_visible);
 
+    stage_start = ana_platform_perf_ticks();
     if (ana_amiga_clear_requested) {
         if (next_state == NULL ||
                 !next_state->clear_color_valid ||
@@ -1589,7 +1611,12 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             }
         }
     }
+    ana_gfx_record_perf_ticks(
+        &ana_gfx_stats.present_clear_perf_ticks,
+        stage_start,
+        ana_platform_perf_ticks());
 
+    stage_start = ana_platform_perf_ticks();
     ana_gfx_record_present_dirty_rects(
         ana_amiga_dirty_rects,
         ana_amiga_dirty_count);
@@ -1603,17 +1630,30 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             ana_amiga_dirty_rects[i].max_x,
             ana_amiga_dirty_rects[i].max_y);
     }
+    ana_gfx_record_perf_ticks(
+        &ana_gfx_stats.present_convert_perf_ticks,
+        stage_start,
+        ana_platform_perf_ticks());
 
     if (ana_amiga_clear_requested) {
         ana_amiga_store_bitmap_dirty_state(next_state);
     }
 
+    stage_start = ana_platform_perf_ticks();
     WaitTOF();
     ana_amiga_set_screen_bitmap(next_visible);
+    ana_gfx_record_perf_ticks(
+        &ana_gfx_stats.present_flip_perf_ticks,
+        stage_start,
+        ana_platform_perf_ticks());
 
     ana_amiga_visible_bitmap = next_visible;
     ana_amiga_draw_bitmap = previous_visible;
     ana_amiga_reset_frame_state();
+    ana_gfx_record_perf_ticks(
+        &ana_gfx_stats.present_total_perf_ticks,
+        total_start,
+        ana_platform_perf_ticks());
 }
 #endif
 

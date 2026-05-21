@@ -15,6 +15,7 @@ typedef struct ANA_Color {
 
 typedef struct ANA_RenderStats {
     long frames;
+    long perf_ticks_per_second;
     long dirty_rects;
     long converted_pixels;
     long planar_clear_rects;
@@ -25,6 +26,10 @@ typedef struct ANA_RenderStats {
     long max_converted_pixels;
     long max_planar_clear_pixels;
     long max_chunky_clear_pixels;
+    long present_total_perf_ticks;
+    long present_clear_perf_ticks;
+    long present_convert_perf_ticks;
+    long present_flip_perf_ticks;
 } ANA_RenderStats;
 
 void ana_set_palette(const ANA_Color* colors, int count);

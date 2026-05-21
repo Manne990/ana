@@ -6,7 +6,8 @@
 
 static int ana_runtime_quit_requested = 0;
 static int ana_runtime_running = 0;
-static ANA_RunStats ana_runtime_last_stats = { 0L, 0L, 1L, 0L };
+static ANA_RunStats ana_runtime_last_stats =
+    { 0L, 0L, 1L, 0L, 1L, 0L, 0L, 0L, 0L };
 
 static int ana_game_value_or_default(int value, int default_value)
 {
@@ -48,6 +49,27 @@ static void ana_runtime_reset_stats(void)
     ana_runtime_last_stats.ticks_per_second =
         ana_platform_time_ticks_per_second();
     ana_runtime_last_stats.average_fps_x100 = 0L;
+    ana_runtime_last_stats.perf_ticks_per_second =
+        (long)ana_platform_perf_ticks_per_second();
+    ana_runtime_last_stats.input_perf_ticks = 0L;
+    ana_runtime_last_stats.update_perf_ticks = 0L;
+    ana_runtime_last_stats.draw_perf_ticks = 0L;
+    ana_runtime_last_stats.present_perf_ticks = 0L;
+}
+
+static void ana_runtime_record_perf_ticks(
+    long* total,
+    unsigned long start_ticks,
+    unsigned long end_ticks)
+{
+    unsigned long elapsed;
+
+    if (total == NULL) {
+        return;
+    }
+
+    elapsed = end_ticks - start_ticks;
+    *total += (long)elapsed;
 }
 
 static void ana_runtime_record_stats(long start_ticks, long end_ticks)
@@ -83,6 +105,7 @@ int ana_run(const ANA_Game* game)
     ANA_Time time;
     long start_ticks;
     long end_ticks;
+    unsigned long perf_start;
 
     ana_runtime_reset_stats();
 
@@ -122,19 +145,39 @@ int ana_run(const ANA_Game* game)
     start_ticks = ana_platform_time_ticks();
 
     while (!ana_runtime_quit_requested) {
+        perf_start = ana_platform_perf_ticks();
         ana_input_update();
+        ana_runtime_record_perf_ticks(
+            &ana_runtime_last_stats.input_perf_ticks,
+            perf_start,
+            ana_platform_perf_ticks());
 
         if (ana_quit_requested()) {
             ana_quit();
         }
 
         if (!ana_runtime_quit_requested && game->update != NULL) {
+            perf_start = ana_platform_perf_ticks();
             game->update(time);
+            ana_runtime_record_perf_ticks(
+                &ana_runtime_last_stats.update_perf_ticks,
+                perf_start,
+                ana_platform_perf_ticks());
         }
 
         if (!ana_runtime_quit_requested && game->draw != NULL) {
+            perf_start = ana_platform_perf_ticks();
             game->draw();
+            ana_runtime_record_perf_ticks(
+                &ana_runtime_last_stats.draw_perf_ticks,
+                perf_start,
+                ana_platform_perf_ticks());
+            perf_start = ana_platform_perf_ticks();
             ana_present();
+            ana_runtime_record_perf_ticks(
+                &ana_runtime_last_stats.present_perf_ticks,
+                perf_start,
+                ana_platform_perf_ticks());
         }
 
         time.tick++;

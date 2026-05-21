@@ -296,6 +296,31 @@ static void invaders_shutdown(void)
     player_image = 0;
 }
 
+static long invaders_average_us(
+    long total_perf_ticks,
+    long frames,
+    long perf_ticks_per_second)
+{
+    long avg_ticks;
+
+    if (total_perf_ticks <= 0L || frames <= 0L ||
+            perf_ticks_per_second <= 0L) {
+        return 0L;
+    }
+
+    avg_ticks = total_perf_ticks / frames;
+    if (perf_ticks_per_second >= 1000L) {
+        return (avg_ticks * 1000L) / (perf_ticks_per_second / 1000L);
+    }
+
+    return (avg_ticks * 1000000L) / perf_ticks_per_second;
+}
+
+static void invaders_print_ms(long microseconds)
+{
+    printf("%ld.%03ld", microseconds / 1000L, microseconds % 1000L);
+}
+
 static void invaders_print_run_stats(void)
 {
     ANA_RunStats stats;
@@ -305,6 +330,14 @@ static void invaders_print_run_stats(void)
     long converted_pixels_per_frame;
     long planar_clear_pixels_per_frame;
     long chunky_clear_pixels_per_frame;
+    long input_us;
+    long update_us;
+    long draw_us;
+    long present_us;
+    long present_total_us;
+    long present_clear_us;
+    long present_convert_us;
+    long present_flip_us;
 
     stats = ana_last_run_stats();
     render_stats = ana_render_stats();
@@ -313,6 +346,38 @@ static void invaders_print_run_stats(void)
     converted_pixels_per_frame = 0L;
     planar_clear_pixels_per_frame = 0L;
     chunky_clear_pixels_per_frame = 0L;
+    input_us = invaders_average_us(
+        stats.input_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    update_us = invaders_average_us(
+        stats.update_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    draw_us = invaders_average_us(
+        stats.draw_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    present_us = invaders_average_us(
+        stats.present_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    present_total_us = invaders_average_us(
+        render_stats.present_total_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+    present_clear_us = invaders_average_us(
+        render_stats.present_clear_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+    present_convert_us = invaders_average_us(
+        render_stats.present_convert_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+    present_flip_us = invaders_average_us(
+        render_stats.present_flip_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
 
     if (stats.ticks_per_second > 0L) {
         elapsed_seconds_x100 =
@@ -356,6 +421,24 @@ static void invaders_print_run_stats(void)
         "Chunky clear pixels/frame: %ld (max %ld)\n",
         chunky_clear_pixels_per_frame,
         render_stats.max_chunky_clear_pixels);
+    printf("Avg input/update/draw/present ms: ");
+    invaders_print_ms(input_us);
+    printf("/");
+    invaders_print_ms(update_us);
+    printf("/");
+    invaders_print_ms(draw_us);
+    printf("/");
+    invaders_print_ms(present_us);
+    printf("\n");
+    printf("Avg present clear/c2p/flip/total ms: ");
+    invaders_print_ms(present_clear_us);
+    printf("/");
+    invaders_print_ms(present_convert_us);
+    printf("/");
+    invaders_print_ms(present_flip_us);
+    printf("/");
+    invaders_print_ms(present_total_us);
+    printf("\n");
 }
 
 int main(void)

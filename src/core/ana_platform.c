@@ -4,7 +4,10 @@
 
 #ifdef ANA_TARGET_AMIGA
 #include <dos/dos.h>
+#include <exec/types.h>
+#include <intuition/intuitionbase.h>
 #include <proto/dos.h>
+#include <proto/intuition.h>
 #else
 #include <time.h>
 #endif
@@ -94,5 +97,35 @@ long ana_platform_time_ticks_per_second(void)
     }
 
     return (long)CLOCKS_PER_SEC;
+#endif
+}
+
+unsigned long ana_platform_perf_ticks(void)
+{
+#ifdef ANA_TARGET_AMIGA
+    ULONG seconds;
+    ULONG micros;
+
+    if (IntuitionBase != NULL) {
+        CurrentTime(&seconds, &micros);
+        return (seconds * 1000000UL) + micros;
+    }
+
+    return (unsigned long)ana_platform_time_ticks() * 20000UL;
+#else
+    return (unsigned long)clock();
+#endif
+}
+
+unsigned long ana_platform_perf_ticks_per_second(void)
+{
+#ifdef ANA_TARGET_AMIGA
+    return 1000000UL;
+#else
+    if ((long)CLOCKS_PER_SEC <= 0L) {
+        return 1UL;
+    }
+
+    return (unsigned long)CLOCKS_PER_SEC;
 #endif
 }

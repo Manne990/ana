@@ -93,6 +93,7 @@ static void test_runtime_loop(void)
     stats = ana_last_run_stats();
     assert(stats.frames == 2);
     assert(stats.ticks_per_second > 0);
+    assert(stats.perf_ticks_per_second > 0);
 }
 
 static void test_runtime_rejects_bad_profile(void)

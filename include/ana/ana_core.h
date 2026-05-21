@@ -13,6 +13,11 @@ typedef struct ANA_RunStats {
     long elapsed_ticks;
     long ticks_per_second;
     long average_fps_x100;
+    long perf_ticks_per_second;
+    long input_perf_ticks;
+    long update_perf_ticks;
+    long draw_perf_ticks;
+    long present_perf_ticks;
 } ANA_RunStats;
 
 int ana_run(const ANA_Game* game);
