@@ -213,23 +213,23 @@ static void invaders_draw(void)
     ana_clear(0);
 
     if (hud_font != 0) {
-        ana_draw_text(hud_font, 8, 8, "SCORE");
+        ana_draw_text(hud_font, 16, 16, "SCORE");
         ana_draw_int(
             hud_font,
-            8 + ana_text_width(hud_font, "SCORE "),
-            8,
+            16 + ana_text_width(hud_font, "SCORE "),
+            16,
             score);
-        ana_draw_text(hud_font, 220, 8, "LIVES");
+        ana_draw_text(hud_font, 200, 16, "LIVES");
         ana_draw_int(
             hud_font,
-            220 + ana_text_width(hud_font, "LIVES "),
-            8,
+            200 + ana_text_width(hud_font, "LIVES "),
+            16,
             lives);
-        ana_draw_text(hud_font, 8, 20, "STATUS");
+        ana_draw_text(hud_font, 16, 30, "STATUS");
         ana_draw_text(
             hud_font,
-            8 + ana_text_width(hud_font, "STATUS "),
-            20,
+            16 + ana_text_width(hud_font, "STATUS "),
+            30,
             bullet_active ? "SHOT" : "READY");
     }
 

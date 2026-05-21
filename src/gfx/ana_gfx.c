@@ -133,6 +133,13 @@ static struct ANA_AmigaDirtyRect
 static int ana_amiga_dirty_count = 0;
 #endif
 
+static void ana_draw_image_frame_internal(
+    ANA_Image image,
+    int frame,
+    int x,
+    int y,
+    int mark_dirty);
+
 static int ana_image_magic_is_valid(const unsigned char* header)
 {
     return header[0] == 'A' &&
@@ -1076,11 +1083,20 @@ void ana_draw_text(ANA_Font font, int x, int y, const char* text)
 {
     int pen_x;
     int frame;
+    int width;
     unsigned char ch;
 
     if (font == NULL || font->image == NULL || text == NULL) {
         return;
     }
+
+#ifdef ANA_TARGET_AMIGA
+    width = ana_text_width(font, text);
+    ana_amiga_mark_dirty_rect(x, y, x + width, y + font->char_height);
+#else
+    width = 0;
+    (void)width;
+#endif
 
     pen_x = x;
 
@@ -1089,7 +1105,7 @@ void ana_draw_text(ANA_Font font, int x, int y, const char* text)
         frame = (int)ch - font->first_char;
 
         if (frame >= 0 && frame < font->char_count) {
-            ana_draw_image_frame(font->image, frame, pen_x, y);
+            ana_draw_image_frame_internal(font->image, frame, pen_x, y, 0);
         }
 
         pen_x += font->char_width;
@@ -1166,6 +1182,16 @@ void ana_draw_image(ANA_Image image, int x, int y)
 
 void ana_draw_image_frame(ANA_Image image, int frame, int x, int y)
 {
+    ana_draw_image_frame_internal(image, frame, x, y, 1);
+}
+
+static void ana_draw_image_frame_internal(
+    ANA_Image image,
+    int frame,
+    int x,
+    int y,
+    int mark_dirty)
+{
     int start_x;
     int start_y;
     int end_x;
@@ -1207,7 +1233,11 @@ void ana_draw_image_frame(ANA_Image image, int frame, int x, int y)
     }
 
 #ifdef ANA_TARGET_AMIGA
-    ana_amiga_mark_dirty_rect(start_x, start_y, end_x, end_y);
+    if (mark_dirty) {
+        ana_amiga_mark_dirty_rect(start_x, start_y, end_x, end_y);
+    }
+#else
+    (void)mark_dirty;
 #endif
 
     mask = ana_image_mask_base(image, frame);
