@@ -541,6 +541,39 @@ static int ana_amiga_rects_overlap(
         b->min_y < a->max_y;
 }
 
+static int ana_amiga_rects_should_merge(
+    const struct ANA_AmigaDirtyRect* a,
+    const struct ANA_AmigaDirtyRect* b)
+{
+    struct ANA_AmigaDirtyRect merged;
+    long merged_area;
+    long separate_area;
+
+    merged = *a;
+
+    if (b->min_x < merged.min_x) {
+        merged.min_x = b->min_x;
+    }
+
+    if (b->min_y < merged.min_y) {
+        merged.min_y = b->min_y;
+    }
+
+    if (b->max_x > merged.max_x) {
+        merged.max_x = b->max_x;
+    }
+
+    if (b->max_y > merged.max_y) {
+        merged.max_y = b->max_y;
+    }
+
+    merged_area = ana_gfx_dirty_rect_area(&merged);
+    separate_area =
+        ana_gfx_dirty_rect_area(a) + ana_gfx_dirty_rect_area(b);
+
+    return merged_area <= separate_area + 64L;
+}
+
 static void ana_amiga_expand_dirty_rect(
     struct ANA_AmigaDirtyRect* target,
     const struct ANA_AmigaDirtyRect* source)
@@ -592,6 +625,9 @@ static void ana_amiga_coalesce_dirty_rect(int index)
                 &ana_amiga_dirty_rects[index],
                 &ana_amiga_dirty_rects[i]) ||
                 ana_amiga_rects_overlap(
+                    &ana_amiga_dirty_rects[index],
+                    &ana_amiga_dirty_rects[i]) ||
+                ana_amiga_rects_should_merge(
                     &ana_amiga_dirty_rects[index],
                     &ana_amiga_dirty_rects[i])) {
             ana_amiga_expand_dirty_rect(
@@ -848,6 +884,12 @@ static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y
         }
 
         if (ana_amiga_rects_overlap(&ana_amiga_dirty_rects[i], &rect)) {
+            ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[i], &rect);
+            ana_amiga_coalesce_dirty_rect(i);
+            return;
+        }
+
+        if (ana_amiga_rects_should_merge(&ana_amiga_dirty_rects[i], &rect)) {
             ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[i], &rect);
             ana_amiga_coalesce_dirty_rect(i);
             return;
