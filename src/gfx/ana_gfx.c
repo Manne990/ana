@@ -387,6 +387,94 @@ static void ana_gfx_load_default_palette(void)
 }
 
 #ifdef ANA_TARGET_AMIGA
+static int ana_amiga_rect_contains(
+    const struct ANA_AmigaDirtyRect* outer,
+    const struct ANA_AmigaDirtyRect* inner)
+{
+    return outer->min_x <= inner->min_x &&
+        outer->min_y <= inner->min_y &&
+        outer->max_x >= inner->max_x &&
+        outer->max_y >= inner->max_y;
+}
+
+static int ana_amiga_rects_overlap(
+    const struct ANA_AmigaDirtyRect* a,
+    const struct ANA_AmigaDirtyRect* b)
+{
+    return a->min_x < b->max_x &&
+        b->min_x < a->max_x &&
+        a->min_y < b->max_y &&
+        b->min_y < a->max_y;
+}
+
+static void ana_amiga_expand_dirty_rect(
+    struct ANA_AmigaDirtyRect* target,
+    const struct ANA_AmigaDirtyRect* source)
+{
+    if (source->min_x < target->min_x) {
+        target->min_x = source->min_x;
+    }
+
+    if (source->min_y < target->min_y) {
+        target->min_y = source->min_y;
+    }
+
+    if (source->max_x > target->max_x) {
+        target->max_x = source->max_x;
+    }
+
+    if (source->max_y > target->max_y) {
+        target->max_y = source->max_y;
+    }
+}
+
+static void ana_amiga_remove_dirty_rect(int index)
+{
+    int i;
+
+    if (index < 0 || index >= ana_amiga_dirty_count) {
+        return;
+    }
+
+    for (i = index; i < ana_amiga_dirty_count - 1; i++) {
+        ana_amiga_dirty_rects[i] = ana_amiga_dirty_rects[i + 1];
+    }
+
+    ana_amiga_dirty_count--;
+}
+
+static void ana_amiga_coalesce_dirty_rect(int index)
+{
+    int i;
+
+    i = 0;
+    while (i < ana_amiga_dirty_count) {
+        if (i == index) {
+            i++;
+            continue;
+        }
+
+        if (ana_amiga_rect_contains(
+                &ana_amiga_dirty_rects[index],
+                &ana_amiga_dirty_rects[i]) ||
+                ana_amiga_rects_overlap(
+                    &ana_amiga_dirty_rects[index],
+                    &ana_amiga_dirty_rects[i])) {
+            ana_amiga_expand_dirty_rect(
+                &ana_amiga_dirty_rects[index],
+                &ana_amiga_dirty_rects[i]);
+            ana_amiga_remove_dirty_rect(i);
+            if (i < index) {
+                index--;
+            }
+            i = 0;
+            continue;
+        }
+
+        i++;
+    }
+}
+
 static void ana_amiga_reset_frame_state(void)
 {
     ana_amiga_dirty_count = 0;
@@ -396,6 +484,9 @@ static void ana_amiga_reset_frame_state(void)
 
 static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
 {
+    struct ANA_AmigaDirtyRect rect;
+    int i;
+
     if (min_x < 0) {
         min_x = 0;
     }
@@ -416,30 +507,31 @@ static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y
         return;
     }
 
+    rect.min_x = min_x;
+    rect.min_y = min_y;
+    rect.max_x = max_x;
+    rect.max_y = max_y;
+
+    for (i = 0; i < ana_amiga_dirty_count; i++) {
+        if (ana_amiga_rect_contains(&ana_amiga_dirty_rects[i], &rect)) {
+            return;
+        }
+
+        if (ana_amiga_rects_overlap(&ana_amiga_dirty_rects[i], &rect)) {
+            ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[i], &rect);
+            ana_amiga_coalesce_dirty_rect(i);
+            return;
+        }
+    }
+
     if (ana_amiga_dirty_count < ANA_AMIGA_MAX_DIRTY_RECTS) {
-        ana_amiga_dirty_rects[ana_amiga_dirty_count].min_x = min_x;
-        ana_amiga_dirty_rects[ana_amiga_dirty_count].min_y = min_y;
-        ana_amiga_dirty_rects[ana_amiga_dirty_count].max_x = max_x;
-        ana_amiga_dirty_rects[ana_amiga_dirty_count].max_y = max_y;
+        ana_amiga_dirty_rects[ana_amiga_dirty_count] = rect;
         ana_amiga_dirty_count++;
         return;
     }
 
-    if (min_x < ana_amiga_dirty_rects[0].min_x) {
-        ana_amiga_dirty_rects[0].min_x = min_x;
-    }
-
-    if (min_y < ana_amiga_dirty_rects[0].min_y) {
-        ana_amiga_dirty_rects[0].min_y = min_y;
-    }
-
-    if (max_x > ana_amiga_dirty_rects[0].max_x) {
-        ana_amiga_dirty_rects[0].max_x = max_x;
-    }
-
-    if (max_y > ana_amiga_dirty_rects[0].max_y) {
-        ana_amiga_dirty_rects[0].max_y = max_y;
-    }
+    ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[0], &rect);
+    ana_amiga_coalesce_dirty_rect(0);
 }
 
 static unsigned short ana_amiga_color_to_rgb4(ANA_Color color)
@@ -1136,10 +1228,6 @@ static void ana_draw_font_glyph(ANA_Font font, int frame, int x, int y)
         return;
     }
 
-#ifdef ANA_TARGET_AMIGA
-    ana_amiga_mark_dirty_rect(start_x, start_y, end_x, end_y);
-#endif
-
     mask = ana_image_mask_base(image, frame);
 
     for (dest_y = start_y; dest_y < end_y; dest_y++) {
@@ -1149,11 +1237,9 @@ static void ana_draw_font_glyph(ANA_Font font, int frame, int x, int y)
             src_x = dest_x - x;
 
             if (mask != NULL) {
-                draw_pixel = ana_image_bit_at(
-                    mask,
-                    image->row_bytes,
-                    src_x,
-                    src_y);
+                draw_pixel = (
+                    mask[(src_y * image->row_bytes) + (src_x >> 3)] &
+                        (0x80u >> (src_x & 7))) != 0u;
             } else {
                 draw_pixel =
                     ana_image_pixel_at(image, frame, src_x, src_y) != 0u;
