@@ -109,6 +109,41 @@ static void test_keyboard_quit_mapping(void)
     assert(ana_quit_requested());
 }
 
+static void test_amiga_joydat_mapping(void)
+{
+    unsigned int state;
+
+    state = ana_input_state_from_amiga_joydat(0x0300u, 0);
+    assert((state & ANA_INPUT_LEFT_MASK) != 0u);
+    assert((state & ANA_INPUT_UP_MASK) == 0u);
+
+    state = ana_input_state_from_amiga_joydat(0x0100u, 0);
+    assert((state & ANA_INPUT_UP_MASK) != 0u);
+    assert((state & ANA_INPUT_LEFT_MASK) == 0u);
+
+    state = ana_input_state_from_amiga_joydat(0x0003u, 0);
+    assert((state & ANA_INPUT_RIGHT_MASK) != 0u);
+    assert((state & ANA_INPUT_DOWN_MASK) == 0u);
+
+    state = ana_input_state_from_amiga_joydat(0x0001u, 0);
+    assert((state & ANA_INPUT_DOWN_MASK) != 0u);
+    assert((state & ANA_INPUT_RIGHT_MASK) == 0u);
+
+    state = ana_input_state_from_amiga_joydat(0x0200u, 1);
+    assert((state & ANA_INPUT_LEFT_MASK) != 0u);
+    assert((state & ANA_INPUT_UP_MASK) != 0u);
+    assert((state & ANA_INPUT_RIGHT_MASK) == 0u);
+    assert((state & ANA_INPUT_DOWN_MASK) == 0u);
+    assert((state & ANA_ACTION_1_MASK) != 0u);
+
+    state = ana_input_state_from_amiga_joydat(0x0002u, 0);
+    assert((state & ANA_INPUT_LEFT_MASK) == 0u);
+    assert((state & ANA_INPUT_UP_MASK) == 0u);
+    assert((state & ANA_INPUT_RIGHT_MASK) != 0u);
+    assert((state & ANA_INPUT_DOWN_MASK) != 0u);
+    assert((state & ANA_ACTION_1_MASK) == 0u);
+}
+
 static void test_invalid_inputs_are_safe(void)
 {
     ana_input_reset();
@@ -148,6 +183,7 @@ int main(void)
     test_default_keyboard_mapping();
     test_custom_keyboard_mapping();
     test_keyboard_quit_mapping();
+    test_amiga_joydat_mapping();
     test_invalid_inputs_are_safe();
     test_quit_request();
 

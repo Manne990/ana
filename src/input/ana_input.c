@@ -4,17 +4,25 @@
 
 #ifdef ANA_TARGET_AMIGA
 #include <exec/types.h>
+#include <hardware/cia.h>
+#include <hardware/custom.h>
 #include <intuition/intuition.h>
 #include <proto/exec.h>
 #endif
 
 #ifdef ANA_TARGET_AMIGA
 #define ANA_AMIGA_RAWKEY_RELEASE 0x80
+#define ANA_AMIGA_CIAA_FIRE0 0x40u
+#define ANA_AMIGA_CIAA_FIRE1 0x80u
+
+extern struct Custom custom;
+extern struct CIA ciaa;
 #endif
 
 static unsigned int ana_current_input[ANA_INPUT_DEVICES];
 static unsigned int ana_previous_input[ANA_INPUT_DEVICES];
 static unsigned int ana_pending_input[ANA_INPUT_DEVICES];
+static unsigned int ana_backend_input[ANA_INPUT_DEVICES];
 static int ana_pending_key_state[ANA_KEY_COUNT];
 static unsigned int ana_key_direction_map[ANA_KEY_COUNT][ANA_INPUT_DEVICES];
 static unsigned int ana_key_action_map[ANA_KEY_COUNT][ANA_INPUT_DEVICES];
@@ -123,6 +131,37 @@ static int ana_input_mapped_quit_requested(void)
     return 0;
 }
 
+unsigned int ana_input_state_from_amiga_joydat(
+    unsigned short joydat,
+    int fire_down)
+{
+    unsigned int state;
+
+    state = 0u;
+
+    if ((joydat & 0x0200u) != 0u) {
+        state |= ANA_INPUT_LEFT_MASK;
+    }
+
+    if ((joydat & 0x0002u) != 0u) {
+        state |= ANA_INPUT_RIGHT_MASK;
+    }
+
+    if ((((joydat >> 9) ^ (joydat >> 8)) & 0x0001u) != 0u) {
+        state |= ANA_INPUT_UP_MASK;
+    }
+
+    if ((((joydat >> 1) ^ joydat) & 0x0001u) != 0u) {
+        state |= ANA_INPUT_DOWN_MASK;
+    }
+
+    if (fire_down) {
+        state |= ANA_ACTION_1_MASK;
+    }
+
+    return state;
+}
+
 #ifdef ANA_TARGET_AMIGA
 static ANA_Key ana_amiga_key_from_raw_code(int code)
 {
@@ -164,6 +203,21 @@ static ANA_Key ana_amiga_key_from_raw_code(int code)
     }
 }
 
+static void ana_amiga_poll_joysticks(void)
+{
+    unsigned char ciaa_port_a;
+
+    ciaa_port_a = ciaa.ciapra;
+    ana_backend_input[ANA_INPUT_DEVICE_0] =
+        ana_input_state_from_amiga_joydat(
+            custom.joy1dat,
+            (ciaa_port_a & ANA_AMIGA_CIAA_FIRE1) == 0u);
+    ana_backend_input[ANA_INPUT_DEVICE_1] =
+        ana_input_state_from_amiga_joydat(
+            custom.joy0dat,
+            (ciaa_port_a & ANA_AMIGA_CIAA_FIRE0) == 0u);
+}
+
 static void ana_input_poll_backend(void)
 {
     struct Window* window;
@@ -171,6 +225,8 @@ static void ana_input_poll_backend(void)
     ANA_Key key;
     int code;
     int is_down;
+
+    ana_amiga_poll_joysticks();
 
     window = (struct Window*)ana_gfx_native_window();
     if (window == NULL || window->UserPort == NULL) {
@@ -205,6 +261,7 @@ void ana_input_reset(void)
         ana_current_input[i] = 0u;
         ana_previous_input[i] = 0u;
         ana_pending_input[i] = 0u;
+        ana_backend_input[i] = 0u;
     }
 
     for (i = 0; i < ANA_KEY_COUNT; i++) {
@@ -227,6 +284,7 @@ void ana_input_update(void)
     for (i = 0; i < ANA_INPUT_DEVICES; i++) {
         ana_previous_input[i] = ana_current_input[i];
         ana_current_input[i] = ana_pending_input[i] |
+            ana_backend_input[i] |
             ana_input_mapped_key_state((ANA_InputDevice)i);
     }
 

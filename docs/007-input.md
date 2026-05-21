@@ -112,9 +112,12 @@ host/test-backenden, sa spelets mapping fungerar likadant:
 - Z/X/C/V
 - Ctrl
 
-Joystick/gamepad ligger fortfarande pa samma direction/action-API, men den
-forsta hardvarubackenden ar tangentbordet eftersom det gor emulator-testning
-direkt mojlig.
+Amiga-bygget laser ocksa de klassiska joystick-portarna varje frame.
+`ANA_INPUT_DEVICE_0` mappar till den vanliga spelarporten (`JOY1DAT`, fire via
+CIAA PRA bit 7) och `ANA_INPUT_DEVICE_1` mappar till den andra porten
+(`JOY0DAT`, fire via CIAA PRA bit 6). Det gor att en emulator som mappar
+host-tangentbordets pilar till joystick-porten fungerar utan att spelet
+behover skilja pa joystick och tangentbord.
 
 ## Prestanda och beteende
 
