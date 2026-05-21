@@ -141,7 +141,16 @@ struct ANA_AmigaBitmapState {
     unsigned char clear_color;
 };
 
+struct ANA_AmigaFramebufferState {
+    struct ANA_AmigaDirtyRect dirty_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
+    int dirty_count;
+    int clear_color_valid;
+    unsigned char clear_color;
+};
+
 static struct ANA_AmigaBitmapState ana_amiga_bitmap_states[2];
+static struct ANA_AmigaFramebufferState
+    ana_amiga_framebuffer_states[ANA_FRAMEBUFFER_COUNT];
 #endif
 
 static void ana_draw_image_frame_internal(
@@ -497,6 +506,17 @@ static void ana_amiga_reset_bitmap_states(void)
     memset(ana_amiga_bitmap_states, 0, sizeof(ana_amiga_bitmap_states));
 }
 
+static void ana_amiga_reset_framebuffer_states(void)
+{
+    int i;
+
+    for (i = 0; i < ANA_FRAMEBUFFER_COUNT; i++) {
+        ana_amiga_framebuffer_states[i].dirty_count = 0;
+        ana_amiga_framebuffer_states[i].clear_color_valid = 1;
+        ana_amiga_framebuffer_states[i].clear_color = 0u;
+    }
+}
+
 static struct ANA_AmigaBitmapState* ana_amiga_bitmap_state_for(
     struct BitMap* bitmap)
 {
@@ -528,6 +548,95 @@ static void ana_amiga_store_bitmap_dirty_state(
     for (i = 0; i < ana_amiga_dirty_count; i++) {
         state->dirty_rects[i] = ana_amiga_dirty_rects[i];
     }
+}
+
+static void ana_amiga_store_framebuffer_dirty_state(int buffer_index)
+{
+    struct ANA_AmigaFramebufferState* state;
+    int i;
+
+    if (buffer_index < 0 || buffer_index >= ANA_FRAMEBUFFER_COUNT) {
+        return;
+    }
+
+    state = &ana_amiga_framebuffer_states[buffer_index];
+    state->dirty_count = ana_amiga_dirty_count;
+    for (i = 0; i < ana_amiga_dirty_count; i++) {
+        state->dirty_rects[i] = ana_amiga_dirty_rects[i];
+    }
+}
+
+static void ana_amiga_fill_chunky_rect(
+    int buffer_index,
+    unsigned char color,
+    const struct ANA_AmigaDirtyRect* rect)
+{
+    int y;
+    int width;
+    unsigned char* pixels;
+
+    if (buffer_index < 0 || buffer_index >= ANA_FRAMEBUFFER_COUNT ||
+            rect == NULL) {
+        return;
+    }
+
+    if (rect->min_x >= rect->max_x || rect->min_y >= rect->max_y) {
+        return;
+    }
+
+    width = rect->max_x - rect->min_x;
+    pixels = ana_framebuffers[buffer_index];
+
+    for (y = rect->min_y; y < rect->max_y; y++) {
+        memset(
+            pixels + (y * ANA_DEFAULT_WIDTH) + rect->min_x,
+            color,
+            (size_t)width);
+    }
+}
+
+static void ana_amiga_clear_chunky_rects(
+    int buffer_index,
+    unsigned char color,
+    const struct ANA_AmigaDirtyRect* rects,
+    int rect_count)
+{
+    int i;
+
+    for (i = 0; i < rect_count; i++) {
+        ana_amiga_fill_chunky_rect(buffer_index, color, &rects[i]);
+    }
+}
+
+static void ana_amiga_clear_draw_framebuffer(unsigned char color)
+{
+    struct ANA_AmigaFramebufferState* state;
+
+    state = &ana_amiga_framebuffer_states[ana_draw_buffer];
+
+    if (!state->clear_color_valid || state->clear_color != color) {
+        memset(
+            ana_framebuffers[ana_draw_buffer],
+            color,
+            ANA_FRAMEBUFFER_PIXELS);
+        state->dirty_count = 0;
+        state->clear_color_valid = 1;
+        state->clear_color = color;
+        ana_amiga_dirty_count = 0;
+        return;
+    }
+
+    ana_amiga_clear_chunky_rects(
+        ana_draw_buffer,
+        color,
+        state->dirty_rects,
+        state->dirty_count);
+    ana_amiga_clear_chunky_rects(
+        ana_draw_buffer,
+        color,
+        ana_amiga_dirty_rects,
+        ana_amiga_dirty_count);
+    ana_amiga_dirty_count = 0;
 }
 
 static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
@@ -801,6 +910,8 @@ static void ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
     ana_amiga_screen->RastPort.BitMap = bitmap;
     if (ana_amiga_screen->ViewPort.RasInfo != NULL) {
         ana_amiga_screen->ViewPort.RasInfo->BitMap = bitmap;
+        ScrollVPort(&ana_amiga_screen->ViewPort);
+        return;
     }
 
     MakeScreen(ana_amiga_screen);
@@ -1082,6 +1193,10 @@ ANA_Result ana_gfx_open(const ANA_Profile* profile)
 
     memset(ana_framebuffers, 0, sizeof(ana_framebuffers));
     ana_gfx_load_default_palette();
+
+#ifdef ANA_TARGET_AMIGA
+    ana_amiga_reset_framebuffer_states();
+#endif
 
     ana_gfx_opened = 1;
     ana_draw_buffer = 0;
@@ -1641,11 +1756,13 @@ void ana_clear(unsigned char color_index)
     }
 
     color_index = (unsigned char)(color_index & 0x0f);
-    memset(ana_framebuffers[ana_draw_buffer], color_index, ANA_FRAMEBUFFER_PIXELS);
 
 #ifdef ANA_TARGET_AMIGA
+    ana_amiga_clear_draw_framebuffer(color_index);
     ana_amiga_clear_requested = 1;
     ana_amiga_clear_color = color_index;
+#else
+    memset(ana_framebuffers[ana_draw_buffer], color_index, ANA_FRAMEBUFFER_PIXELS);
 #endif
 }
 
@@ -1663,6 +1780,7 @@ void ana_present(void)
     ana_presented_frames++;
 
 #ifdef ANA_TARGET_AMIGA
+    ana_amiga_store_framebuffer_dirty_state(ana_front_buffer);
     ana_amiga_present_buffer(ana_framebuffers[ana_front_buffer]);
 #endif
 }
