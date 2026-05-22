@@ -36,6 +36,7 @@ typedef struct ANA_RenderStats {
 
 void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
+void ana_fill_rect(unsigned char color_index, int x, int y, int width, int height);
 void ana_present(void);
 ANA_RenderStats ana_render_stats(void);
 

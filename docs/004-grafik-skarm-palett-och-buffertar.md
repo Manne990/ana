@@ -28,6 +28,7 @@ typedef struct ANA_Color {
 
 void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
+void ana_fill_rect(unsigned char color_index, int x, int y, int width, int height);
 void ana_present(void);
 ANA_RenderStats ana_render_stats(void);
 ```
@@ -52,17 +53,20 @@ Amiga-bygget anvander en Intuition custom screen i PAL lores:
 - en borderless window ovanpa screenen for raw-key input
 - `WaitTOF()` i `ana_present`
 - defaultpalett sa `ana_clear` syns aven utan explicit palett
+- `ana_fill_rect` for att rensa sma omraden utan full framebuffer-clear
 - software-present fran ANA:s draw-buffer till Amiga bitplanes
 - dubbelbuffrad screen-bitmap sa kopieringen sker mot dold frame
+- packad c2p-LUT for att minska CPU-arbetet vid dirty-rect-konvertering
 - dirty-rect-konvertering for ritade images och text, med flera sma rects per
   frame sa HUD-text och spelarsprite inte tvingar en stor gemensam konvertering
 - Amiga-target byggs optimerat eftersom ooptimerad 68K-kod blir for langsam
   for per-frame rendering
 
-Den publika spelkoden ritar fortfarande med `ana_clear` och `ana_draw_image`.
-Den forsta backend-implementationen prioriterar korrekt synlig output och enkel
-debuggning. Direktritning till planar buffers eller blitteroptimerade paths kan
-laggas under samma API nar vi borjar pressa Invaders-prestanda.
+Den publika spelkoden kan fortfarande anvanda den enkla `ana_clear` +
+`ana_draw_image`-modellen. Exempel som behover pressa mer prestanda kan istallet
+rita retained och anvanda `ana_fill_rect` for sma bakgrundsrensningar.
+Direktritning till planar buffers eller blitteroptimerade paths kan laggas under
+samma API nar vi borjar pressa Invaders-prestanda ytterligare.
 
 ## Prestandakrav
 

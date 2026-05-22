@@ -140,6 +140,9 @@ struct ANA_AmigaDirtyRect {
 static struct ANA_AmigaDirtyRect
     ana_amiga_dirty_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
 static int ana_amiga_dirty_count = 0;
+static struct ANA_AmigaDirtyRect
+    ana_amiga_planar_clear_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
+static int ana_amiga_planar_clear_count = 0;
 
 struct ANA_AmigaBitmapState {
     struct BitMap* bitmap;
@@ -159,8 +162,7 @@ struct ANA_AmigaFramebufferState {
 static struct ANA_AmigaBitmapState ana_amiga_bitmap_states[2];
 static struct ANA_AmigaFramebufferState
     ana_amiga_framebuffer_states[ANA_FRAMEBUFFER_COUNT];
-static unsigned char
-    ana_amiga_planar_pair_lut[4][256][ANA_DEFAULT_BITPLANES];
+static unsigned long ana_amiga_planar_pair_lut[4][256];
 static int ana_amiga_planar_pair_lut_ready = 0;
 #endif
 
@@ -704,45 +706,57 @@ static void ana_amiga_expand_dirty_rect(
     }
 }
 
-static void ana_amiga_remove_dirty_rect(int index)
+static void ana_amiga_remove_rect(
+    struct ANA_AmigaDirtyRect* rects,
+    int* rect_count,
+    int index)
 {
     int i;
 
-    if (index < 0 || index >= ana_amiga_dirty_count) {
+    if (rects == NULL || rect_count == NULL ||
+            index < 0 || index >= *rect_count) {
         return;
     }
 
-    for (i = index; i < ana_amiga_dirty_count - 1; i++) {
-        ana_amiga_dirty_rects[i] = ana_amiga_dirty_rects[i + 1];
+    for (i = index; i < *rect_count - 1; i++) {
+        rects[i] = rects[i + 1];
     }
 
-    ana_amiga_dirty_count--;
+    (*rect_count)--;
 }
 
-static void ana_amiga_coalesce_dirty_rect(int index)
+static void ana_amiga_coalesce_rect(
+    struct ANA_AmigaDirtyRect* rects,
+    int* rect_count,
+    int index)
 {
     int i;
 
+    if (rects == NULL || rect_count == NULL ||
+            index < 0 || index >= *rect_count) {
+        return;
+    }
+
     i = 0;
-    while (i < ana_amiga_dirty_count) {
+    while (i < *rect_count) {
         if (i == index) {
             i++;
             continue;
         }
 
         if (ana_amiga_rect_contains(
-                &ana_amiga_dirty_rects[index],
-                &ana_amiga_dirty_rects[i]) ||
+                &rects[index],
+                &rects[i]) ||
                 ana_amiga_rects_overlap(
-                    &ana_amiga_dirty_rects[index],
-                    &ana_amiga_dirty_rects[i]) ||
+                    &rects[index],
+                    &rects[i]) ||
                 ana_amiga_rects_should_merge(
-                    &ana_amiga_dirty_rects[index],
-                    &ana_amiga_dirty_rects[i])) {
+                    &rects[index],
+                    &rects[i])) {
             ana_amiga_expand_dirty_rect(
-                &ana_amiga_dirty_rects[index],
-                &ana_amiga_dirty_rects[i]);
-            ana_amiga_remove_dirty_rect(i);
+                &rects[index],
+                &rects[i]);
+            ana_amiga_remove_rect(rects, rect_count, i);
             if (i < index) {
                 index--;
             }
@@ -757,6 +771,7 @@ static void ana_amiga_coalesce_dirty_rect(int index)
 static void ana_amiga_reset_frame_state(void)
 {
     ana_amiga_dirty_count = 0;
+    ana_amiga_planar_clear_count = 0;
     ana_amiga_clear_requested = 0;
     ana_amiga_clear_color = 0;
 }
@@ -785,7 +800,7 @@ static void ana_amiga_init_planar_pair_lut(void)
     int color0;
     int color1;
     int shift;
-    unsigned char value;
+    unsigned char plane_values[ANA_DEFAULT_BITPLANES];
 
     if (ana_amiga_planar_pair_lut_ready) {
         return;
@@ -799,18 +814,24 @@ static void ana_amiga_init_planar_pair_lut(void)
             color1 = index & 0x0f;
 
             for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-                value = 0u;
+                plane_values[plane] = 0u;
 
                 if ((color0 & (1 << plane)) != 0) {
-                    value = (unsigned char)(value | (1u << (shift + 1)));
+                    plane_values[plane] = (unsigned char)(
+                        plane_values[plane] | (1u << (shift + 1)));
                 }
 
                 if ((color1 & (1 << plane)) != 0) {
-                    value = (unsigned char)(value | (1u << shift));
+                    plane_values[plane] = (unsigned char)(
+                        plane_values[plane] | (1u << shift));
                 }
-
-                ana_amiga_planar_pair_lut[slot][index][plane] = value;
             }
+
+            ana_amiga_planar_pair_lut[slot][index] =
+                (unsigned long)plane_values[0] |
+                ((unsigned long)plane_values[1] << 8) |
+                ((unsigned long)plane_values[2] << 16) |
+                ((unsigned long)plane_values[3] << 24);
         }
     }
 
@@ -913,6 +934,7 @@ static void ana_amiga_clear_draw_framebuffer(unsigned char color)
     struct ANA_AmigaFramebufferState* state;
 
     state = &ana_amiga_framebuffer_states[ana_draw_buffer];
+    ana_amiga_planar_clear_count = 0;
 
     if (!state->clear_color_valid || state->clear_color != color) {
         memset(
@@ -946,7 +968,13 @@ static void ana_amiga_clear_draw_framebuffer(unsigned char color)
     ana_amiga_dirty_count = 0;
 }
 
-static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
+static void ana_amiga_mark_rect(
+    struct ANA_AmigaDirtyRect* rects,
+    int* rect_count,
+    int min_x,
+    int min_y,
+    int max_x,
+    int max_y)
 {
     struct ANA_AmigaDirtyRect rect;
     int i;
@@ -987,32 +1015,58 @@ static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y
     rect.max_x = max_x;
     rect.max_y = max_y;
 
-    for (i = 0; i < ana_amiga_dirty_count; i++) {
-        if (ana_amiga_rect_contains(&ana_amiga_dirty_rects[i], &rect)) {
+    for (i = 0; i < *rect_count; i++) {
+        if (ana_amiga_rect_contains(&rects[i], &rect)) {
             return;
         }
 
-        if (ana_amiga_rects_overlap(&ana_amiga_dirty_rects[i], &rect)) {
-            ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[i], &rect);
-            ana_amiga_coalesce_dirty_rect(i);
+        if (ana_amiga_rects_overlap(&rects[i], &rect)) {
+            ana_amiga_expand_dirty_rect(&rects[i], &rect);
+            ana_amiga_coalesce_rect(rects, rect_count, i);
             return;
         }
 
-        if (ana_amiga_rects_should_merge(&ana_amiga_dirty_rects[i], &rect)) {
-            ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[i], &rect);
-            ana_amiga_coalesce_dirty_rect(i);
+        if (ana_amiga_rects_should_merge(&rects[i], &rect)) {
+            ana_amiga_expand_dirty_rect(&rects[i], &rect);
+            ana_amiga_coalesce_rect(rects, rect_count, i);
             return;
         }
     }
 
-    if (ana_amiga_dirty_count < ANA_AMIGA_MAX_DIRTY_RECTS) {
-        ana_amiga_dirty_rects[ana_amiga_dirty_count] = rect;
-        ana_amiga_dirty_count++;
+    if (*rect_count < ANA_AMIGA_MAX_DIRTY_RECTS) {
+        rects[*rect_count] = rect;
+        (*rect_count)++;
         return;
     }
 
-    ana_amiga_expand_dirty_rect(&ana_amiga_dirty_rects[0], &rect);
-    ana_amiga_coalesce_dirty_rect(0);
+    ana_amiga_expand_dirty_rect(&rects[0], &rect);
+    ana_amiga_coalesce_rect(rects, rect_count, 0);
+}
+
+static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
+{
+    ana_amiga_mark_rect(
+        ana_amiga_dirty_rects,
+        &ana_amiga_dirty_count,
+        min_x,
+        min_y,
+        max_x,
+        max_y);
+}
+
+static void ana_amiga_mark_planar_clear_rect(
+    int min_x,
+    int min_y,
+    int max_x,
+    int max_y)
+{
+    ana_amiga_mark_rect(
+        ana_amiga_planar_clear_rects,
+        &ana_amiga_planar_clear_count,
+        min_x,
+        min_y,
+        max_x,
+        max_y);
 }
 
 static unsigned short ana_amiga_color_to_rgb4(ANA_Color color)
@@ -1494,6 +1548,7 @@ static int ana_amiga_open_display(void)
     if (ana_amiga_screen_buffers_ready) {
         ana_amiga_original_bitmap = ana_amiga_screen_buffers[0]->sb_BitMap;
         ana_amiga_draw_bitmap = ana_amiga_screen_buffers[1]->sb_BitMap;
+        ana_amiga_visible_bitmap = ana_amiga_original_bitmap;
     }
 
     ana_amiga_bitmap_states[0].bitmap = ana_amiga_original_bitmap;
@@ -1565,6 +1620,11 @@ static void ana_amiga_copy_chunky_rect_to_bitplanes(
     int index1;
     int index2;
     int index3;
+    unsigned long packed;
+    const unsigned long* lut0;
+    const unsigned long* lut1;
+    const unsigned long* lut2;
+    const unsigned long* lut3;
     unsigned char* plane0;
     unsigned char* plane1;
     unsigned char* plane2;
@@ -1615,6 +1675,10 @@ static void ana_amiga_copy_chunky_rect_to_bitplanes(
     }
 
     ana_amiga_init_planar_pair_lut();
+    lut0 = ana_amiga_planar_pair_lut[0];
+    lut1 = ana_amiga_planar_pair_lut[1];
+    lut2 = ana_amiga_planar_pair_lut[2];
+    lut3 = ana_amiga_planar_pair_lut[3];
 
     for (y = min_y; y < max_y; y++) {
         row_offset = (unsigned long)y * bitmap->BytesPerRow;
@@ -1630,27 +1694,16 @@ static void ana_amiga_copy_chunky_rect_to_bitplanes(
             index1 = ((in[2] & 0x0f) << 4) | (in[3] & 0x0f);
             index2 = ((in[4] & 0x0f) << 4) | (in[5] & 0x0f);
             index3 = ((in[6] & 0x0f) << 4) | (in[7] & 0x0f);
+            packed =
+                lut0[index0] |
+                lut1[index1] |
+                lut2[index2] |
+                lut3[index3];
 
-            out0[byte_x] = (unsigned char)(
-                ana_amiga_planar_pair_lut[0][index0][0] |
-                ana_amiga_planar_pair_lut[1][index1][0] |
-                ana_amiga_planar_pair_lut[2][index2][0] |
-                ana_amiga_planar_pair_lut[3][index3][0]);
-            out1[byte_x] = (unsigned char)(
-                ana_amiga_planar_pair_lut[0][index0][1] |
-                ana_amiga_planar_pair_lut[1][index1][1] |
-                ana_amiga_planar_pair_lut[2][index2][1] |
-                ana_amiga_planar_pair_lut[3][index3][1]);
-            out2[byte_x] = (unsigned char)(
-                ana_amiga_planar_pair_lut[0][index0][2] |
-                ana_amiga_planar_pair_lut[1][index1][2] |
-                ana_amiga_planar_pair_lut[2][index2][2] |
-                ana_amiga_planar_pair_lut[3][index3][2]);
-            out3[byte_x] = (unsigned char)(
-                ana_amiga_planar_pair_lut[0][index0][3] |
-                ana_amiga_planar_pair_lut[1][index1][3] |
-                ana_amiga_planar_pair_lut[2][index2][3] |
-                ana_amiga_planar_pair_lut[3][index3][3]);
+            out0[byte_x] = (unsigned char)(packed & 0xffu);
+            out1[byte_x] = (unsigned char)((packed >> 8) & 0xffu);
+            out2[byte_x] = (unsigned char)((packed >> 16) & 0xffu);
+            out3[byte_x] = (unsigned char)((packed >> 24) & 0xffu);
 
             in += 8;
         }
@@ -1672,8 +1725,13 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 
     total_start = ana_platform_perf_ticks();
 
+#ifdef ANA_AMIGA_DIRECT_PRESENT
+    next_visible = ana_amiga_visible_bitmap;
+    previous_visible = ana_amiga_visible_bitmap;
+#else
     next_visible = ana_amiga_draw_bitmap;
     previous_visible = ana_amiga_visible_bitmap;
+#endif
 
     if (next_visible == NULL || previous_visible == NULL) {
         return;
@@ -1712,6 +1770,23 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             }
         }
     }
+
+    for (i = 0; i < ana_amiga_planar_clear_count; i++) {
+        if (ana_amiga_rect_contained_by_any(
+                &ana_amiga_planar_clear_rects[i],
+                ana_amiga_dirty_rects,
+                ana_amiga_dirty_count)) {
+            continue;
+        }
+
+        ana_gfx_record_planar_clear_rects(
+            &ana_amiga_planar_clear_rects[i],
+            1);
+        ana_amiga_fill_bitmap_rect(
+            next_visible,
+            0u,
+            &ana_amiga_planar_clear_rects[i]);
+    }
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_clear_perf_ticks,
         stage_start,
@@ -1736,24 +1811,28 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
         stage_start,
         ana_platform_perf_ticks());
 
-    if (ana_amiga_clear_requested) {
-        ana_amiga_store_bitmap_dirty_state(next_state);
-    }
+    ana_amiga_store_bitmap_dirty_state(next_state);
 
     stage_start = ana_platform_perf_ticks();
+#ifdef ANA_AMIGA_DIRECT_PRESENT
+    ana_gfx_stats.direct_flips++;
+#else
     if (!ana_amiga_set_screen_bitmap(next_visible)) {
         ana_gfx_stats.direct_flips++;
         WaitTOF();
     } else {
         ana_gfx_stats.screen_buffer_flips++;
     }
+#endif
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_flip_perf_ticks,
         stage_start,
         ana_platform_perf_ticks());
 
+#ifndef ANA_AMIGA_DIRECT_PRESENT
     ana_amiga_visible_bitmap = next_visible;
     ana_amiga_draw_bitmap = previous_visible;
+#endif
     ana_amiga_reset_frame_state();
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_total_perf_ticks,
@@ -2664,6 +2743,60 @@ void ana_clear(unsigned char color_index)
 #else
     memset(ana_framebuffers[ana_draw_buffer], color_index, ANA_FRAMEBUFFER_PIXELS);
 #endif
+}
+
+void ana_fill_rect(unsigned char color_index, int x, int y, int width, int height)
+{
+    int start_x;
+    int start_y;
+    int end_x;
+    int end_y;
+    int row;
+    unsigned char* pixels;
+
+    if (!ana_gfx_opened || width <= 0 || height <= 0) {
+        return;
+    }
+
+    if (x >= ANA_DEFAULT_WIDTH || y >= ANA_DEFAULT_HEIGHT ||
+            x + width <= 0 || y + height <= 0) {
+        return;
+    }
+
+    start_x = x < 0 ? 0 : x;
+    start_y = y < 0 ? 0 : y;
+    end_x = x + width;
+    end_y = y + height;
+
+    if (end_x > ANA_DEFAULT_WIDTH) {
+        end_x = ANA_DEFAULT_WIDTH;
+    }
+
+    if (end_y > ANA_DEFAULT_HEIGHT) {
+        end_y = ANA_DEFAULT_HEIGHT;
+    }
+
+    if (start_x >= end_x || start_y >= end_y) {
+        return;
+    }
+
+    color_index = (unsigned char)(color_index & 0x0f);
+
+#ifdef ANA_TARGET_AMIGA
+    if (color_index == 0u) {
+        ana_amiga_mark_planar_clear_rect(start_x, start_y, end_x, end_y);
+    } else {
+        ana_amiga_mark_dirty_rect(start_x, start_y, end_x, end_y);
+    }
+#endif
+
+    pixels = ana_framebuffers[ana_draw_buffer];
+    for (row = start_y; row < end_y; row++) {
+        memset(
+            pixels + ((long)row * ANA_DEFAULT_WIDTH) + start_x,
+            color_index,
+            (size_t)(end_x - start_x));
+    }
 }
 
 void ana_present(void)

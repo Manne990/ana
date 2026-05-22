@@ -147,6 +147,31 @@ make amiga-examples
 make adfs
 ```
 
+Local ADF images are written to `build/adf/`, for example
+`build/adf/invaders.adf`.
+
+For performance investigations you can build a debug-statistics Invaders ADF:
+
+```sh
+make amiga-invaders-debug
+make invaders-debug-adf
+```
+
+This writes `build/adf/invaders-debug.adf` and keeps the normal
+`build/adf/invaders.adf` output unchanged.
+
+There is also an experimental direct-present build for comparing the cost
+of AmigaOS screen-buffer flipping against direct dirty-rect updates:
+
+```sh
+make amiga-invaders-fast
+make invaders-fast-adf
+```
+
+This writes `build/adf/invaders-fast.adf`. It includes the same debug
+statistics as `invaders-debug.adf`, but uses a different Amiga graphics
+present path.
+
 ## License
 
 See [LICENSE](LICENSE).

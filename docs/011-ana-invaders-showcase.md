@@ -39,10 +39,18 @@ Miniminiva for 0.1:
 - game over
 - restart
 
-Nuvarande tidiga exempel har en styrbar spelarsprite, ett enkelt spelarskott pa
-`ANA_ACTION_1`/Space/fire och en liten bitmapfont-HUD for score, lives och
-status. Det ar fortfarande ett smoke-test for runtime, image-rendering, text och
-input; fiendeformation, kollisioner, ljud och game states byggs vidare separat.
+Nuvarande exempel har en styrbar spelarsprite, flera samtidiga spelarskott pa
+`ANA_ACTION_1`/Space/fire, en liten bitmapfont-HUD for score, lives och status,
+en fiendeformation med tva animation frames, skottkollision, poang per traff och
+enkla explosioner. Det ar fortfarande en tidig spelbar slice; fiendeskott, ljud
+och tydligare game states byggs vidare separat.
+
+Renderingen ar optimerad for Amiga genom att HUD och fiendeformation ligger kvar
+i respektive draw-buffer tills de andras. Spelet rensar sedan bara gamla
+player-, bullet- och explosionsrektanglar med `ana_fill_rect`, och ritar om
+fiender lokalt nar ett rorligt objekt passerat over formationen. Vid traff
+rensas bara den borttagna fiendens rektangel i varje buffer, och explosioner
+lamnas kvar tills deras animation frame faktiskt byts.
 
 ## Grafik och ljud
 

@@ -25,6 +25,22 @@ static void test_clear_and_present(void)
     ana_present();
     assert(ana_gfx_front_pixel(10, 10) == 4);
 
+    ana_clear(0);
+    ana_fill_rect(6, 2, 3, 4, 5);
+    assert(ana_gfx_draw_pixel(1, 3) == 0);
+    assert(ana_gfx_draw_pixel(2, 3) == 6);
+    assert(ana_gfx_draw_pixel(5, 7) == 6);
+    assert(ana_gfx_draw_pixel(6, 7) == 0);
+
+    ana_fill_rect(23, -2, -2, 4, 4);
+    assert(ana_gfx_draw_pixel(0, 0) == 7);
+    assert(ana_gfx_draw_pixel(1, 1) == 7);
+    assert(ana_gfx_draw_pixel(2, 2) == 0);
+
+    ana_present();
+    assert(ana_gfx_front_pixel(2, 3) == 6);
+    assert(ana_gfx_front_pixel(0, 0) == 7);
+
     ana_gfx_close();
     assert(!ana_gfx_is_open());
 }
