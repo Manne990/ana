@@ -1057,6 +1057,43 @@ static InvadersRect invaders_align_rect_for_dirty(InvadersRect rect)
     return rect;
 }
 
+static int invaders_rect_overlaps_formation_bounds(InvadersRect rect)
+{
+    InvadersRect formation;
+
+    if (invaders_remaining <= 0) {
+        return 0;
+    }
+
+    formation.x = invader_formation_x;
+    formation.y = invader_formation_y;
+    formation.w = INVADER_FORMATION_WIDTH;
+    formation.h =
+        ((INVADER_ROWS - 1) * INVADER_SPACING_Y) + INVADER_HEIGHT;
+
+    return invaders_rects_intersect(rect, formation);
+}
+
+static int invaders_bullet_should_draw(
+    InvadersBullet bullet,
+    int bullet_width,
+    int bullet_height)
+{
+    InvadersRect rect;
+
+    if (!bullet.active) {
+        return 0;
+    }
+
+    rect = invaders_make_rect(
+        bullet.x,
+        bullet.y,
+        bullet_width,
+        bullet_height);
+
+    return !invaders_rect_overlaps_formation_bounds(rect);
+}
+
 static void invaders_fill_rect_black(InvadersRect rect)
 {
     rect = invaders_align_rect_for_dirty(rect);
@@ -1463,19 +1500,35 @@ static void invaders_draw_hud_slot(int slot)
 static void invaders_store_draw_slot(int slot)
 {
     InvadersDrawSlot* draw_slot;
+    int bullet_width;
+    int bullet_height;
     int i;
 
     draw_slot = &draw_slots[slot];
+    bullet_width = bullet_image != 0 ? ana_image_width(bullet_image) : 2;
+    bullet_height = bullet_image != 0 ? ana_image_height(bullet_image) : 6;
     draw_slot->has_player = player_image != 0;
     draw_slot->player_x = player_x;
     draw_slot->player_y = player_y;
 
     for (i = 0; i < PLAYER_BULLET_SLOTS; i++) {
         draw_slot->bullets[i] = player_bullets[i];
+        if (!invaders_bullet_should_draw(
+                draw_slot->bullets[i],
+                bullet_width,
+                bullet_height)) {
+            draw_slot->bullets[i].active = 0;
+        }
     }
 
     for (i = 0; i < ALIEN_BULLET_SLOTS; i++) {
         draw_slot->alien_bullets[i] = alien_bullets[i];
+        if (!invaders_bullet_should_draw(
+                draw_slot->alien_bullets[i],
+                bullet_width,
+                bullet_height)) {
+            draw_slot->alien_bullets[i].active = 0;
+        }
     }
 
     for (i = 0; i < EXPLOSION_SLOTS; i++) {
@@ -1650,8 +1703,16 @@ static void invaders_draw(void)
     }
 
     if (bullet_image != 0) {
+        int bullet_width;
+        int bullet_height;
+
+        bullet_width = ana_image_width(bullet_image);
+        bullet_height = ana_image_height(bullet_image);
         for (i = 0; i < PLAYER_BULLET_SLOTS; i++) {
-            if (player_bullets[i].active) {
+            if (invaders_bullet_should_draw(
+                    player_bullets[i],
+                    bullet_width,
+                    bullet_height)) {
                 ana_draw_image(
                     bullet_image,
                     player_bullets[i].x,
@@ -1661,8 +1722,16 @@ static void invaders_draw(void)
     }
 
     if (bullet_image != 0) {
+        int bullet_width;
+        int bullet_height;
+
+        bullet_width = ana_image_width(bullet_image);
+        bullet_height = ana_image_height(bullet_image);
         for (i = 0; i < ALIEN_BULLET_SLOTS; i++) {
-            if (alien_bullets[i].active) {
+            if (invaders_bullet_should_draw(
+                    alien_bullets[i],
+                    bullet_width,
+                    bullet_height)) {
                 ana_draw_image(
                     bullet_image,
                     alien_bullets[i].x,
