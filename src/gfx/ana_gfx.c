@@ -55,6 +55,12 @@
 #else
 #define ANA_AMIGA_WINDOW_REFRESH WFLG_SIMPLE_REFRESH
 #endif
+
+#ifdef ANA_AMIGA_DIRECT_PRESENT
+#define ANA_AMIGA_BLACK_FILL_USES_PLANAR_CLEAR 0
+#else
+#define ANA_AMIGA_BLACK_FILL_USES_PLANAR_CLEAR 1
+#endif
 #endif
 
 static unsigned char ana_framebuffers[ANA_FRAMEBUFFER_COUNT][ANA_FRAMEBUFFER_PIXELS];
@@ -1725,6 +1731,15 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 
     total_start = ana_platform_perf_ticks();
 
+#ifdef ANA_AMIGA_DIRECT_PRESENT_SYNC
+    stage_start = ana_platform_perf_ticks();
+    WaitTOF();
+    ana_gfx_record_perf_ticks(
+        &ana_gfx_stats.present_flip_perf_ticks,
+        stage_start,
+        ana_platform_perf_ticks());
+#endif
+
 #ifdef ANA_AMIGA_DIRECT_PRESENT
     next_visible = ana_amiga_visible_bitmap;
     previous_visible = ana_amiga_visible_bitmap;
@@ -1815,7 +1830,9 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 
     stage_start = ana_platform_perf_ticks();
 #ifdef ANA_AMIGA_DIRECT_PRESENT
+#ifndef ANA_AMIGA_DIRECT_PRESENT_SYNC
     ana_gfx_stats.direct_flips++;
+#endif
 #else
     if (!ana_amiga_set_screen_bitmap(next_visible)) {
         ana_gfx_stats.direct_flips++;
@@ -1824,10 +1841,15 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
         ana_gfx_stats.screen_buffer_flips++;
     }
 #endif
+#ifndef ANA_AMIGA_DIRECT_PRESENT_SYNC
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_flip_perf_ticks,
         stage_start,
         ana_platform_perf_ticks());
+#endif
+#ifdef ANA_AMIGA_DIRECT_PRESENT_SYNC
+    ana_gfx_stats.direct_flips++;
+#endif
 
 #ifndef ANA_AMIGA_DIRECT_PRESENT
     ana_amiga_visible_bitmap = next_visible;
@@ -2783,7 +2805,7 @@ void ana_fill_rect(unsigned char color_index, int x, int y, int width, int heigh
     color_index = (unsigned char)(color_index & 0x0f);
 
 #ifdef ANA_TARGET_AMIGA
-    if (color_index == 0u) {
+    if (color_index == 0u && ANA_AMIGA_BLACK_FILL_USES_PLANAR_CLEAR) {
         ana_amiga_mark_planar_clear_rect(start_x, start_y, end_x, end_y);
     } else {
         ana_amiga_mark_dirty_rect(start_x, start_y, end_x, end_y);

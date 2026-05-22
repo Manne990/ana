@@ -150,6 +150,11 @@ make adfs
 Local ADF images are written to `build/adf/`, for example
 `build/adf/invaders.adf`.
 
+The normal Amiga build uses ANA's direct-present renderer by default. That
+path updates the visible bitmap with final dirty-rect contents and avoids the
+screen-buffer safe-wait cost that was too expensive for the current Invaders
+sample.
+
 For performance investigations you can build a debug-statistics Invaders ADF:
 
 ```sh
@@ -158,19 +163,28 @@ make invaders-debug-adf
 ```
 
 This writes `build/adf/invaders-debug.adf` and keeps the normal
-`build/adf/invaders.adf` output unchanged.
+`build/adf/invaders.adf` output unchanged. It uses the same renderer as the
+normal build, but prints timing counters when the program exits.
 
-There is also an experimental direct-present build for comparing the cost
-of AmigaOS screen-buffer flipping against direct dirty-rect updates:
+To test the direct-present path synchronized before writing to the visible
+bitmap:
 
 ```sh
-make amiga-invaders-fast
-make invaders-fast-adf
+make amiga-invaders-sync
+make invaders-sync-adf
 ```
 
-This writes `build/adf/invaders-fast.adf`. It includes the same debug
-statistics as `invaders-debug.adf`, but uses a different Amiga graphics
-present path.
+This writes `build/adf/invaders-sync.adf`. It is intended to compare
+visual stability against the default direct-present path.
+
+To force the older screen-buffer renderer for comparison, rebuild from clean
+without the default Amiga present flags:
+
+```sh
+make clean
+make amiga-examples AMIGA_PRESENT_CFLAGS=
+make adfs AMIGA_PRESENT_CFLAGS=
+```
 
 ## License
 
