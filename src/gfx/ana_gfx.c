@@ -2823,15 +2823,21 @@ void ana_fill_rect(unsigned char color_index, int x, int y, int width, int heigh
 
 void ana_present(void)
 {
+#if !defined(ANA_TARGET_AMIGA) || !defined(ANA_AMIGA_DIRECT_PRESENT)
     int previous_front;
+#endif
 
     if (!ana_gfx_opened) {
         return;
     }
 
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_DIRECT_PRESENT)
+    ana_front_buffer = ana_draw_buffer;
+#else
     previous_front = ana_front_buffer;
     ana_front_buffer = ana_draw_buffer;
     ana_draw_buffer = previous_front;
+#endif
     ana_presented_frames++;
     ana_gfx_stats.frames = (long)ana_presented_frames;
 
