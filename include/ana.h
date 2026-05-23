@@ -9,5 +9,6 @@
 #include "ana/ana_gfx.h"
 #include "ana/ana_input.h"
 #include "ana/ana_sound.h"
+#include "ana/ana_helpers.h"
 
 #endif

@@ -1,36 +1,8 @@
 #include "ana.h"
+#include "invaders_assets.h"
 
 #include <stdio.h>
 #include <string.h>
-
-#define HUD_FONT_WIDTH 6
-#define HUD_FONT_HEIGHT 7
-#define HUD_FONT_FIRST_CHAR '0'
-#define HUD_FONT_CHAR_COUNT 43
-#define HUD_FONT_HEADER_SIZE 16
-#define HUD_FONT_IMAGE_HEADER_SIZE 20
-#define HUD_FONT_FRAME_SIZE (HUD_FONT_HEIGHT * 2)
-#define HUD_FONT_DATA_SIZE \
-    (HUD_FONT_HEADER_SIZE + HUD_FONT_IMAGE_HEADER_SIZE + \
-        (HUD_FONT_CHAR_COUNT * HUD_FONT_FRAME_SIZE))
-#define INVADERS_IMAGE_HEADER_SIZE 20
-#define INVADERS_IMAGE_BITPLANES 4
-#define INVADERS_SOUND_HEADER_SIZE 20
-#define INVADERS_SOUND_RATE 8000
-#define INVADERS_SOUND_FLAG_SIGNED_8BIT 1
-#define INVADERS_FIRE_SOUND_SAMPLES 160
-#define INVADERS_EXPLOSION_SOUND_SAMPLES 320
-#define INVADERS_STEP_SOUND_SAMPLES 160
-#define INVADERS_GAME_OVER_SOUND_SAMPLES 480
-#define INVADERS_SOUND_SIZE(samples) (INVADERS_SOUND_HEADER_SIZE + (samples))
-#define INVADERS_MASKED_IMAGE_SIZE(width, height, frames) \
-    (INVADERS_IMAGE_HEADER_SIZE + \
-        ((frames) * ((((width) + 7) / 8) * (height)) * \
-            (1 + INVADERS_IMAGE_BITPLANES)))
-#define INVADERS_UNMASKED_IMAGE_SIZE(width, height, frames) \
-    (INVADERS_IMAGE_HEADER_SIZE + \
-        ((frames) * ((((width) + 7) / 8) * (height)) * \
-            INVADERS_IMAGE_BITPLANES))
 
 #define PLAYER_SPEED 2
 #define PLAYER_BULLET_SPEED 4
@@ -49,6 +21,8 @@
 #define INVADER_SPACING_Y 16
 #define INVADER_FORMATION_WIDTH \
     (INVADER_WIDTH + ((INVADER_COLUMNS - 1) * INVADER_SPACING_X))
+#define INVADER_FORMATION_HEIGHT \
+    (INVADER_HEIGHT + ((INVADER_ROWS - 1) * INVADER_SPACING_Y))
 #define INVADER_START_X 52
 #define INVADER_START_Y 54
 #define INVADER_STEP_PIXELS 2
@@ -59,7 +33,6 @@
 #define INVADER_MIN_INTERVAL 5
 #define ALIEN_FIRE_BASE_INTERVAL 45
 #define ALIEN_FIRE_MIN_INTERVAL 10
-#define INVADER_COLOR 3
 
 #define EXPLOSION_WIDTH 16
 #define EXPLOSION_HEIGHT 10
@@ -80,17 +53,11 @@
 #define HUD_LIVES_Y 16
 #define HUD_STATUS_X 16
 #define HUD_STATUS_Y 30
+#define HUD_FONT_HEIGHT 7
 #define HUD_SCORE_CLEAR_WIDTH 90
 #define HUD_LIVES_CLEAR_WIDTH 70
 #define HUD_STATUS_CLEAR_WIDTH 150
 #define HUD_STATUS_TEXT_SIZE 16
-
-typedef struct InvadersRect {
-    int x;
-    int y;
-    int w;
-    int h;
-} InvadersRect;
 
 typedef struct InvadersExplosion {
     int active;
@@ -118,163 +85,12 @@ typedef struct InvadersDrawSlot {
     char hud_status[HUD_STATUS_TEXT_SIZE];
 } InvadersDrawSlot;
 
-static const unsigned char player_image_data[] = {
-    0x41, 0x4e, 0x41, 0x49, 0x4d, 0x47, 0x30, 0x31,
-    0x10, 0x00, 0x0a, 0x00, 0x01, 0x00, 0x04, 0x01,
-    0x00, 0x00, 0x00, 0x00,
-    0x03, 0x00, 0x07, 0x80, 0x0f, 0xc0, 0x1f, 0xe0,
-    0x3f, 0xf0, 0x7f, 0xf8, 0xff, 0xfc, 0x7f, 0xf8,
-    0x3b, 0x70, 0x04, 0x80,
-    0x03, 0x00, 0x07, 0x80, 0x0f, 0xc0, 0x1f, 0xe0,
-    0x3f, 0xf0, 0x7f, 0xf8, 0xff, 0xfc, 0x7f, 0xf8,
-    0x38, 0x70, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x07, 0x80,
-    0x0f, 0xc0, 0x1f, 0xe0, 0x3f, 0xf0, 0x10, 0x20,
-    0x03, 0x00, 0x04, 0x80,
-    0x03, 0x00, 0x07, 0x80, 0x0c, 0xc0, 0x18, 0x60,
-    0x30, 0x30, 0x60, 0x18, 0xc0, 0x0c, 0x6f, 0xd8,
-    0x38, 0x70, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00
-};
-
-static const unsigned char bullet_image_data[] = {
-    0x41, 0x4e, 0x41, 0x49, 0x4d, 0x47, 0x30, 0x31,
-    0x02, 0x00, 0x06, 0x00, 0x01, 0x00, 0x01, 0x01,
-    0x00, 0x00, 0x00, 0x00,
-    0xc0, 0xc0, 0xc0, 0xc0, 0xc0, 0xc0,
-    0xc0, 0xc0, 0xc0, 0xc0, 0xc0, 0xc0
-};
-
-static const char* const invader_frame_0[INVADER_HEIGHT] = {
-    "....##....##....",
-    "...##########...",
-    "..############..",
-    ".###..####..###.",
-    "################",
-    "..##.##..##.##..",
-    ".##..........##.",
-    "...##......##..."
-};
-
-static const char* const invader_frame_1[INVADER_HEIGHT] = {
-    "....##....##....",
-    ".##############.",
-    "################",
-    "###..######..###",
-    "################",
-    "...###....###...",
-    "..##..####..##..",
-    "##............##"
-};
-
-static const char* const explosion_frame_0[EXPLOSION_HEIGHT] = {
-    "................",
-    "......#..#......",
-    "...#..####..#...",
-    "....########....",
-    "..############..",
-    "....########....",
-    "...#..####..#...",
-    "......#..#......",
-    "................",
-    "................"
-};
-
-static const char* const explosion_frame_1[EXPLOSION_HEIGHT] = {
-    "....#......#....",
-    ".#....#..#....#.",
-    "...#........#...",
-    ".....##..##.....",
-    "#..##......##..#",
-    ".....##..##.....",
-    "...#........#...",
-    ".#....#..#....#.",
-    "....#......#....",
-    "................"
-};
-
-static const unsigned char hud_font_glyphs[HUD_FONT_CHAR_COUNT][HUD_FONT_HEIGHT] = {
-    { 0x70, 0x88, 0x98, 0xa8, 0xc8, 0x88, 0x70 },
-    { 0x20, 0x60, 0x20, 0x20, 0x20, 0x20, 0x70 },
-    { 0x70, 0x88, 0x08, 0x10, 0x20, 0x40, 0xf8 },
-    { 0xf0, 0x08, 0x08, 0x70, 0x08, 0x08, 0xf0 },
-    { 0x10, 0x30, 0x50, 0x90, 0xf8, 0x10, 0x10 },
-    { 0xf8, 0x80, 0x80, 0xf0, 0x08, 0x08, 0xf0 },
-    { 0x70, 0x80, 0x80, 0xf0, 0x88, 0x88, 0x70 },
-    { 0xf8, 0x08, 0x10, 0x20, 0x40, 0x40, 0x40 },
-    { 0x70, 0x88, 0x88, 0x70, 0x88, 0x88, 0x70 },
-    { 0x70, 0x88, 0x88, 0x78, 0x08, 0x08, 0x70 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    { 0x70, 0x88, 0x88, 0xf8, 0x88, 0x88, 0x88 },
-    { 0xf0, 0x88, 0x88, 0xf0, 0x88, 0x88, 0xf0 },
-    { 0x78, 0x80, 0x80, 0x80, 0x80, 0x80, 0x78 },
-    { 0xf0, 0x88, 0x88, 0x88, 0x88, 0x88, 0xf0 },
-    { 0xf8, 0x80, 0x80, 0xf0, 0x80, 0x80, 0xf8 },
-    { 0xf8, 0x80, 0x80, 0xf0, 0x80, 0x80, 0x80 },
-    { 0x78, 0x80, 0x80, 0x98, 0x88, 0x88, 0x78 },
-    { 0x88, 0x88, 0x88, 0xf8, 0x88, 0x88, 0x88 },
-    { 0x70, 0x20, 0x20, 0x20, 0x20, 0x20, 0x70 },
-    { 0x08, 0x08, 0x08, 0x08, 0x88, 0x88, 0x70 },
-    { 0x88, 0x90, 0xa0, 0xc0, 0xa0, 0x90, 0x88 },
-    { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xf8 },
-    { 0x88, 0xd8, 0xa8, 0xa8, 0x88, 0x88, 0x88 },
-    { 0x88, 0xc8, 0xa8, 0x98, 0x88, 0x88, 0x88 },
-    { 0x70, 0x88, 0x88, 0x88, 0x88, 0x88, 0x70 },
-    { 0xf0, 0x88, 0x88, 0xf0, 0x80, 0x80, 0x80 },
-    { 0x70, 0x88, 0x88, 0x88, 0xa8, 0x90, 0x68 },
-    { 0xf0, 0x88, 0x88, 0xf0, 0xa0, 0x90, 0x88 },
-    { 0x78, 0x80, 0x80, 0x70, 0x08, 0x08, 0xf0 },
-    { 0xf8, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20 },
-    { 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x70 },
-    { 0x88, 0x88, 0x88, 0x88, 0x88, 0x50, 0x20 },
-    { 0x88, 0x88, 0x88, 0xa8, 0xa8, 0xa8, 0x50 },
-    { 0x88, 0x88, 0x50, 0x20, 0x50, 0x88, 0x88 },
-    { 0x88, 0x88, 0x50, 0x20, 0x20, 0x20, 0x20 },
-    { 0xf8, 0x08, 0x10, 0x20, 0x40, 0x80, 0xf8 }
-};
-
-static unsigned char hud_font_data[HUD_FONT_DATA_SIZE];
-static unsigned char invader_image_data[
-    INVADERS_UNMASKED_IMAGE_SIZE(
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        INVADER_FRAMES)];
-static unsigned char explosion_image_data[
-    INVADERS_MASKED_IMAGE_SIZE(
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        EXPLOSION_FRAMES)];
-static unsigned char fire_sound_data[
-    INVADERS_SOUND_SIZE(INVADERS_FIRE_SOUND_SAMPLES)];
-static unsigned char explosion_sound_data[
-    INVADERS_SOUND_SIZE(INVADERS_EXPLOSION_SOUND_SAMPLES)];
-static unsigned char step_sound_data[
-    INVADERS_SOUND_SIZE(INVADERS_STEP_SOUND_SAMPLES)];
-static unsigned char game_over_sound_data[
-    INVADERS_SOUND_SIZE(INVADERS_GAME_OVER_SOUND_SAMPLES)];
-static ANA_Image player_image = 0;
-static ANA_Image bullet_image = 0;
-static ANA_Image invader_image = 0;
-static ANA_Image explosion_image = 0;
-static ANA_Font hud_font = 0;
-static ANA_Sound fire_sound = 0;
-static ANA_Sound explosion_sound = 0;
-static ANA_Sound step_sound = 0;
-static ANA_Sound game_over_sound = 0;
 static unsigned char invader_alive[INVADER_ROWS][INVADER_COLUMNS];
 static InvadersExplosion explosions[EXPLOSION_SLOTS];
 static InvadersBullet player_bullets[PLAYER_BULLET_SLOTS];
 static InvadersBullet alien_bullets[ALIEN_BULLET_SLOTS];
 static InvadersDrawSlot draw_slots[INVADERS_DRAW_SLOTS];
-static InvadersRect removed_enemy_rects
+static ANA_Rect removed_enemy_rects
     [INVADERS_DRAW_SLOTS][INVADERS_REMOVED_ENEMY_SLOTS];
 static int removed_enemy_counts[INVADERS_DRAW_SLOTS];
 static int formation_dirty_slots[INVADERS_DRAW_SLOTS];
@@ -290,8 +106,8 @@ static int invader_formation_x = INVADER_START_X;
 static int invader_formation_y = INVADER_START_Y;
 static int invader_direction = 1;
 static int invader_frame = 0;
-static int invader_move_timer = 0;
-static int alien_fire_timer = 0;
+static ANA_Timer invader_move_timer;
+static ANA_Timer alien_fire_timer;
 static int invaders_remaining = 0;
 static int score = 0;
 static int lives = 3;
@@ -299,348 +115,6 @@ static int game_over = 0;
 static int demo_ticks = 0;
 static int invaders_assets_loaded = 0;
 static unsigned long invaders_rng_state = 0x13579bdfUL;
-
-static void invaders_write_u16_le(unsigned char* bytes, int value)
-{
-    bytes[0] = (unsigned char)(value & 0xff);
-    bytes[1] = (unsigned char)((value >> 8) & 0xff);
-}
-
-static void invaders_write_u32_le(unsigned char* bytes, long value)
-{
-    bytes[0] = (unsigned char)(value & 0xff);
-    bytes[1] = (unsigned char)((value >> 8) & 0xff);
-    bytes[2] = (unsigned char)((value >> 16) & 0xff);
-    bytes[3] = (unsigned char)((value >> 24) & 0xff);
-}
-
-static void invaders_write_sound_header(
-    unsigned char* bytes,
-    int sample_count,
-    int volume,
-    int priority)
-{
-    bytes[0] = 'A';
-    bytes[1] = 'N';
-    bytes[2] = 'A';
-    bytes[3] = 'S';
-    bytes[4] = 'N';
-    bytes[5] = 'D';
-    bytes[6] = '0';
-    bytes[7] = '1';
-    invaders_write_u16_le(bytes + 8, INVADERS_SOUND_RATE);
-    invaders_write_u32_le(bytes + 10, (long)sample_count);
-    bytes[14] = (unsigned char)volume;
-    bytes[15] = (unsigned char)priority;
-    bytes[16] = INVADERS_SOUND_FLAG_SIGNED_8BIT;
-    bytes[17] = 0u;
-    bytes[18] = 0u;
-    bytes[19] = 0u;
-}
-
-static unsigned char invaders_signed_sample(int sample)
-{
-    if (sample > 127) {
-        sample = 127;
-    }
-
-    if (sample < -128) {
-        sample = -128;
-    }
-
-    return (unsigned char)(sample & 0xff);
-}
-
-static void invaders_build_fire_sound(void)
-{
-    unsigned char* out;
-    int i;
-    int amp;
-    int period;
-    int sample;
-
-    invaders_write_sound_header(
-        fire_sound_data,
-        INVADERS_FIRE_SOUND_SAMPLES,
-        42,
-        2);
-    out = fire_sound_data + INVADERS_SOUND_HEADER_SIZE;
-    for (i = 0; i < INVADERS_FIRE_SOUND_SAMPLES; i++) {
-        amp = 58 - (i / 2);
-        if (amp < 8) {
-            amp = 8;
-        }
-        period = 6 - (i / 24);
-        if (period < 2) {
-            period = 2;
-        }
-        sample = ((i / period) & 1) ? amp : -amp;
-        out[i] = invaders_signed_sample(sample);
-    }
-}
-
-static void invaders_build_explosion_sound(void)
-{
-    unsigned char* out;
-    unsigned long state;
-    int i;
-    int amp;
-    int sample;
-
-    invaders_write_sound_header(
-        explosion_sound_data,
-        INVADERS_EXPLOSION_SOUND_SAMPLES,
-        54,
-        4);
-    out = explosion_sound_data + INVADERS_SOUND_HEADER_SIZE;
-    state = 0x2468ace1UL;
-    for (i = 0; i < INVADERS_EXPLOSION_SOUND_SAMPLES; i++) {
-        state = (state * 1103515245UL) + 12345UL;
-        amp = 72 - ((i * 68) / INVADERS_EXPLOSION_SOUND_SAMPLES);
-        sample = (int)((state >> 16) & 0x7fu) - 64;
-        sample = (sample * amp) / 64;
-        out[i] = invaders_signed_sample(sample);
-    }
-}
-
-static void invaders_build_step_sound(void)
-{
-    unsigned char* out;
-    int i;
-    int sample;
-
-    invaders_write_sound_header(
-        step_sound_data,
-        INVADERS_STEP_SOUND_SAMPLES,
-        34,
-        1);
-    out = step_sound_data + INVADERS_SOUND_HEADER_SIZE;
-    for (i = 0; i < INVADERS_STEP_SOUND_SAMPLES; i++) {
-        sample = ((i / 8) & 1) ? 42 : -42;
-        out[i] = invaders_signed_sample(sample);
-    }
-}
-
-static void invaders_build_game_over_sound(void)
-{
-    unsigned char* out;
-    int i;
-    int amp;
-    int period;
-    int sample;
-
-    invaders_write_sound_header(
-        game_over_sound_data,
-        INVADERS_GAME_OVER_SOUND_SAMPLES,
-        52,
-        5);
-    out = game_over_sound_data + INVADERS_SOUND_HEADER_SIZE;
-    for (i = 0; i < INVADERS_GAME_OVER_SOUND_SAMPLES; i++) {
-        amp = 58 - (i / 8);
-        if (amp < 20) {
-            amp = 20;
-        }
-        period = 5 + (i / 32);
-        sample = ((i / period) & 1) ? amp : -amp;
-        out[i] = invaders_signed_sample(sample);
-    }
-}
-
-static void invaders_build_sound_data(void)
-{
-    invaders_build_fire_sound();
-    invaders_build_explosion_sound();
-    invaders_build_step_sound();
-    invaders_build_game_over_sound();
-}
-
-static void invaders_write_image_header(
-    unsigned char* bytes,
-    int width,
-    int height,
-    int frames,
-    int masked)
-{
-    bytes[0] = 'A';
-    bytes[1] = 'N';
-    bytes[2] = 'A';
-    bytes[3] = 'I';
-    bytes[4] = 'M';
-    bytes[5] = 'G';
-    bytes[6] = '0';
-    bytes[7] = '1';
-    invaders_write_u16_le(bytes + 8, width);
-    invaders_write_u16_le(bytes + 10, height);
-    invaders_write_u16_le(bytes + 12, frames);
-    bytes[14] = INVADERS_IMAGE_BITPLANES;
-    bytes[15] = masked ? 1u : 0u;
-    bytes[16] = 0u;
-    bytes[17] = 0u;
-    bytes[18] = 0u;
-    bytes[19] = 0u;
-}
-
-static void invaders_set_planar_bit(
-    unsigned char* bytes,
-    int row_bytes,
-    int x,
-    int y)
-{
-    bytes[(y * row_bytes) + (x >> 3)] =
-        (unsigned char)(
-            bytes[(y * row_bytes) + (x >> 3)] |
-            (0x80u >> (x & 7)));
-}
-
-static void invaders_write_solid_frame(
-    unsigned char* image_data,
-    int width,
-    int height,
-    int frame,
-    const char* const* rows,
-    unsigned char color,
-    int masked)
-{
-    unsigned char* frame_base;
-    unsigned char* mask;
-    unsigned char* planes;
-    int row_bytes;
-    int plane_size;
-    int frame_size;
-    int x;
-    int y;
-    int plane;
-
-    row_bytes = (width + 7) / 8;
-    plane_size = row_bytes * height;
-    frame_size =
-        plane_size * (INVADERS_IMAGE_BITPLANES + (masked ? 1 : 0));
-    frame_base =
-        image_data + INVADERS_IMAGE_HEADER_SIZE + (frame * frame_size);
-    mask = masked ? frame_base : NULL;
-    planes = masked ? frame_base + plane_size : frame_base;
-    memset(frame_base, 0, (size_t)frame_size);
-
-    color = (unsigned char)(color & 0x0f);
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            if (rows[y][x] != '.' && rows[y][x] != ' ') {
-                if (mask != NULL) {
-                    invaders_set_planar_bit(mask, row_bytes, x, y);
-                }
-                for (plane = 0; plane < INVADERS_IMAGE_BITPLANES; plane++) {
-                    if ((color & (1u << plane)) != 0u) {
-                        invaders_set_planar_bit(
-                            planes + (plane * plane_size),
-                            row_bytes,
-                            x,
-                            y);
-                    }
-                }
-            }
-        }
-    }
-}
-
-static void invaders_build_sprite_data(void)
-{
-    invaders_write_image_header(
-        invader_image_data,
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        INVADER_FRAMES,
-        0);
-    invaders_write_solid_frame(
-        invader_image_data,
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        0,
-        invader_frame_0,
-        INVADER_COLOR,
-        0);
-    invaders_write_solid_frame(
-        invader_image_data,
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        1,
-        invader_frame_1,
-        INVADER_COLOR,
-        0);
-
-    invaders_write_image_header(
-        explosion_image_data,
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        EXPLOSION_FRAMES,
-        1);
-    invaders_write_solid_frame(
-        explosion_image_data,
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        0,
-        explosion_frame_0,
-        5u,
-        1);
-    invaders_write_solid_frame(
-        explosion_image_data,
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        1,
-        explosion_frame_1,
-        2u,
-        1);
-}
-
-static void invaders_build_hud_font_data(void)
-{
-    unsigned char* out;
-    int glyph;
-    int row;
-
-    hud_font_data[0] = 'A';
-    hud_font_data[1] = 'N';
-    hud_font_data[2] = 'A';
-    hud_font_data[3] = 'F';
-    hud_font_data[4] = 'N';
-    hud_font_data[5] = 'T';
-    hud_font_data[6] = '0';
-    hud_font_data[7] = '1';
-    invaders_write_u16_le(hud_font_data + 8, HUD_FONT_WIDTH);
-    invaders_write_u16_le(hud_font_data + 10, HUD_FONT_HEIGHT);
-    hud_font_data[12] = HUD_FONT_FIRST_CHAR;
-    hud_font_data[13] = HUD_FONT_CHAR_COUNT;
-    hud_font_data[14] = 0u;
-    hud_font_data[15] = 0u;
-
-    hud_font_data[16] = 'A';
-    hud_font_data[17] = 'N';
-    hud_font_data[18] = 'A';
-    hud_font_data[19] = 'I';
-    hud_font_data[20] = 'M';
-    hud_font_data[21] = 'G';
-    hud_font_data[22] = '0';
-    hud_font_data[23] = '1';
-    invaders_write_u16_le(hud_font_data + 24, HUD_FONT_WIDTH);
-    invaders_write_u16_le(hud_font_data + 26, HUD_FONT_HEIGHT);
-    invaders_write_u16_le(hud_font_data + 28, HUD_FONT_CHAR_COUNT);
-    hud_font_data[30] = 1u;
-    hud_font_data[31] = 1u;
-    hud_font_data[32] = 0u;
-    hud_font_data[33] = 0u;
-    hud_font_data[34] = 0u;
-    hud_font_data[35] = 0u;
-
-    out = hud_font_data + HUD_FONT_HEADER_SIZE + HUD_FONT_IMAGE_HEADER_SIZE;
-    for (glyph = 0; glyph < HUD_FONT_CHAR_COUNT; glyph++) {
-        for (row = 0; row < HUD_FONT_HEIGHT; row++) {
-            *out++ = hud_font_glyphs[glyph][row];
-        }
-
-        for (row = 0; row < HUD_FONT_HEIGHT; row++) {
-            *out++ = hud_font_glyphs[glyph][row];
-        }
-    }
-}
 
 static void invaders_reset_explosions(void)
 {
@@ -723,8 +197,8 @@ static void invaders_reset_formation(void)
     invader_formation_y = INVADER_START_Y;
     invader_direction = 1;
     invader_frame = 0;
-    invader_move_timer = 0;
-    alien_fire_timer = 0;
+    ana_timer_reset(&invader_move_timer, INVADER_BASE_INTERVAL);
+    ana_timer_reset(&alien_fire_timer, ALIEN_FIRE_BASE_INTERVAL);
     invaders_remaining = 0;
 
     for (row = 0; row < INVADER_ROWS; row++) {
@@ -753,14 +227,6 @@ static void invaders_reset_game_state(void)
     invaders_reset_draw_slots();
 }
 
-static int invaders_rects_intersect(InvadersRect a, InvadersRect b)
-{
-    return a.x < b.x + b.w &&
-        b.x < a.x + a.w &&
-        a.y < b.y + b.h &&
-        b.y < a.y + a.h;
-}
-
 static int invaders_enemy_x(int col)
 {
     return invader_formation_x + (col * INVADER_SPACING_X);
@@ -773,7 +239,7 @@ static int invaders_enemy_y(int row)
 
 static void invaders_queue_removed_enemy_rect(int x, int y)
 {
-    InvadersRect rect;
+    ANA_Rect rect;
     int slot;
     int count;
 
@@ -836,11 +302,7 @@ static int invaders_move_interval(void)
     interval =
         (INVADER_BASE_INTERVAL * 100) /
         (100 + (removed * 5));
-    if (interval < INVADER_MIN_INTERVAL) {
-        interval = INVADER_MIN_INTERVAL;
-    }
-
-    return interval;
+    return ana_clamp_int(interval, INVADER_MIN_INTERVAL, INVADER_BASE_INTERVAL);
 }
 
 static int invaders_fire_interval(void)
@@ -852,11 +314,10 @@ static int invaders_fire_interval(void)
     interval =
         (ALIEN_FIRE_BASE_INTERVAL * 100) /
         (100 + (removed * 6));
-    if (interval < ALIEN_FIRE_MIN_INTERVAL) {
-        interval = ALIEN_FIRE_MIN_INTERVAL;
-    }
-
-    return interval;
+    return ana_clamp_int(
+        interval,
+        ALIEN_FIRE_MIN_INTERVAL,
+        ALIEN_FIRE_BASE_INTERVAL);
 }
 
 static int invaders_update_formation(void)
@@ -872,12 +333,11 @@ static int invaders_update_formation(void)
         return 0;
     }
 
-    invader_move_timer++;
-    if (invader_move_timer < invaders_move_interval()) {
+    invader_move_timer.interval = invaders_move_interval();
+    if (!ana_timer_tick(&invader_move_timer)) {
         return 0;
     }
 
-    invader_move_timer = 0;
     left = ANA_DEFAULT_WIDTH;
     right = 0;
 
@@ -928,33 +388,31 @@ static void invaders_check_bullet_hits(int bullet_width, int bullet_height)
     int bullet;
     int row;
     int col;
-    int bullet_x;
-    int bullet_y;
-    int bullet_right;
-    int bullet_bottom;
     int enemy_x;
     int enemy_y;
+    ANA_Rect bullet_rect;
+    ANA_Rect enemy_rect;
 
     if (game_over || invaders_remaining <= 0) {
         return;
     }
+
+    bullet_rect.w = bullet_width;
+    bullet_rect.h = bullet_height;
+    enemy_rect.w = INVADER_WIDTH;
+    enemy_rect.h = INVADER_HEIGHT;
 
     for (bullet = 0; bullet < PLAYER_BULLET_SLOTS; bullet++) {
         if (!player_bullets[bullet].active) {
             continue;
         }
 
-        bullet_x = player_bullets[bullet].x;
-        bullet_y = player_bullets[bullet].y;
-        bullet_right = bullet_x + bullet_width;
-        bullet_bottom = bullet_y + bullet_height;
+        bullet_rect.x = player_bullets[bullet].x;
+        bullet_rect.y = player_bullets[bullet].y;
 
         for (row = 0; row < INVADER_ROWS; row++) {
             enemy_y = invaders_enemy_y(row);
-            if (bullet_bottom <= enemy_y ||
-                    bullet_y >= enemy_y + INVADER_HEIGHT) {
-                continue;
-            }
+            enemy_rect.y = enemy_y;
 
             for (col = 0; col < INVADER_COLUMNS; col++) {
                 if (!invader_alive[row][col]) {
@@ -962,8 +420,8 @@ static void invaders_check_bullet_hits(int bullet_width, int bullet_height)
                 }
 
                 enemy_x = invaders_enemy_x(col);
-                if (bullet_x < enemy_x + INVADER_WIDTH &&
-                        bullet_right > enemy_x) {
+                enemy_rect.x = enemy_x;
+                if (ana_rect_intersects(bullet_rect, enemy_rect)) {
                     invader_alive[row][col] = 0u;
                     invaders_remaining--;
                     player_bullets[bullet].active = 0;
@@ -1085,12 +543,12 @@ static void invaders_update_alien_fire(int bullet_width)
         return;
     }
 
-    alien_fire_timer++;
-    if (alien_fire_timer < invaders_fire_interval()) {
+    alien_fire_timer.interval = invaders_fire_interval();
+    if (!ana_timer_tick(&alien_fire_timer)) {
         return;
     }
 
-    alien_fire_timer = (int)(invaders_random() % 4u);
+    alien_fire_timer.ticks = (int)(invaders_random() % 4u);
     invaders_spawn_alien_bullet(bullet_width);
 }
 
@@ -1130,8 +588,8 @@ static int invaders_player_was_hit(
     int bullet_width,
     int bullet_height)
 {
-    InvadersRect player_rect;
-    InvadersRect bullet_rect;
+    ANA_Rect player_rect;
+    ANA_Rect bullet_rect;
     int i;
 
     if (game_over || invaders_remaining <= 0) {
@@ -1152,7 +610,7 @@ static int invaders_player_was_hit(
 
         bullet_rect.x = alien_bullets[i].x;
         bullet_rect.y = alien_bullets[i].y;
-        if (invaders_rects_intersect(player_rect, bullet_rect)) {
+        if (ana_rect_intersects(player_rect, bullet_rect)) {
             ana_play_sound(game_over_sound);
             return 1;
         }
@@ -1200,9 +658,9 @@ static int invaders_draw_slot_index(void)
     return demo_ticks & (INVADERS_DRAW_SLOTS - 1);
 }
 
-static InvadersRect invaders_make_rect(int x, int y, int w, int h)
+static ANA_Rect invaders_make_rect(int x, int y, int w, int h)
 {
-    InvadersRect rect;
+    ANA_Rect rect;
 
     rect.x = x;
     rect.y = y;
@@ -1212,7 +670,7 @@ static InvadersRect invaders_make_rect(int x, int y, int w, int h)
     return rect;
 }
 
-static InvadersRect invaders_align_rect_for_dirty(InvadersRect rect)
+static ANA_Rect invaders_align_rect_for_dirty(ANA_Rect rect)
 {
     int max_x;
 
@@ -1230,9 +688,9 @@ static InvadersRect invaders_align_rect_for_dirty(InvadersRect rect)
     return rect;
 }
 
-static int invaders_rect_overlaps_alive_enemy(InvadersRect rect)
+static int invaders_rect_overlaps_alive_enemy(ANA_Rect rect)
 {
-    InvadersRect enemy;
+    ANA_Rect enemy;
     int row;
     int col;
 
@@ -1250,7 +708,7 @@ static int invaders_rect_overlaps_alive_enemy(InvadersRect rect)
             }
 
             enemy.x = invaders_enemy_x(col);
-            if (invaders_rects_intersect(rect, enemy)) {
+            if (ana_rect_intersects(rect, enemy)) {
                 return 1;
             }
         }
@@ -1264,7 +722,7 @@ static int invaders_bullet_should_draw(
     int bullet_width,
     int bullet_height)
 {
-    InvadersRect rect;
+    ANA_Rect rect;
 
     if (!bullet.active) {
         return 0;
@@ -1279,7 +737,7 @@ static int invaders_bullet_should_draw(
     return !invaders_rect_overlaps_alive_enemy(rect);
 }
 
-static void invaders_fill_rect_black(InvadersRect rect)
+static void invaders_fill_rect_black(ANA_Rect rect)
 {
     rect = invaders_align_rect_for_dirty(rect);
     ana_fill_rect(0u, rect.x, rect.y, rect.w, rect.h);
@@ -1297,7 +755,7 @@ static int invaders_explosion_frame_for_age(int age)
     return frame;
 }
 
-static InvadersRect invaders_explosion_rect(const InvadersExplosion* explosion)
+static ANA_Rect invaders_explosion_rect(const InvadersExplosion* explosion)
 {
     return invaders_make_rect(
         explosion->x,
@@ -1306,9 +764,9 @@ static InvadersRect invaders_explosion_rect(const InvadersExplosion* explosion)
         EXPLOSION_HEIGHT);
 }
 
-static int invaders_rect_overlaps_active_explosion(InvadersRect rect)
+static int invaders_rect_overlaps_active_explosion(ANA_Rect rect)
 {
-    InvadersRect explosion_rect;
+    ANA_Rect explosion_rect;
     int i;
 
     for (i = 0; i < EXPLOSION_SLOTS; i++) {
@@ -1317,7 +775,7 @@ static int invaders_rect_overlaps_active_explosion(InvadersRect rect)
         }
 
         explosion_rect = invaders_explosion_rect(&explosions[i]);
-        if (invaders_rects_intersect(rect, explosion_rect)) {
+        if (ana_rect_intersects(rect, explosion_rect)) {
             return 1;
         }
     }
@@ -1343,13 +801,12 @@ static int invaders_explosion_unchanged_for_slot(
             invaders_explosion_frame_for_age(current->age);
 }
 
-static void invaders_repair_formation_overlap(InvadersRect rect)
+static void invaders_repair_formation_overlap(ANA_Rect rect)
 {
+    ANA_Rect formation_rect;
+    ANA_Rect enemy_rect;
     int row;
     int col;
-    int formation_bottom;
-    int rect_right;
-    int rect_bottom;
     int enemy_x;
     int enemy_y;
 
@@ -1357,24 +814,20 @@ static void invaders_repair_formation_overlap(InvadersRect rect)
         return;
     }
 
-    rect_right = rect.x + rect.w;
-    rect_bottom = rect.y + rect.h;
-    formation_bottom =
-        invader_formation_y +
-        ((INVADER_ROWS - 1) * INVADER_SPACING_Y) +
-        INVADER_HEIGHT;
-    if (rect_right <= invader_formation_x ||
-            rect.x >= invader_formation_x + INVADER_FORMATION_WIDTH ||
-            rect_bottom <= invader_formation_y ||
-            rect.y >= formation_bottom) {
+    formation_rect = invaders_make_rect(
+        invader_formation_x,
+        invader_formation_y,
+        INVADER_FORMATION_WIDTH,
+        INVADER_FORMATION_HEIGHT);
+    if (!ana_rect_intersects(rect, formation_rect)) {
         return;
     }
 
+    enemy_rect.w = INVADER_WIDTH;
+    enemy_rect.h = INVADER_HEIGHT;
     for (row = 0; row < INVADER_ROWS; row++) {
         enemy_y = invaders_enemy_y(row);
-        if (rect_bottom <= enemy_y || rect.y >= enemy_y + INVADER_HEIGHT) {
-            continue;
-        }
+        enemy_rect.y = enemy_y;
 
         for (col = 0; col < INVADER_COLUMNS; col++) {
             if (!invader_alive[row][col]) {
@@ -1382,7 +835,8 @@ static void invaders_repair_formation_overlap(InvadersRect rect)
             }
 
             enemy_x = invaders_enemy_x(col);
-            if (rect.x < enemy_x + INVADER_WIDTH && rect_right > enemy_x) {
+            enemy_rect.x = enemy_x;
+            if (ana_rect_intersects(rect, enemy_rect)) {
                 ana_draw_image_frame(
                     invader_image,
                     invader_frame,
@@ -1393,7 +847,7 @@ static void invaders_repair_formation_overlap(InvadersRect rect)
     }
 }
 
-static int invaders_clear_previous_rect(int slot, InvadersRect rect)
+static int invaders_clear_previous_rect(int slot, ANA_Rect rect)
 {
     rect = invaders_align_rect_for_dirty(rect);
     invaders_fill_rect_black(rect);
@@ -1408,7 +862,7 @@ static int invaders_clear_movers_from_state(
     int slot,
     const InvadersDrawSlot* draw_slot)
 {
-    InvadersRect rect;
+    ANA_Rect rect;
     int player_width;
     int player_height;
     int bullet_width;
@@ -1486,7 +940,7 @@ static int invaders_clear_previous_movers(int slot)
 
 static int invaders_process_removed_enemies(int slot)
 {
-    InvadersRect rect;
+    ANA_Rect rect;
     int redraw_explosions;
     int i;
 
@@ -1737,52 +1191,7 @@ static void invaders_init(void)
 
 static void invaders_load(void)
 {
-    invaders_build_sprite_data();
-    invaders_build_hud_font_data();
-    invaders_build_sound_data();
-    ana_set_sound_volume(52);
-
-    player_image = ana_load_image_data(
-        player_image_data,
-        (long)sizeof(player_image_data));
-    bullet_image = ana_load_image_data(
-        bullet_image_data,
-        (long)sizeof(bullet_image_data));
-    invader_image = ana_load_image_data(
-        invader_image_data,
-        (long)sizeof(invader_image_data));
-    explosion_image = ana_load_image_data(
-        explosion_image_data,
-        (long)sizeof(explosion_image_data));
-    hud_font = ana_load_font_data(
-        hud_font_data,
-        (long)sizeof(hud_font_data));
-    fire_sound = ana_load_sound_data(
-        fire_sound_data,
-        (long)sizeof(fire_sound_data));
-    explosion_sound = ana_load_sound_data(
-        explosion_sound_data,
-        (long)sizeof(explosion_sound_data));
-    step_sound = ana_load_sound_data(
-        step_sound_data,
-        (long)sizeof(step_sound_data));
-    game_over_sound = ana_load_sound_data(
-        game_over_sound_data,
-        (long)sizeof(game_over_sound_data));
-    if (hud_font != 0) {
-        ana_set_font_color(hud_font, 5);
-    }
-
-    invaders_assets_loaded =
-        player_image != 0 &&
-        bullet_image != 0 &&
-        invader_image != 0 &&
-        explosion_image != 0 &&
-        hud_font != 0 &&
-        fire_sound != 0 &&
-        explosion_sound != 0 &&
-        step_sound != 0 &&
-        game_over_sound != 0;
+    invaders_assets_loaded = invaders_load_assets();
 }
 
 static void invaders_update(ANA_Time time)
@@ -1810,13 +1219,7 @@ static void invaders_update(ANA_Time time)
         player_x += PLAYER_SPEED;
     }
 
-    if (player_x < 0) {
-        player_x = 0;
-    }
-
-    if (player_x > ANA_DEFAULT_WIDTH - player_width) {
-        player_x = ANA_DEFAULT_WIDTH - player_width;
-    }
+    player_x = ana_clamp_int(player_x, 0, ANA_DEFAULT_WIDTH - player_width);
 
     if ((game_over || invaders_remaining <= 0) && action_pressed) {
         invaders_reset_game_state();
@@ -1952,24 +1355,7 @@ static void invaders_draw(void)
 
 static void invaders_shutdown(void)
 {
-    ana_free_sound(game_over_sound);
-    ana_free_sound(step_sound);
-    ana_free_sound(explosion_sound);
-    ana_free_sound(fire_sound);
-    ana_free_font(hud_font);
-    ana_free_image(explosion_image);
-    ana_free_image(invader_image);
-    ana_free_image(bullet_image);
-    ana_free_image(player_image);
-    game_over_sound = 0;
-    step_sound = 0;
-    explosion_sound = 0;
-    fire_sound = 0;
-    hud_font = 0;
-    explosion_image = 0;
-    invader_image = 0;
-    bullet_image = 0;
-    player_image = 0;
+    invaders_free_assets();
 }
 
 #ifdef ANA_INVADERS_DEBUG_STATS

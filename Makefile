@@ -20,6 +20,7 @@ AMIGA_SYNC_BUILD_DIR := $(BUILD_DIR)/amiga-sync
 ANA_SRCS := \
 	src/core/ana_core.c \
 	src/core/ana_platform.c \
+	src/core/ana_helpers.c \
 	src/core/ana_result.c \
 	src/gfx/ana_gfx.c \
 	src/input/ana_input.c \
@@ -32,6 +33,7 @@ TEST_BINS := \
 	$(BUILD_DIR)/tests/runtime_loop_test \
 	$(BUILD_DIR)/tests/gfx_test \
 	$(BUILD_DIR)/tests/input_test \
+	$(BUILD_DIR)/tests/helpers_test \
 	$(BUILD_DIR)/tests/sound_test
 
 TOOL_TEST_HELPERS := \
@@ -40,6 +42,15 @@ TOOL_TEST_HELPERS := \
 EXAMPLE_BINS := \
 	$(BUILD_DIR)/examples/hello/hello \
 	$(BUILD_DIR)/examples/invaders/invaders
+
+INVADERS_SRCS := \
+	examples/invaders/main.c \
+	examples/invaders/invaders_assets.c
+INVADERS_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/invaders
+INVADERS_ASSET_DIR := $(INVADERS_ASSET_BUILD_DIR)/assets
+INVADERS_ASSET_BUILDER := \
+	$(BUILD_DIR)/examples/invaders-build-assets/build-assets
+INVADERS_ASSET_STAMP := $(INVADERS_ASSET_BUILD_DIR)/.stamp
 
 TOOL_BINS := $(BUILD_DIR)/tools/ana-convert/ana-convert
 
@@ -62,13 +73,17 @@ ADF_FILES := \
 INVADERS_DEBUG_ADF := $(ADF_DIR)/invaders-debug.adf
 INVADERS_SYNC_ADF := $(ADF_DIR)/invaders-sync.adf
 
-.PHONY: all lib examples tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf clean
+.PHONY: all lib examples examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf clean
 
 all: lib examples tools
 
 lib: $(LIBANA)
 
 examples: $(EXAMPLE_BINS)
+
+examples/invaders-assets: $(INVADERS_ASSET_STAMP)
+
+invaders-assets: $(INVADERS_ASSET_STAMP)
 
 tools: $(TOOL_BINS)
 
@@ -98,9 +113,18 @@ $(BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(LIBANA)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/examples/invaders/invaders: examples/invaders/main.c $(LIBANA)
+$(INVADERS_ASSET_BUILDER): examples/invaders/build_assets.c
 	mkdir -p $(@D)
-	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
+
+$(INVADERS_ASSET_STAMP): $(INVADERS_ASSET_BUILDER)
+	mkdir -p $(INVADERS_ASSET_DIR)
+	$(INVADERS_ASSET_BUILDER) $(INVADERS_ASSET_DIR)
+	touch $@
+
+$(BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(LIBANA) $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INVADERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c $(LIBANA)
 	mkdir -p $(@D)
@@ -126,33 +150,33 @@ $(AMIGA_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_LIBANA)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_BUILD_DIR)/examples/invaders/invaders: examples/invaders/main.c $(AMIGA_LIBANA)
+$(AMIGA_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(AMIGA_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
-	$(AMIGA_CC) $(AMIGA_CFLAGS) $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
+	$(AMIGA_CC) $(AMIGA_CFLAGS) $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_INVADERS_DEBUG_BIN): examples/invaders/main.c $(AMIGA_LIBANA)
+$(AMIGA_INVADERS_DEBUG_BIN): $(INVADERS_SRCS) $(AMIGA_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
-	$(AMIGA_CC) $(AMIGA_CFLAGS) -DANA_INVADERS_DEBUG_STATS $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
+	$(AMIGA_CC) $(AMIGA_CFLAGS) -DANA_INVADERS_DEBUG_STATS $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_INVADERS_SYNC_BIN): examples/invaders/main.c $(AMIGA_SYNC_LIBANA)
+$(AMIGA_INVADERS_SYNC_BIN): $(INVADERS_SRCS) $(AMIGA_SYNC_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
-	$(AMIGA_CC) $(AMIGA_SYNC_CFLAGS) -DANA_INVADERS_DEBUG_STATS $< $(AMIGA_SYNC_LIBANA) $(AMIGA_LDFLAGS) -o $@
+	$(AMIGA_CC) $(AMIGA_SYNC_CFLAGS) -DANA_INVADERS_DEBUG_STATS $(INVADERS_SRCS) $(AMIGA_SYNC_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
 $(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAHello
 
-$(ADF_DIR)/invaders.adf: $(AMIGA_BUILD_DIR)/examples/invaders/invaders
+$(ADF_DIR)/invaders.adf: $(AMIGA_BUILD_DIR)/examples/invaders/invaders $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
-	$(ADFTOOL) -i $< -a $@ -l ANAInvaders
+	$(ADFTOOL) -i $< -a $@ -l ANAInvaders $(INVADERS_ASSET_DIR)
 
-$(INVADERS_DEBUG_ADF): $(AMIGA_INVADERS_DEBUG_BIN)
+$(INVADERS_DEBUG_ADF): $(AMIGA_INVADERS_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
-	$(ADFTOOL) -i $< -a $@ -l ANAInvDbg
+	$(ADFTOOL) -i $< -a $@ -l ANAInvDbg $(INVADERS_ASSET_DIR)
 
-$(INVADERS_SYNC_ADF): $(AMIGA_INVADERS_SYNC_BIN)
+$(INVADERS_SYNC_ADF): $(AMIGA_INVADERS_SYNC_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
-	$(ADFTOOL) -i $< -a $@ -l ANAInvSync
+	$(ADFTOOL) -i $< -a $@ -l ANAInvSync $(INVADERS_ASSET_DIR)
 
 $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)
