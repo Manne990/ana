@@ -18,11 +18,15 @@ Ge ANA 0.1 tillrackligt ljudstod for korta ljudeffekter i Invaders: skott, explo
 typedef struct ANA_SoundData* ANA_Sound;
 
 ANA_Sound ana_load_sound(const char* path);
+ANA_Sound ana_load_sound_data(const unsigned char* bytes, long size);
 void ana_free_sound(ANA_Sound sound);
 void ana_play_sound(ANA_Sound sound);
 void ana_stop_all_sounds(void);
 void ana_set_sound_volume(int volume);
 ```
+
+`ana_load_sound_data` laser samma format fran en inbaddad byte-array. Det ar
+praktiskt for sma ADF-exempel som just nu paketeras som en ensam korbar fil.
 
 ## Kanalstrategi
 
@@ -42,6 +46,36 @@ Ljudassets ska vara forkonverterade till ett runtime-vanligt format:
 - sample rate metadata
 - langd
 - eventuell default-volym
+
+0.1-formatet ar `.anasnd`:
+
+```text
+offset  size  description
+0       8     magic: ANASND01
+8       2     sample rate, little endian
+10      4     sample length in bytes, little endian
+14      1     default volume, 0-64
+15      1     priority, higher can replace lower priority sounds
+16      1     flags, bit 0 = signed 8-bit PCM
+17      3     reserved, must be 0
+20      n     signed 8-bit PCM sample bytes
+```
+
+Sampledata paddas internt till jamnt antal bytes nar det behovs, eftersom
+Paula spelar ljud-DMA i ord. Playback allokerar inte minne; allokering sker vid
+load.
+
+## Implementation 0.1
+
+- Host-backenden validerar format, laddar samples och haller kanalstatus sa
+  tester kan verifiera API-beteende.
+- Amiga-backenden allokerar sampledata i Chip RAM och spelar via fyra Paula-
+  kanaler.
+- `ana_play_sound` ar fire-and-forget. Den valjer en ledig kanal nar det gar,
+  annars ersatts en kanal enligt enkel prioritet/round-robin.
+- Runtime stoppar kanalen nar samplets beraknade langd har passerat, eftersom
+  Paula annars loopar ljud-DMA kontinuerligt.
+- `ana_set_sound_volume` satter global volym 0-64.
 
 ## Inte i 0.1
 

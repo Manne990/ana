@@ -109,10 +109,12 @@ The initial 0.1 work is split into focused specs:
 10. [Small game helpers](docs/010-sma-spelhjalpare.md)
 11. [ANA Invaders showcase](docs/011-ana-invaders-showcase.md)
 12. [Documentation and release package](docs/012-dokumentation-och-releasepaket.md)
+13. [Asset pipeline 0.2](docs/013-asset-pipeline-02.md)
+14. [Music and channel policy](docs/014-musik-och-kanalpolicy.md)
 
 ## Current Status
 
-ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, visible Amiga PAL lores graphics, image loading/rendering, bitmap font text, input mapping, example skeletons, and the first host-side asset conversion flow.
+ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, visible Amiga PAL lores graphics, image loading/rendering, bitmap font text, input mapping, short SFX playback, example skeletons, and the first host-side asset conversion flow.
 
 ## Build
 

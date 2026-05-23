@@ -28,6 +28,12 @@ void ana_input_set_pending_state(ANA_InputDevice device, unsigned int state);
 void ana_input_set_pending_key_state(ANA_Key key, int is_down);
 void ana_input_set_pending_quit(int requested);
 
+ANA_Result ana_sound_open(const ANA_Profile* profile);
+void ana_sound_close(void);
+void ana_sound_update(void);
+int ana_sound_active_channel_count(void);
+int ana_sound_global_volume(void);
+
 long ana_platform_time_ticks(void);
 long ana_platform_time_ticks_per_second(void);
 unsigned long ana_platform_perf_ticks(void);

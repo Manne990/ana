@@ -22,7 +22,8 @@ ANA_SRCS := \
 	src/core/ana_platform.c \
 	src/core/ana_result.c \
 	src/gfx/ana_gfx.c \
-	src/input/ana_input.c
+	src/input/ana_input.c \
+	src/sound/ana_sound.c
 ANA_OBJS := $(ANA_SRCS:%.c=$(BUILD_DIR)/%.o)
 LIBANA := $(BUILD_DIR)/libana.a
 
@@ -30,7 +31,8 @@ TEST_BINS := \
 	$(BUILD_DIR)/tests/platform_profile_test \
 	$(BUILD_DIR)/tests/runtime_loop_test \
 	$(BUILD_DIR)/tests/gfx_test \
-	$(BUILD_DIR)/tests/input_test
+	$(BUILD_DIR)/tests/input_test \
+	$(BUILD_DIR)/tests/sound_test
 
 TOOL_TEST_HELPERS := \
 	$(BUILD_DIR)/tests/ana_convert_image_test

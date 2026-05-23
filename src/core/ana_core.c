@@ -149,6 +149,12 @@ int ana_run(const ANA_Game* game)
         return result;
     }
 
+    result = ana_sound_open(&profile);
+    if (result != ANA_OK) {
+        ana_gfx_close();
+        return result;
+    }
+
     ana_input_reset();
     ana_runtime_running = 1;
     ana_runtime_quit_requested = 0;
@@ -206,6 +212,7 @@ int ana_run(const ANA_Game* game)
                 start_ticks,
                 time.tick + 1L,
                 (long)profile.fps);
+            ana_sound_update();
         }
 
         time.tick++;
@@ -220,6 +227,7 @@ int ana_run(const ANA_Game* game)
 
     ana_runtime_quit_requested = 0;
     ana_runtime_running = 0;
+    ana_sound_close();
     ana_gfx_close();
 
     return ANA_OK;

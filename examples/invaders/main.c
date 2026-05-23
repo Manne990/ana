@@ -15,6 +15,14 @@
         (HUD_FONT_CHAR_COUNT * HUD_FONT_FRAME_SIZE))
 #define INVADERS_IMAGE_HEADER_SIZE 20
 #define INVADERS_IMAGE_BITPLANES 4
+#define INVADERS_SOUND_HEADER_SIZE 20
+#define INVADERS_SOUND_RATE 8000
+#define INVADERS_SOUND_FLAG_SIGNED_8BIT 1
+#define INVADERS_FIRE_SOUND_SAMPLES 160
+#define INVADERS_EXPLOSION_SOUND_SAMPLES 320
+#define INVADERS_STEP_SOUND_SAMPLES 160
+#define INVADERS_GAME_OVER_SOUND_SAMPLES 480
+#define INVADERS_SOUND_SIZE(samples) (INVADERS_SOUND_HEADER_SIZE + (samples))
 #define INVADERS_MASKED_IMAGE_SIZE(width, height, frames) \
     (INVADERS_IMAGE_HEADER_SIZE + \
         ((frames) * ((((width) + 7) / 8) * (height)) * \
@@ -244,11 +252,23 @@ static unsigned char explosion_image_data[
         EXPLOSION_WIDTH,
         EXPLOSION_HEIGHT,
         EXPLOSION_FRAMES)];
+static unsigned char fire_sound_data[
+    INVADERS_SOUND_SIZE(INVADERS_FIRE_SOUND_SAMPLES)];
+static unsigned char explosion_sound_data[
+    INVADERS_SOUND_SIZE(INVADERS_EXPLOSION_SOUND_SAMPLES)];
+static unsigned char step_sound_data[
+    INVADERS_SOUND_SIZE(INVADERS_STEP_SOUND_SAMPLES)];
+static unsigned char game_over_sound_data[
+    INVADERS_SOUND_SIZE(INVADERS_GAME_OVER_SOUND_SAMPLES)];
 static ANA_Image player_image = 0;
 static ANA_Image bullet_image = 0;
 static ANA_Image invader_image = 0;
 static ANA_Image explosion_image = 0;
 static ANA_Font hud_font = 0;
+static ANA_Sound fire_sound = 0;
+static ANA_Sound explosion_sound = 0;
+static ANA_Sound step_sound = 0;
+static ANA_Sound game_over_sound = 0;
 static unsigned char invader_alive[INVADER_ROWS][INVADER_COLUMNS];
 static InvadersExplosion explosions[EXPLOSION_SLOTS];
 static InvadersBullet player_bullets[PLAYER_BULLET_SLOTS];
@@ -284,6 +304,154 @@ static void invaders_write_u16_le(unsigned char* bytes, int value)
 {
     bytes[0] = (unsigned char)(value & 0xff);
     bytes[1] = (unsigned char)((value >> 8) & 0xff);
+}
+
+static void invaders_write_u32_le(unsigned char* bytes, long value)
+{
+    bytes[0] = (unsigned char)(value & 0xff);
+    bytes[1] = (unsigned char)((value >> 8) & 0xff);
+    bytes[2] = (unsigned char)((value >> 16) & 0xff);
+    bytes[3] = (unsigned char)((value >> 24) & 0xff);
+}
+
+static void invaders_write_sound_header(
+    unsigned char* bytes,
+    int sample_count,
+    int volume,
+    int priority)
+{
+    bytes[0] = 'A';
+    bytes[1] = 'N';
+    bytes[2] = 'A';
+    bytes[3] = 'S';
+    bytes[4] = 'N';
+    bytes[5] = 'D';
+    bytes[6] = '0';
+    bytes[7] = '1';
+    invaders_write_u16_le(bytes + 8, INVADERS_SOUND_RATE);
+    invaders_write_u32_le(bytes + 10, (long)sample_count);
+    bytes[14] = (unsigned char)volume;
+    bytes[15] = (unsigned char)priority;
+    bytes[16] = INVADERS_SOUND_FLAG_SIGNED_8BIT;
+    bytes[17] = 0u;
+    bytes[18] = 0u;
+    bytes[19] = 0u;
+}
+
+static unsigned char invaders_signed_sample(int sample)
+{
+    if (sample > 127) {
+        sample = 127;
+    }
+
+    if (sample < -128) {
+        sample = -128;
+    }
+
+    return (unsigned char)(sample & 0xff);
+}
+
+static void invaders_build_fire_sound(void)
+{
+    unsigned char* out;
+    int i;
+    int amp;
+    int period;
+    int sample;
+
+    invaders_write_sound_header(
+        fire_sound_data,
+        INVADERS_FIRE_SOUND_SAMPLES,
+        42,
+        2);
+    out = fire_sound_data + INVADERS_SOUND_HEADER_SIZE;
+    for (i = 0; i < INVADERS_FIRE_SOUND_SAMPLES; i++) {
+        amp = 58 - (i / 2);
+        if (amp < 8) {
+            amp = 8;
+        }
+        period = 6 - (i / 24);
+        if (period < 2) {
+            period = 2;
+        }
+        sample = ((i / period) & 1) ? amp : -amp;
+        out[i] = invaders_signed_sample(sample);
+    }
+}
+
+static void invaders_build_explosion_sound(void)
+{
+    unsigned char* out;
+    unsigned long state;
+    int i;
+    int amp;
+    int sample;
+
+    invaders_write_sound_header(
+        explosion_sound_data,
+        INVADERS_EXPLOSION_SOUND_SAMPLES,
+        54,
+        4);
+    out = explosion_sound_data + INVADERS_SOUND_HEADER_SIZE;
+    state = 0x2468ace1UL;
+    for (i = 0; i < INVADERS_EXPLOSION_SOUND_SAMPLES; i++) {
+        state = (state * 1103515245UL) + 12345UL;
+        amp = 72 - ((i * 68) / INVADERS_EXPLOSION_SOUND_SAMPLES);
+        sample = (int)((state >> 16) & 0x7fu) - 64;
+        sample = (sample * amp) / 64;
+        out[i] = invaders_signed_sample(sample);
+    }
+}
+
+static void invaders_build_step_sound(void)
+{
+    unsigned char* out;
+    int i;
+    int sample;
+
+    invaders_write_sound_header(
+        step_sound_data,
+        INVADERS_STEP_SOUND_SAMPLES,
+        34,
+        1);
+    out = step_sound_data + INVADERS_SOUND_HEADER_SIZE;
+    for (i = 0; i < INVADERS_STEP_SOUND_SAMPLES; i++) {
+        sample = ((i / 8) & 1) ? 42 : -42;
+        out[i] = invaders_signed_sample(sample);
+    }
+}
+
+static void invaders_build_game_over_sound(void)
+{
+    unsigned char* out;
+    int i;
+    int amp;
+    int period;
+    int sample;
+
+    invaders_write_sound_header(
+        game_over_sound_data,
+        INVADERS_GAME_OVER_SOUND_SAMPLES,
+        52,
+        5);
+    out = game_over_sound_data + INVADERS_SOUND_HEADER_SIZE;
+    for (i = 0; i < INVADERS_GAME_OVER_SOUND_SAMPLES; i++) {
+        amp = 58 - (i / 8);
+        if (amp < 20) {
+            amp = 20;
+        }
+        period = 5 + (i / 32);
+        sample = ((i / period) & 1) ? amp : -amp;
+        out[i] = invaders_signed_sample(sample);
+    }
+}
+
+static void invaders_build_sound_data(void)
+{
+    invaders_build_fire_sound();
+    invaders_build_explosion_sound();
+    invaders_build_step_sound();
+    invaders_build_game_over_sound();
 }
 
 static void invaders_write_image_header(
@@ -642,6 +810,7 @@ static void invaders_spawn_explosion(int x, int y)
     explosions[slot].x = x;
     explosions[slot].y = y - 1;
     explosions[slot].age = 0;
+    ana_play_sound(explosion_sound);
 }
 
 static void invaders_update_explosions(void)
@@ -734,12 +903,14 @@ static int invaders_update_formation(void)
         invader_formation_x += invader_direction * INVADER_STEP_PIXELS;
     }
 
+    ana_play_sound(step_sound);
     invader_frame = 1 - invader_frame;
     invaders_mark_formation_dirty();
     enemy_y = invader_formation_y +
         ((INVADER_ROWS - 1) * INVADER_SPACING_Y) +
         INVADER_HEIGHT;
     if (enemy_y >= player_y - 4) {
+        ana_play_sound(game_over_sound);
         invaders_reset_game_state();
         return 1;
     }
@@ -832,6 +1003,7 @@ static void invaders_spawn_player_bullet(
             player_bullets[i].x =
                 player_x + (player_width / 2) - (bullet_width / 2);
             player_bullets[i].y = player_y - bullet_height;
+            ana_play_sound(fire_sound);
             return;
         }
     }
@@ -981,6 +1153,7 @@ static int invaders_player_was_hit(
         bullet_rect.x = alien_bullets[i].x;
         bullet_rect.y = alien_bullets[i].y;
         if (invaders_rects_intersect(player_rect, bullet_rect)) {
+            ana_play_sound(game_over_sound);
             return 1;
         }
     }
@@ -1057,21 +1230,33 @@ static InvadersRect invaders_align_rect_for_dirty(InvadersRect rect)
     return rect;
 }
 
-static int invaders_rect_overlaps_formation_bounds(InvadersRect rect)
+static int invaders_rect_overlaps_alive_enemy(InvadersRect rect)
 {
-    InvadersRect formation;
+    InvadersRect enemy;
+    int row;
+    int col;
 
     if (invaders_remaining <= 0) {
         return 0;
     }
 
-    formation.x = invader_formation_x;
-    formation.y = invader_formation_y;
-    formation.w = INVADER_FORMATION_WIDTH;
-    formation.h =
-        ((INVADER_ROWS - 1) * INVADER_SPACING_Y) + INVADER_HEIGHT;
+    enemy.w = INVADER_WIDTH;
+    enemy.h = INVADER_HEIGHT;
+    for (row = 0; row < INVADER_ROWS; row++) {
+        enemy.y = invaders_enemy_y(row);
+        for (col = 0; col < INVADER_COLUMNS; col++) {
+            if (!invader_alive[row][col]) {
+                continue;
+            }
 
-    return invaders_rects_intersect(rect, formation);
+            enemy.x = invaders_enemy_x(col);
+            if (invaders_rects_intersect(rect, enemy)) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
 }
 
 static int invaders_bullet_should_draw(
@@ -1091,7 +1276,7 @@ static int invaders_bullet_should_draw(
         bullet_width,
         bullet_height);
 
-    return !invaders_rect_overlaps_formation_bounds(rect);
+    return !invaders_rect_overlaps_alive_enemy(rect);
 }
 
 static void invaders_fill_rect_black(InvadersRect rect)
@@ -1554,6 +1739,8 @@ static void invaders_load(void)
 {
     invaders_build_sprite_data();
     invaders_build_hud_font_data();
+    invaders_build_sound_data();
+    ana_set_sound_volume(52);
 
     player_image = ana_load_image_data(
         player_image_data,
@@ -1570,6 +1757,18 @@ static void invaders_load(void)
     hud_font = ana_load_font_data(
         hud_font_data,
         (long)sizeof(hud_font_data));
+    fire_sound = ana_load_sound_data(
+        fire_sound_data,
+        (long)sizeof(fire_sound_data));
+    explosion_sound = ana_load_sound_data(
+        explosion_sound_data,
+        (long)sizeof(explosion_sound_data));
+    step_sound = ana_load_sound_data(
+        step_sound_data,
+        (long)sizeof(step_sound_data));
+    game_over_sound = ana_load_sound_data(
+        game_over_sound_data,
+        (long)sizeof(game_over_sound_data));
     if (hud_font != 0) {
         ana_set_font_color(hud_font, 5);
     }
@@ -1579,7 +1778,11 @@ static void invaders_load(void)
         bullet_image != 0 &&
         invader_image != 0 &&
         explosion_image != 0 &&
-        hud_font != 0;
+        hud_font != 0 &&
+        fire_sound != 0 &&
+        explosion_sound != 0 &&
+        step_sound != 0 &&
+        game_over_sound != 0;
 }
 
 static void invaders_update(ANA_Time time)
@@ -1749,11 +1952,19 @@ static void invaders_draw(void)
 
 static void invaders_shutdown(void)
 {
+    ana_free_sound(game_over_sound);
+    ana_free_sound(step_sound);
+    ana_free_sound(explosion_sound);
+    ana_free_sound(fire_sound);
     ana_free_font(hud_font);
     ana_free_image(explosion_image);
     ana_free_image(invader_image);
     ana_free_image(bullet_image);
     ana_free_image(player_image);
+    game_over_sound = 0;
+    step_sound = 0;
+    explosion_sound = 0;
+    fire_sound = 0;
     hud_font = 0;
     explosion_image = 0;
     invader_image = 0;
