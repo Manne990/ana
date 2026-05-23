@@ -1,5 +1,8 @@
 CC ?= cc
 AR ?= ar
+HOST_NATIVE_CC := $(shell command -v x86_64-linux-gnu-gcc 2>/dev/null || command -v cc 2>/dev/null || echo cc)
+HOST_NATIVE_LDFLAGS := $(shell if command -v x86_64-linux-gnu-gcc >/dev/null 2>&1 && command -v x86_64-linux-gnu-ld.bfd >/dev/null 2>&1; then echo -fuse-ld=bfd; fi)
+HOST_CC ?= $(HOST_NATIVE_CC)
 AMIGA_CC ?= m68k-amigaos-gcc
 AMIGA_AR ?= m68k-amigaos-ar
 ADFTOOL ?= gadf
@@ -7,6 +10,8 @@ RM = rm -rf
 
 CFLAGS ?= -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc
 LDFLAGS ?=
+HOST_CFLAGS ?= $(CFLAGS)
+HOST_LDFLAGS ?= $(LDFLAGS) $(HOST_NATIVE_LDFLAGS)
 AMIGA_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68000 -DANA_TARGET_AMIGA
 AMIGA_PRESENT_CFLAGS ?= -DANA_AMIGA_DIRECT_PRESENT
 AMIGA_CFLAGS ?= $(AMIGA_BASE_CFLAGS) $(AMIGA_PRESENT_CFLAGS)
@@ -115,7 +120,7 @@ $(BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(LIBANA)
 
 $(INVADERS_ASSET_BUILDER): examples/invaders/build_assets.c
 	mkdir -p $(@D)
-	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
+	$(HOST_CC) $(HOST_CFLAGS) $< $(HOST_LDFLAGS) -o $@
 
 $(INVADERS_ASSET_STAMP): $(INVADERS_ASSET_BUILDER)
 	mkdir -p $(INVADERS_ASSET_DIR)
