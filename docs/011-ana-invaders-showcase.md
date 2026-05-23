@@ -31,6 +31,7 @@ Miniminiva for 0.1:
 - fiendeformation
 - fiender som ror sig horisontellt och nedat
 - fiender som skjuter
+- skyddsblock som stoppar och bryts ner av skott
 - kollision mellan skott och fiender
 - kollision mellan fiendeskott och spelare
 - explosioner
@@ -39,11 +40,11 @@ Miniminiva for 0.1:
 - game over
 - restart
 
-Nuvarande exempel har en styrbar spelarsprite, flera samtidiga spelarskott pa
-`ANA_ACTION_1`/Space/fire, en liten bitmapfont-HUD for score, lives och status,
-en fiendeformation med tva animation frames, skottkollision, poang per traff och
-enkla explosioner. Det ar fortfarande en tidig spelbar slice; fiendeskott, ljud
-och tydligare game states byggs vidare separat.
+Nuvarande exempel har title screen, styrbar spelarsprite, flera samtidiga
+spelarskott pa `ANA_ACTION_1`/Space/fire, en liten bitmapfont-HUD for score,
+lives och status, en fiendeformation med tva animation frames, fiendeskott,
+skyddsblock, skottkollision, poang per traff, enkla explosioner, game over,
+clear och restart.
 
 Renderingen ar optimerad for Amiga genom att HUD och fiendeformation ligger kvar
 i respektive draw-buffer tills de andras. Spelet rensar sedan bara gamla
@@ -60,6 +61,7 @@ Showcaset ska ha hyfsad polish:
 - lasbar bitmapfont
 - minst ett par animation frames for fiender
 - enkel explosionanimation
+- klassiska skyddsblock
 - skottljud
 - explosionsljud
 - enemy step-ljud eller motsvarande rytm
@@ -89,3 +91,12 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 - Spelet anvander ANA for de centrala systemen.
 - Spelet kanns tillrackligt komplett for en publik 0.1-demo.
 - Kodbasen fungerar som larande exempel for nya ANA-anvandare.
+
+## Implementationsstatus
+
+- Title, playing, clear och game over finns som separata states.
+- Lives raknas ner vid spelartraff; vid sista traff visas game over.
+- Aliens som nar spelaren ger game over.
+- Space/fire startar spelet fran title och restartar fran clear/game over.
+- Skyddsblock stoppar bade spelar- och fiendeskott och bryts ner cell for cell.
+- Normal-ADF, debug-ADF och sync-ADF bygger samma showcase-assets.

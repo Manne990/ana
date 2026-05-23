@@ -59,6 +59,24 @@
 #define HUD_STATUS_CLEAR_WIDTH 150
 #define HUD_STATUS_TEXT_SIZE 16
 
+#define SHIELD_COUNT 4
+#define SHIELD_COLUMNS 8
+#define SHIELD_ROWS 5
+#define SHIELD_CELL_SIZE 4
+#define SHIELD_WIDTH (SHIELD_COLUMNS * SHIELD_CELL_SIZE)
+#define SHIELD_HEIGHT (SHIELD_ROWS * SHIELD_CELL_SIZE)
+#define SHIELD_START_X 30
+#define SHIELD_Y 178
+#define SHIELD_SPACING_X 72
+#define SHIELD_COLOR 3
+
+typedef enum InvadersGameState {
+    INVADERS_STATE_TITLE,
+    INVADERS_STATE_PLAYING,
+    INVADERS_STATE_CLEAR,
+    INVADERS_STATE_GAME_OVER
+} InvadersGameState;
+
 typedef struct InvadersExplosion {
     int active;
     int x;
@@ -99,7 +117,9 @@ static int formation_slot_x[INVADERS_DRAW_SLOTS];
 static int formation_slot_y[INVADERS_DRAW_SLOTS];
 static int formation_row_min_slots[INVADERS_DRAW_SLOTS][INVADER_ROWS];
 static int formation_row_max_slots[INVADERS_DRAW_SLOTS][INVADER_ROWS];
+static int shield_dirty_slots[INVADERS_DRAW_SLOTS];
 static int full_clear_slots[INVADERS_DRAW_SLOTS];
+static unsigned char shield_cells[SHIELD_COUNT][SHIELD_ROWS][SHIELD_COLUMNS];
 static int player_x = 152;
 static int player_y = 220;
 static int invader_formation_x = INVADER_START_X;
@@ -111,10 +131,18 @@ static ANA_Timer alien_fire_timer;
 static int invaders_remaining = 0;
 static int score = 0;
 static int lives = 3;
-static int game_over = 0;
+static InvadersGameState game_state = INVADERS_STATE_TITLE;
 static int demo_ticks = 0;
 static int invaders_assets_loaded = 0;
 static unsigned long invaders_rng_state = 0x13579bdfUL;
+
+static const unsigned char shield_pattern[SHIELD_ROWS][SHIELD_COLUMNS] = {
+    { 0u, 1u, 1u, 1u, 1u, 1u, 1u, 0u },
+    { 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u },
+    { 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u },
+    { 1u, 1u, 1u, 0u, 0u, 1u, 1u, 1u },
+    { 1u, 1u, 0u, 0u, 0u, 0u, 1u, 1u }
+};
 
 static void invaders_reset_explosions(void)
 {
@@ -157,6 +185,19 @@ static unsigned int invaders_random(void)
     return (unsigned int)((invaders_rng_state >> 16) & 0x7fffu);
 }
 
+static void invaders_request_full_clear(void)
+{
+    int i;
+
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        full_clear_slots[i] = 1;
+        formation_dirty_slots[i] = 1;
+        shield_dirty_slots[i] = 1;
+        removed_enemy_counts[i] = 0;
+        draw_slots[i].hud_drawn = 0;
+    }
+}
+
 static void invaders_mark_formation_dirty(void)
 {
     int i;
@@ -165,6 +206,61 @@ static void invaders_mark_formation_dirty(void)
         formation_dirty_slots[i] = 1;
         removed_enemy_counts[i] = 0;
     }
+}
+
+static void invaders_mark_shields_dirty(void)
+{
+    int i;
+
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        shield_dirty_slots[i] = 1;
+    }
+}
+
+static int invaders_shield_x(int shield)
+{
+    return SHIELD_START_X + (shield * SHIELD_SPACING_X);
+}
+
+static ANA_Rect invaders_shield_cell_rect(int shield, int row, int col)
+{
+    ANA_Rect rect;
+
+    rect.x = invaders_shield_x(shield) + (col * SHIELD_CELL_SIZE);
+    rect.y = SHIELD_Y + (row * SHIELD_CELL_SIZE);
+    rect.w = SHIELD_CELL_SIZE;
+    rect.h = SHIELD_CELL_SIZE;
+
+    return rect;
+}
+
+static ANA_Rect invaders_shield_rect(int shield)
+{
+    ANA_Rect rect;
+
+    rect.x = invaders_shield_x(shield);
+    rect.y = SHIELD_Y;
+    rect.w = SHIELD_WIDTH;
+    rect.h = SHIELD_HEIGHT;
+
+    return rect;
+}
+
+static void invaders_reset_shields(void)
+{
+    int shield;
+    int row;
+    int col;
+
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        for (row = 0; row < SHIELD_ROWS; row++) {
+            for (col = 0; col < SHIELD_COLUMNS; col++) {
+                shield_cells[shield][row][col] = shield_pattern[row][col];
+            }
+        }
+    }
+
+    invaders_mark_shields_dirty();
 }
 
 static void invaders_reset_draw_slots(void)
@@ -184,6 +280,7 @@ static void invaders_reset_draw_slots(void)
             formation_row_min_slots[i][row] = INVADER_COLUMNS;
             formation_row_max_slots[i][row] = -1;
         }
+        shield_dirty_slots[i] = 1;
         full_clear_slots[i] = 1;
     }
 }
@@ -211,20 +308,74 @@ static void invaders_reset_formation(void)
     invaders_mark_formation_dirty();
 }
 
-static void invaders_reset_game_state(void)
+static void invaders_start_new_game(void)
 {
     player_x = 152;
     player_y = 220;
     score = 0;
     lives = 3;
-    game_over = 0;
+    game_state = INVADERS_STATE_PLAYING;
     demo_ticks = 0;
 
     invaders_reset_formation();
+    invaders_reset_shields();
     invaders_reset_explosions();
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
     invaders_reset_draw_slots();
+}
+
+static void invaders_enter_title(void)
+{
+    player_x = 152;
+    player_y = 220;
+    score = 0;
+    lives = 3;
+    game_state = INVADERS_STATE_TITLE;
+    demo_ticks = 0;
+
+    invaders_reset_formation();
+    invaders_reset_shields();
+    invaders_reset_explosions();
+    invaders_reset_player_bullets();
+    invaders_reset_alien_bullets();
+    invaders_reset_draw_slots();
+}
+
+static void invaders_enter_clear(void)
+{
+    game_state = INVADERS_STATE_CLEAR;
+    invaders_reset_player_bullets();
+    invaders_reset_alien_bullets();
+    invaders_request_full_clear();
+}
+
+static void invaders_enter_game_over(void)
+{
+    game_state = INVADERS_STATE_GAME_OVER;
+    invaders_reset_player_bullets();
+    invaders_reset_alien_bullets();
+    ana_play_sound(game_over_sound);
+    invaders_request_full_clear();
+}
+
+static void invaders_lose_life(void)
+{
+    if (lives > 0) {
+        lives--;
+    }
+
+    if (lives <= 0) {
+        invaders_enter_game_over();
+        return;
+    }
+
+    player_x = 152;
+    invaders_reset_player_bullets();
+    invaders_reset_alien_bullets();
+    invaders_reset_explosions();
+    ana_play_sound(explosion_sound);
+    invaders_request_full_clear();
 }
 
 static int invaders_enemy_x(int col)
@@ -329,7 +480,7 @@ static int invaders_update_formation(void)
     int enemy_x;
     int enemy_y;
 
-    if (game_over || invaders_remaining <= 0) {
+    if (game_state != INVADERS_STATE_PLAYING || invaders_remaining <= 0) {
         return 0;
     }
 
@@ -370,8 +521,7 @@ static int invaders_update_formation(void)
         ((INVADER_ROWS - 1) * INVADER_SPACING_Y) +
         INVADER_HEIGHT;
     if (enemy_y >= player_y - 4) {
-        ana_play_sound(game_over_sound);
-        invaders_reset_game_state();
+        invaders_enter_game_over();
         return 1;
     }
 
@@ -381,6 +531,91 @@ static int invaders_update_formation(void)
 static int invaders_enemy_score(int row)
 {
     return (INVADER_ROWS - row) * 10;
+}
+
+static int invaders_rect_overlaps_alive_shield(ANA_Rect rect)
+{
+    ANA_Rect cell_rect;
+    int shield;
+    int row;
+    int col;
+
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
+            continue;
+        }
+
+        for (row = 0; row < SHIELD_ROWS; row++) {
+            for (col = 0; col < SHIELD_COLUMNS; col++) {
+                if (!shield_cells[shield][row][col]) {
+                    continue;
+                }
+
+                cell_rect = invaders_shield_cell_rect(shield, row, col);
+                if (ana_rect_intersects(rect, cell_rect)) {
+                    return 1;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int invaders_damage_shield_at_rect(ANA_Rect rect)
+{
+    ANA_Rect cell_rect;
+    int shield;
+    int row;
+    int col;
+
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
+            continue;
+        }
+
+        for (row = 0; row < SHIELD_ROWS; row++) {
+            for (col = 0; col < SHIELD_COLUMNS; col++) {
+                if (!shield_cells[shield][row][col]) {
+                    continue;
+                }
+
+                cell_rect = invaders_shield_cell_rect(shield, row, col);
+                if (ana_rect_intersects(rect, cell_rect)) {
+                    shield_cells[shield][row][col] = 0u;
+                    invaders_mark_shields_dirty();
+                    return 1;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+static void invaders_check_shield_hits(
+    InvadersBullet* bullets,
+    int slots,
+    int bullet_width,
+    int bullet_height)
+{
+    ANA_Rect bullet_rect;
+    int i;
+
+    bullet_rect.w = bullet_width;
+    bullet_rect.h = bullet_height;
+
+    for (i = 0; i < slots; i++) {
+        if (!bullets[i].active) {
+            continue;
+        }
+
+        bullet_rect.x = bullets[i].x;
+        bullet_rect.y = bullets[i].y;
+        if (invaders_damage_shield_at_rect(bullet_rect)) {
+            bullets[i].active = 0;
+        }
+    }
 }
 
 static void invaders_check_bullet_hits(int bullet_width, int bullet_height)
@@ -393,7 +628,7 @@ static void invaders_check_bullet_hits(int bullet_width, int bullet_height)
     ANA_Rect bullet_rect;
     ANA_Rect enemy_rect;
 
-    if (game_over || invaders_remaining <= 0) {
+    if (game_state != INVADERS_STATE_PLAYING || invaders_remaining <= 0) {
         return;
     }
 
@@ -503,7 +738,7 @@ static void invaders_spawn_alien_bullet(int bullet_width)
     int row;
     int col;
 
-    if (game_over || invaders_remaining <= 0) {
+    if (game_state != INVADERS_STATE_PLAYING || invaders_remaining <= 0) {
         return;
     }
 
@@ -539,7 +774,7 @@ static void invaders_spawn_alien_bullet(int bullet_width)
 
 static void invaders_update_alien_fire(int bullet_width)
 {
-    if (game_over || invaders_remaining <= 0) {
+    if (game_state != INVADERS_STATE_PLAYING || invaders_remaining <= 0) {
         return;
     }
 
@@ -592,7 +827,7 @@ static int invaders_player_was_hit(
     ANA_Rect bullet_rect;
     int i;
 
-    if (game_over || invaders_remaining <= 0) {
+    if (game_state != INVADERS_STATE_PLAYING || invaders_remaining <= 0) {
         return 0;
     }
 
@@ -611,7 +846,7 @@ static int invaders_player_was_hit(
         bullet_rect.x = alien_bullets[i].x;
         bullet_rect.y = alien_bullets[i].y;
         if (ana_rect_intersects(player_rect, bullet_rect)) {
-            ana_play_sound(game_over_sound);
+            alien_bullets[i].active = 0;
             return 1;
         }
     }
@@ -634,11 +869,15 @@ static int invaders_any_alien_bullet_active(void)
 
 static const char* invaders_status_text(void)
 {
-    if (game_over) {
+    if (game_state == INVADERS_STATE_TITLE) {
+        return "PRESS FIRE";
+    }
+
+    if (game_state == INVADERS_STATE_GAME_OVER) {
         return "GAME OVER";
     }
 
-    if (invaders_remaining <= 0) {
+    if (game_state == INVADERS_STATE_CLEAR) {
         return "CLEAR";
     }
 
@@ -734,13 +973,46 @@ static int invaders_bullet_should_draw(
         bullet_width,
         bullet_height);
 
-    return !invaders_rect_overlaps_alive_enemy(rect);
+    return !invaders_rect_overlaps_alive_enemy(rect) &&
+        !invaders_rect_overlaps_alive_shield(rect);
 }
 
 static void invaders_fill_rect_black(ANA_Rect rect)
 {
     rect = invaders_align_rect_for_dirty(rect);
     ana_fill_rect(0u, rect.x, rect.y, rect.w, rect.h);
+}
+
+static void invaders_repair_shields_overlap(ANA_Rect rect)
+{
+    ANA_Rect cell_rect;
+    int shield;
+    int row;
+    int col;
+
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
+            continue;
+        }
+
+        for (row = 0; row < SHIELD_ROWS; row++) {
+            for (col = 0; col < SHIELD_COLUMNS; col++) {
+                if (!shield_cells[shield][row][col]) {
+                    continue;
+                }
+
+                cell_rect = invaders_shield_cell_rect(shield, row, col);
+                if (ana_rect_intersects(rect, cell_rect)) {
+                    ana_fill_rect(
+                        SHIELD_COLOR,
+                        cell_rect.x,
+                        cell_rect.y,
+                        cell_rect.w,
+                        cell_rect.h);
+                }
+            }
+        }
+    }
 }
 
 static int invaders_explosion_frame_for_age(int age)
@@ -853,6 +1125,9 @@ static int invaders_clear_previous_rect(int slot, ANA_Rect rect)
     invaders_fill_rect_black(rect);
     if (!formation_dirty_slots[slot]) {
         invaders_repair_formation_overlap(rect);
+    }
+    if (!shield_dirty_slots[slot]) {
+        invaders_repair_shields_overlap(rect);
     }
 
     return invaders_rect_overlaps_active_explosion(rect);
@@ -1059,6 +1334,50 @@ static void invaders_draw_formation_slot(int slot)
     }
 }
 
+static void invaders_draw_shields_slot(int slot)
+{
+    ANA_Rect shield_rect;
+    int shield;
+    int row;
+    int col;
+    int run_start;
+
+    if (!shield_dirty_slots[slot]) {
+        return;
+    }
+
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        shield_rect = invaders_shield_rect(shield);
+        invaders_fill_rect_black(shield_rect);
+
+        for (row = 0; row < SHIELD_ROWS; row++) {
+            run_start = -1;
+            for (col = 0; col <= SHIELD_COLUMNS; col++) {
+                if (col < SHIELD_COLUMNS &&
+                        shield_cells[shield][row][col]) {
+                    if (run_start < 0) {
+                        run_start = col;
+                    }
+                    continue;
+                }
+
+                if (run_start >= 0) {
+                    ana_fill_rect(
+                        SHIELD_COLOR,
+                        invaders_shield_x(shield) +
+                            (run_start * SHIELD_CELL_SIZE),
+                        SHIELD_Y + (row * SHIELD_CELL_SIZE),
+                        (col - run_start) * SHIELD_CELL_SIZE,
+                        SHIELD_CELL_SIZE);
+                    run_start = -1;
+                }
+            }
+        }
+    }
+
+    shield_dirty_slots[slot] = 0;
+}
+
 static int invaders_hud_needs_redraw(
     const InvadersDrawSlot* draw_slot,
     const char* status)
@@ -1136,6 +1455,40 @@ static void invaders_draw_hud_slot(int slot)
     invaders_store_hud_state(draw_slot, status);
 }
 
+static void invaders_draw_centered_text(int y, const char* text)
+{
+    int x;
+
+    if (hud_font == 0 || text == NULL) {
+        return;
+    }
+
+    x = (ANA_DEFAULT_WIDTH - ana_text_width(hud_font, text)) / 2;
+    ana_draw_text(hud_font, x, y, text);
+}
+
+static void invaders_draw_state_message(void)
+{
+    if (game_state == INVADERS_STATE_PLAYING) {
+        return;
+    }
+
+    if (game_state == INVADERS_STATE_TITLE) {
+        invaders_draw_centered_text(96, "ANA INVADERS");
+        invaders_draw_centered_text(116, "PRESS FIRE");
+        return;
+    }
+
+    if (game_state == INVADERS_STATE_CLEAR) {
+        invaders_draw_centered_text(96, "CLEAR");
+        invaders_draw_centered_text(116, "PRESS FIRE");
+        return;
+    }
+
+    invaders_draw_centered_text(96, "GAME OVER");
+    invaders_draw_centered_text(116, "PRESS FIRE");
+}
+
 static void invaders_store_draw_slot(int slot)
 {
     InvadersDrawSlot* draw_slot;
@@ -1146,12 +1499,16 @@ static void invaders_store_draw_slot(int slot)
     draw_slot = &draw_slots[slot];
     bullet_width = bullet_image != 0 ? ana_image_width(bullet_image) : 2;
     bullet_height = bullet_image != 0 ? ana_image_height(bullet_image) : 6;
-    draw_slot->has_player = player_image != 0;
+    draw_slot->has_player =
+        game_state == INVADERS_STATE_PLAYING && player_image != 0;
     draw_slot->player_x = player_x;
     draw_slot->player_y = player_y;
 
     for (i = 0; i < PLAYER_BULLET_SLOTS; i++) {
         draw_slot->bullets[i] = player_bullets[i];
+        if (game_state != INVADERS_STATE_PLAYING) {
+            draw_slot->bullets[i].active = 0;
+        }
         if (!invaders_bullet_should_draw(
                 draw_slot->bullets[i],
                 bullet_width,
@@ -1162,6 +1519,9 @@ static void invaders_store_draw_slot(int slot)
 
     for (i = 0; i < ALIEN_BULLET_SLOTS; i++) {
         draw_slot->alien_bullets[i] = alien_bullets[i];
+        if (game_state != INVADERS_STATE_PLAYING) {
+            draw_slot->alien_bullets[i].active = 0;
+        }
         if (!invaders_bullet_should_draw(
                 draw_slot->alien_bullets[i],
                 bullet_width,
@@ -1172,12 +1532,15 @@ static void invaders_store_draw_slot(int slot)
 
     for (i = 0; i < EXPLOSION_SLOTS; i++) {
         draw_slot->explosions[i] = explosions[i];
+        if (game_state != INVADERS_STATE_PLAYING) {
+            draw_slot->explosions[i].active = 0;
+        }
     }
 }
 
 static void invaders_init(void)
 {
-    invaders_reset_game_state();
+    invaders_enter_title();
     invaders_assets_loaded = 0;
 
     ana_input_clear_key_map();
@@ -1211,6 +1574,21 @@ static void invaders_update(ANA_Time time)
         ANA_INPUT_DEVICE_0,
         ANA_ACTION_1);
 
+    if (game_state == INVADERS_STATE_TITLE) {
+        if (action_pressed) {
+            invaders_start_new_game();
+        }
+        goto invaders_update_done;
+    }
+
+    if (game_state == INVADERS_STATE_CLEAR ||
+            game_state == INVADERS_STATE_GAME_OVER) {
+        if (action_pressed) {
+            invaders_start_new_game();
+        }
+        goto invaders_update_done;
+    }
+
     if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT)) {
         player_x -= PLAYER_SPEED;
     }
@@ -1221,9 +1599,7 @@ static void invaders_update(ANA_Time time)
 
     player_x = ana_clamp_int(player_x, 0, ANA_DEFAULT_WIDTH - player_width);
 
-    if ((game_over || invaders_remaining <= 0) && action_pressed) {
-        invaders_reset_game_state();
-    } else if (action_pressed && !game_over) {
+    if (action_pressed) {
         invaders_spawn_player_bullet(
             player_width,
             bullet_width,
@@ -1231,31 +1607,49 @@ static void invaders_update(ANA_Time time)
     }
 
     invaders_update_player_bullets(bullet_height);
-    invaders_check_bullet_hits(bullet_width, bullet_height);
-    invaders_update_alien_fire(bullet_width);
     invaders_update_alien_bullets(bullet_height);
+    invaders_check_shield_hits(
+        player_bullets,
+        PLAYER_BULLET_SLOTS,
+        bullet_width,
+        bullet_height);
+    invaders_check_shield_hits(
+        alien_bullets,
+        ALIEN_BULLET_SLOTS,
+        bullet_width,
+        bullet_height);
+    invaders_check_bullet_hits(bullet_width, bullet_height);
+    if (invaders_remaining <= 0) {
+        invaders_enter_clear();
+        goto invaders_update_done;
+    }
+
+    invaders_update_alien_fire(bullet_width);
     if (invaders_player_was_hit(
             player_width,
             player_height,
             bullet_width,
             bullet_height)) {
-        invaders_reset_game_state();
-        return;
+        invaders_lose_life();
+        goto invaders_update_done;
     }
 
     if (invaders_update_formation()) {
-        return;
+        goto invaders_update_done;
     }
 
     invaders_update_explosions();
 
+invaders_update_done:
     if (ana_quit_requested()) {
         ana_quit();
     }
 
+#ifndef ANA_TARGET_AMIGA
     if (time.tick >= GAME_TICK_LIMIT) {
         ana_quit();
     }
+#endif
 }
 
 static void invaders_draw(void)
@@ -1273,6 +1667,7 @@ static void invaders_draw(void)
         memset(&draw_slots[slot], 0, sizeof(draw_slots[slot]));
         formation_drawn_slots[slot] = 0;
         formation_dirty_slots[slot] = 1;
+        shield_dirty_slots[slot] = 1;
         full_clear_slots[slot] = 0;
         redraw_explosions = 1;
     } else {
@@ -1280,13 +1675,21 @@ static void invaders_draw(void)
     }
 
     invaders_draw_hud_slot(slot);
+    if (game_state != INVADERS_STATE_PLAYING) {
+        invaders_draw_state_message();
+        invaders_store_draw_slot(slot);
+        return;
+    }
+
     if (invaders_process_removed_enemies(slot)) {
         redraw_explosions = 1;
     }
     if (formation_dirty_slots[slot]) {
         redraw_explosions = 1;
+        shield_dirty_slots[slot] = 1;
     }
     invaders_draw_formation_slot(slot);
+    invaders_draw_shields_slot(slot);
 
     if (explosion_image != 0) {
         for (i = 0; i < EXPLOSION_SLOTS; i++) {
