@@ -2,100 +2,170 @@
 
 [![CI](https://github.com/Manne990/ana/actions/workflows/ci.yml/badge.svg)](https://github.com/Manne990/ana/actions/workflows/ci.yml)
 
-ANA, short for "ANA's Now on Amiga", is an early-stage C game framework for the Amiga.
+ANA, short for "ANA's Now on Amiga", is an early-stage C game framework for
+the Amiga.
 
-The goal is to bring some of the approachable workflow from XNA and MonoGame to Amiga development, while staying close to the hardware and keeping runtime overhead predictable. ANA is not intended to be a direct XNA clone. It should feel familiar in structure, but be designed around C, Amiga constraints, and preconverted assets.
+The goal is to bring some of the approachable workflow from XNA and MonoGame to
+Amiga development while still respecting Amiga constraints: fixed hardware,
+limited memory, bitplanes, preconverted assets, and predictable runtime cost.
 
-## Vision
+ANA is not intended to be a direct XNA clone. It should feel familiar in
+structure, but be designed around C and Amiga hardware.
 
-ANA 0.1 is planned as the "Invaders Release": a small, focused framework release demonstrated by a complete Space Invaders-style example game.
+## Current Status
 
-The first release should provide:
+ANA is in 0.1 preview development. The current theme is the "Invaders Release":
+a small framework release demonstrated by a playable Space Invaders-style
+example.
 
-- a C runtime library
-- a simple fixed-step game loop
-- Amiga-friendly graphics setup
-- image rendering
-- joystick and keyboard input
-- short sound effects
+Implemented today:
+
+- fixed-step game loop
+- PAL lores profile validation
+- 16-color image loading and rendering
 - bitmap font text
-- a host-side asset conversion tool
-- small helper APIs for common game code
-- a polished `ana-invaders` showcase
+- semantic input directions/actions with keyboard mapping
+- short SFX playback
+- small helpers for rectangles, clamp, and timers
+- host-side image conversion to `.anaimg`
+- Amiga executable and ADF builds
+- `hello` and `invaders` examples
 
-## Design Goals
+The practical showcase baseline is currently stock A1200-class hardware. A500
+performance remains useful feedback, but it is not the current floor for the
+complete Invaders demo.
 
-- Keep the public API small and readable.
-- Avoid hidden allocations during `update` and `draw`.
-- Use preconverted assets instead of expensive runtime decoding.
-- Target OCS/ECS first, with PAL 320x256 as the initial baseline.
-- Keep performance close to hand-written vanilla C.
-- Make the easy path pleasant without blocking low-level C or assembler escape hatches.
-- Prefer beginner-friendly names like `ANA_Image`, `ANA_Font`, and `ANA_Sound` in the public API.
-- Let example games drive the framework instead of designing a large engine up front.
+## Quick Build
 
-## API Shape
+Host build and tests:
 
-ANA should make simple games read like game code:
+```sh
+make clean
+make all
+make test
+```
+
+Amiga examples:
+
+```sh
+make clean
+make amiga-examples
+make adfs
+```
+
+ADF images are written to `build/adf/`:
+
+- `build/adf/hello.adf`
+- `build/adf/invaders.adf`
+
+The GitHub Actions workflow uploads the same ADFs as the `ana-example-adfs`
+artifact.
+
+## Documentation
+
+Start here:
+
+- [Getting started](docs/getting-started.md)
+- [API overview](docs/api-overview.md)
+- [Asset pipeline guide](docs/asset-pipeline-guide.md)
+- [Build and release package guide](docs/build-and-release.md)
+- [Development routine](docs/development-routine.md)
+- [Performance guide](docs/performance-guide.md)
+- [Known limitations](docs/known-limitations.md)
+- [ANA 0.1 release notes draft](docs/release-notes-0.1.md)
+
+## Example Shape
+
+ANA games are normal C programs that fill an `ANA_Game` struct and call
+`ana_run`:
 
 ```c
 #include <ana.h>
 
-static ANA_Image player;
 static int player_x = 100;
-static int player_y = 80;
 
-void game_init(void) {
-    ana_input_clear_key_map();
-    ana_input_map_key_to_direction(ANA_KEY_LEFT, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
-    ana_input_map_key_to_direction(ANA_KEY_A, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
-    ana_input_map_key_to_direction(ANA_KEY_RIGHT, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
-    ana_input_map_key_to_direction(ANA_KEY_D, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
-    ana_input_map_key_to_action(ANA_KEY_SPACE, ANA_INPUT_DEVICE_0, ANA_ACTION_1);
-}
-
-void game_load(void) {
-    player = ana_load_image("player.anaimg");
-}
-
-void game_update(ANA_Time time) {
-    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
-        player_x++;
-    }
+static void game_update(ANA_Time time)
+{
+    (void)time;
 
     if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT)) {
         player_x--;
     }
+
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
+        player_x++;
+    }
 }
 
-void game_draw(void) {
+static void game_draw(void)
+{
     ana_clear(0);
-    ana_draw_image(player, player_x, player_y);
+    ana_fill_rect(2, player_x, 220, 16, 8);
 }
 
-int main(void) {
-    ANA_Game game = {
-        .init = game_init,
-        .load = game_load,
-        .update = game_update,
-        .draw = game_draw,
+int main(void)
+{
+    ANA_Game game;
 
-        .width = 320,
-        .height = 256,
-        .fps = 50,
-        .colors = 16,
-        .screen_mode = ANA_SCREEN_PAL_LORES
-    };
+    game.init = 0;
+    game.load = 0;
+    game.update = game_update;
+    game.draw = game_draw;
+    game.shutdown = 0;
+    game.width = ANA_DEFAULT_WIDTH;
+    game.height = ANA_DEFAULT_HEIGHT;
+    game.fps = ANA_DEFAULT_FPS;
+    game.colors = ANA_DEFAULT_COLORS;
+    game.screen_mode = ANA_SCREEN_PAL_LORES;
 
     return ana_run(&game);
 }
 ```
 
-The implementation can still use Amiga-specific concepts such as bitplanes, BOBs, blitter operations, hardware sprites, or custom assembler routines. Those details should remain available for optimization and advanced use, but they should not be required for the first successful game.
+See [Getting started](docs/getting-started.md) for a fuller first-game example
+with keyboard mapping.
 
-## ANA 0.1 Specs
+## Asset Conversion
 
-The initial 0.1 work is split into focused specs:
+Build the converter:
+
+```sh
+make tools
+```
+
+Convert a PPM image:
+
+```sh
+build/tools/ana-convert/ana-convert image player.ppm \
+  --out player.anaimg \
+  --colors 16 \
+  --transparent 255,0,255
+```
+
+The current public converter supports PPM P3/P6 input. PNG import, broader font
+conversion, sound conversion, and XNA/MonoGame import experiments are planned
+for later work.
+
+## Release Package
+
+Create a source package:
+
+```sh
+make release-package
+```
+
+The archive is written to:
+
+```text
+build/release/ana-0.1.0-dev.tar.gz
+```
+
+See [Build and release package guide](docs/build-and-release.md) for package
+contents and binary artifact policy.
+
+## 0.1 Specs
+
+The 0.1 work is tracked in focused specs:
 
 1. [Platform and design principles](docs/001-plattform-och-designprinciper.md)
 2. [Project structure and build system](docs/002-projektstruktur-och-build-system.md)
@@ -112,82 +182,6 @@ The initial 0.1 work is split into focused specs:
 13. [Asset pipeline 0.2](docs/013-asset-pipeline-02.md)
 14. [Music and channel policy](docs/014-musik-och-kanalpolicy.md)
 
-## Current Status
-
-ANA is currently in the early implementation phase. The repository contains the initial 0.1 specification documents plus the first C library foundation: platform/profile validation, a minimal game loop, visible Amiga PAL lores graphics, image loading/rendering, bitmap font text, input mapping, short SFX playback, example skeletons, and the first host-side asset conversion flow.
-
-## Build
-
-The current development build uses a simple Makefile:
-
-```sh
-make all
-make test
-```
-
-This builds `libana.a`, the host-side `ana-convert` tool, and the current example programs under `build/`.
-
-## Asset Conversion
-
-The first `ana-convert` implementation converts PPM P3/P6 images into ANA's preconverted `.anaimg` format:
-
-```sh
-build/tools/ana-convert/ana-convert image player.ppm --out player.anaimg --colors 16 --transparent 255,0,255
-build/tools/ana-convert/ana-convert image explosion_sheet.ppm --out explosion.anaimg --colors 16 --frame-width 16 --frame-height 16
-```
-
-PNG support is still planned, but PPM keeps the current pipeline dependency-free while the runtime and asset format settle.
-
-The CI pipeline builds and tests the host code as strict C89 with both GCC and Clang. The Amiga-target build uses GNU89 mode because the m68k Amiga toolchain headers use GCC extensions.
-
-The CI pipeline also builds Amiga-targeted example executables and packages them as ADF images. Download the `ana-example-adfs` artifact from a successful workflow run to try the current examples in an emulator.
-
-For local ADF builds you need `m68k-amigaos-gcc`, `m68k-amigaos-ar`, and `gadf` available on your path:
-
-```sh
-make amiga-examples
-make adfs
-```
-
-Local ADF images are written to `build/adf/`, for example
-`build/adf/invaders.adf`.
-
-The normal Amiga build uses ANA's direct-present renderer by default. That
-path updates the visible bitmap with final dirty-rect contents and avoids the
-screen-buffer safe-wait cost that was too expensive for the current Invaders
-sample.
-
-For performance investigations you can build a debug-statistics Invaders ADF:
-
-```sh
-make amiga-invaders-debug
-make invaders-debug-adf
-```
-
-This writes `build/adf/invaders-debug.adf` and keeps the normal
-`build/adf/invaders.adf` output unchanged. It uses the same renderer as the
-normal build, but prints timing counters when the program exits.
-
-To test the direct-present path synchronized before writing to the visible
-bitmap:
-
-```sh
-make amiga-invaders-sync
-make invaders-sync-adf
-```
-
-This writes `build/adf/invaders-sync.adf`. It is intended to compare
-visual stability against the default direct-present path.
-
-To force the older screen-buffer renderer for comparison, rebuild from clean
-without the default Amiga present flags:
-
-```sh
-make clean
-make amiga-examples AMIGA_PRESENT_CFLAGS=
-make adfs AMIGA_PRESENT_CFLAGS=
-```
-
 ## License
 
-See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

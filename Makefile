@@ -21,6 +21,12 @@ BUILD_DIR ?= build
 AMIGA_BUILD_DIR ?= $(BUILD_DIR)/amiga
 ADF_DIR ?= $(BUILD_DIR)/adf
 AMIGA_SYNC_BUILD_DIR := $(BUILD_DIR)/amiga-sync
+RELEASE_VERSION ?= $(shell grep ANA_VERSION_STRING include/ana/ana_version.h | cut -d '"' -f 2)
+RELEASE_NAME ?= ana-$(RELEASE_VERSION)
+RELEASE_ROOT := $(BUILD_DIR)/release
+RELEASE_DIR := $(RELEASE_ROOT)/$(RELEASE_NAME)
+RELEASE_ARCHIVE := $(RELEASE_ROOT)/$(RELEASE_NAME).tar.gz
+RELEASE_FILES := README.md LICENSE Makefile include src tools examples tests docs .github
 
 ANA_SRCS := \
 	src/core/ana_core.c \
@@ -78,7 +84,7 @@ ADF_FILES := \
 INVADERS_DEBUG_ADF := $(ADF_DIR)/invaders-debug.adf
 INVADERS_SYNC_ADF := $(ADF_DIR)/invaders-sync.adf
 
-.PHONY: all lib examples examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf clean
+.PHONY: all lib examples examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf release-package clean
 
 all: lib examples tools
 
@@ -105,6 +111,13 @@ adfs: $(ADF_FILES)
 invaders-debug-adf: $(INVADERS_DEBUG_ADF)
 
 invaders-sync-adf: $(INVADERS_SYNC_ADF)
+
+release-package:
+	$(RM) $(RELEASE_ROOT)
+	mkdir -p $(RELEASE_DIR)
+	cp -R $(RELEASE_FILES) $(RELEASE_DIR)/
+	tar -C $(RELEASE_ROOT) -czf $(RELEASE_ARCHIVE) $(RELEASE_NAME)
+	@echo "Wrote $(RELEASE_ARCHIVE)"
 
 $(LIBANA): $(ANA_OBJS)
 	mkdir -p $(@D)

@@ -1,0 +1,123 @@
+# Build and release package guide
+
+This document describes the current 0.1 build outputs and the source release
+package.
+
+## Host build outputs
+
+```sh
+make clean
+make all
+```
+
+Outputs:
+
+- `build/libana.a`
+- `build/tools/ana-convert/ana-convert`
+- `build/examples/hello/hello`
+- `build/examples/invaders/invaders`
+
+Run tests:
+
+```sh
+make test
+```
+
+## Amiga build outputs
+
+```sh
+make clean
+make amiga-examples
+```
+
+Outputs:
+
+- `build/amiga/libana.a`
+- `build/amiga/examples/hello/hello`
+- `build/amiga/examples/invaders/invaders`
+
+Build ADFs:
+
+```sh
+make adfs
+```
+
+Outputs:
+
+- `build/adf/hello.adf`
+- `build/adf/invaders.adf`
+
+## CI build
+
+GitHub Actions currently runs:
+
+- strict C89 host build with GCC
+- strict C89 host build with Clang
+- host tests
+- Amiga executable build in Docker
+- ADF packaging
+- ADF artifact upload as `ana-example-adfs`
+
+The Amiga Docker build uses:
+
+```text
+amigadev/crosstools:m68k-amigaos-gcc10_amd64
+```
+
+## Source release package
+
+Create a source package:
+
+```sh
+make release-package
+```
+
+Output:
+
+```text
+build/release/ana-0.1.0-dev.tar.gz
+```
+
+The package contains:
+
+- `README.md`
+- `LICENSE`
+- `Makefile`
+- `include/`
+- `src/`
+- `tools/`
+- `examples/`
+- `tests/`
+- `docs/`
+- `.github/`
+
+It intentionally does not include generated `build/` outputs.
+
+## Binary artifacts
+
+For now, binary artifacts are produced by CI rather than checked into the
+source package.
+
+Current CI binary artifacts:
+
+- `hello.adf`
+- `invaders.adf`
+
+If a future 0.1 release includes prebuilt binaries, the release notes must state:
+
+- compiler and version
+- target CPU assumptions
+- AmigaOS / Kickstart assumptions
+- whether the direct-present renderer is enabled
+- whether debug statistics are enabled
+
+## Versioning
+
+The current version string lives in:
+
+```text
+include/ana/ana_version.h
+```
+
+For the final 0.1 release, update `ANA_VERSION_STRING` from `0.1.0-dev` to the
+released version and generate a fresh package.

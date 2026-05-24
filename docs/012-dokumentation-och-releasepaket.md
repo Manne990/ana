@@ -67,3 +67,21 @@ Kort guide med praktiska regler:
 - En ny utvecklare kan bygga och kora `ana-invaders`.
 - En ny utvecklare kan konvertera minst en bildasset och ladda den i ett exempel.
 - Det framgar tydligt vad ANA 0.1 klarar och vad som ligger utanfor scope.
+
+## Implementationsstatus
+
+- README ar nu en kort ingangsida med lankar till praktiska docs.
+- `docs/getting-started.md` beskriver host-build, Amiga-build, ADF-build och ett
+  forsta minimalt ANA-spel.
+- `docs/api-overview.md` sammanfattar den publika 0.1-API-ytan.
+- `docs/asset-pipeline-guide.md` beskriver aktuell `.anaimg`-pipeline,
+  spritesheets, transparens och Invaders-assets.
+- `docs/build-and-release.md` beskriver build-output, CI-output och
+  releasepaketet.
+- `docs/performance-guide.md` beskriver praktiska prestandaregler och
+  nuvarande A1200-baseline.
+- `docs/known-limitations.md` listar avgransningar for 0.1.
+- `docs/release-notes-0.1.md` ar ett draft-underlag for senare publik release.
+- `docs/development-routine.md` satter en rutin for att granska README och
+  berorda docs efter varje forandring.
+- `make release-package` skapar ett kallkodspaket under `build/release/`.
