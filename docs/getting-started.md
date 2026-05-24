@@ -12,6 +12,7 @@ For host builds and tests:
 
 - a C compiler (`cc`, `gcc`, or `clang`)
 - `make`
+- `python3` for PNG test fixture generation
 - standard POSIX shell tools
 
 For Amiga executable builds:
@@ -39,6 +40,7 @@ This builds:
 
 - `build/libana.a`
 - `build/tools/ana-convert/ana-convert`
+- generated example assets under `build/assets/`
 - host smoke-test versions of `hello` and `invaders`
 - the test binaries
 

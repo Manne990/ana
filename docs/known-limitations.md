@@ -27,8 +27,8 @@ preview work.
 
 ## Assets
 
-- Public image converter supports PPM P3/P6 only.
-- PNG import is not implemented.
+- Public image converter supports PNG and PPM P3/P6.
+- Palette files and manifests exist, but are intentionally simple.
 - Font and sound conversion are not yet exposed as general user-facing tools.
 - No XNA/MonoGame project import yet.
 

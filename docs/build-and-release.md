@@ -16,6 +16,7 @@ Outputs:
 - `build/tools/ana-convert/ana-convert`
 - `build/examples/hello/hello`
 - `build/examples/invaders/invaders`
+- generated example assets under `build/assets/`
 
 Run tests:
 
@@ -54,6 +55,7 @@ GitHub Actions currently runs:
 - strict C89 host build with GCC
 - strict C89 host build with Clang
 - host tests
+- PNG, palette, and manifest asset conversion tests
 - Amiga executable build in Docker
 - ADF packaging
 - ADF artifact upload as `ana-example-adfs`
@@ -87,6 +89,7 @@ The package contains:
 - `src/`
 - `tools/`
 - `examples/`
+- `examples/invaders/assets/` PNG source assets and manifest
 - `tests/`
 - `docs/`
 - `.github/`

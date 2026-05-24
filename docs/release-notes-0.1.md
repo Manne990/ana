@@ -20,6 +20,9 @@ runtime model explicit and performant.
 - short SFX playback
 - small helpers for rectangles, clamp, and timers
 - host-side `ana-convert` image converter
+- PNG image input
+- text palette files (`.anapal`)
+- simple asset manifests
 - Amiga example ADF build
 - ANA Invaders showcase
 

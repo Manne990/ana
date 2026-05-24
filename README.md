@@ -28,6 +28,7 @@ Implemented today:
 - short SFX playback
 - small helpers for rectangles, clamp, and timers
 - host-side image conversion to `.anaimg`
+- PNG source assets, `.anapal` palettes, and simple asset manifests
 - Amiga executable and ADF builds
 - `hello` and `invaders` examples
 
@@ -44,6 +45,8 @@ make clean
 make all
 make test
 ```
+
+Host tests require `python3` for small PNG fixture generation.
 
 Amiga examples:
 
@@ -142,9 +145,28 @@ build/tools/ana-convert/ana-convert image player.ppm \
   --transparent 255,0,255
 ```
 
-The current public converter supports PPM P3/P6 input. PNG import, broader font
-conversion, sound conversion, and XNA/MonoGame import experiments are planned
-for later work.
+Convert a PNG image with a shared palette:
+
+```sh
+build/tools/ana-convert/ana-convert palette palette.png \
+  --out game.anapal \
+  --colors 16
+
+build/tools/ana-convert/ana-convert image player.png \
+  --out player.anaimg \
+  --palette game.anapal \
+  --transparent "#ff00ff"
+```
+
+Build a manifest:
+
+```sh
+build/tools/ana-convert/ana-convert build assets.ana --out build/assets/game
+```
+
+The current public converter supports PNG and PPM P3/P6 image input. Broader
+font conversion, sound conversion, and XNA/MonoGame import experiments are
+planned for later work.
 
 ## Release Package
 

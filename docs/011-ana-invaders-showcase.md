@@ -98,5 +98,6 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 - Lives raknas ner vid spelartraff; vid sista traff visas game over.
 - Aliens som nar spelaren ger game over.
 - Space/fire startar spelet fran title och restartar fran clear/game over.
-- Skyddsblock stoppar bade spelar- och fiendeskott och bryts ner cell for cell.
+- Skyddsblock stoppar bade spelar- och fiendeskott, bryts ner cell for cell,
+  och forstors dar aliens ror sig igenom dem.
 - Normal-ADF, debug-ADF och sync-ADF bygger samma showcase-assets.

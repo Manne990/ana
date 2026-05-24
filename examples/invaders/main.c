@@ -144,6 +144,8 @@ static const unsigned char shield_pattern[SHIELD_ROWS][SHIELD_COLUMNS] = {
     { 1u, 1u, 0u, 0u, 0u, 0u, 1u, 1u }
 };
 
+static void invaders_damage_shields_for_formation(void);
+
 static void invaders_reset_explosions(void)
 {
     int i;
@@ -516,6 +518,7 @@ static int invaders_update_formation(void)
 
     ana_play_sound(step_sound);
     invader_frame = 1 - invader_frame;
+    invaders_damage_shields_for_formation();
     invaders_mark_formation_dirty();
     enemy_y = invader_formation_y +
         ((INVADER_ROWS - 1) * INVADER_SPACING_Y) +
@@ -562,13 +565,15 @@ static int invaders_rect_overlaps_alive_shield(ANA_Rect rect)
     return 0;
 }
 
-static int invaders_damage_shield_at_rect(ANA_Rect rect)
+static int invaders_damage_shield_cells_at_rect(ANA_Rect rect, int stop_after_first)
 {
     ANA_Rect cell_rect;
     int shield;
     int row;
     int col;
+    int damaged;
 
+    damaged = 0;
     for (shield = 0; shield < SHIELD_COUNT; shield++) {
         if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
             continue;
@@ -583,14 +588,51 @@ static int invaders_damage_shield_at_rect(ANA_Rect rect)
                 cell_rect = invaders_shield_cell_rect(shield, row, col);
                 if (ana_rect_intersects(rect, cell_rect)) {
                     shield_cells[shield][row][col] = 0u;
-                    invaders_mark_shields_dirty();
-                    return 1;
+                    damaged = 1;
+                    if (stop_after_first) {
+                        invaders_mark_shields_dirty();
+                        return 1;
+                    }
                 }
             }
         }
     }
 
-    return 0;
+    if (damaged) {
+        invaders_mark_shields_dirty();
+    }
+
+    return damaged;
+}
+
+static int invaders_damage_shield_at_rect(ANA_Rect rect)
+{
+    return invaders_damage_shield_cells_at_rect(rect, 1);
+}
+
+static void invaders_damage_shields_for_formation(void)
+{
+    ANA_Rect enemy_rect;
+    int row;
+    int col;
+
+    if (invaders_remaining <= 0) {
+        return;
+    }
+
+    enemy_rect.w = INVADER_WIDTH;
+    enemy_rect.h = INVADER_HEIGHT;
+    for (row = 0; row < INVADER_ROWS; row++) {
+        enemy_rect.y = invaders_enemy_y(row);
+        for (col = 0; col < INVADER_COLUMNS; col++) {
+            if (!invader_alive[row][col]) {
+                continue;
+            }
+
+            enemy_rect.x = invaders_enemy_x(col);
+            invaders_damage_shield_cells_at_rect(enemy_rect, 0);
+        }
+    }
 }
 
 static void invaders_check_shield_hits(
@@ -1302,8 +1344,6 @@ static void invaders_draw_formation_slot(int slot)
         return;
     }
 
-    invaders_clear_formation_slot(slot);
-
     if (invader_image != 0) {
         for (row = 0; row < INVADER_ROWS; row++) {
             for (col = 0; col < INVADER_COLUMNS; col++) {
@@ -1684,12 +1724,16 @@ static void invaders_draw(void)
     if (invaders_process_removed_enemies(slot)) {
         redraw_explosions = 1;
     }
+    if (shield_dirty_slots[slot] && formation_drawn_slots[slot]) {
+        formation_dirty_slots[slot] = 1;
+    }
     if (formation_dirty_slots[slot]) {
         redraw_explosions = 1;
         shield_dirty_slots[slot] = 1;
+        invaders_clear_formation_slot(slot);
     }
-    invaders_draw_formation_slot(slot);
     invaders_draw_shields_slot(slot);
+    invaders_draw_formation_slot(slot);
 
     if (explosion_image != 0) {
         for (i = 0; i < EXPLOSION_SLOTS; i++) {

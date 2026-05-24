@@ -230,3 +230,17 @@ Felmeddelanden bor innehalla filnamn och, nar rimligt, pixelposition.
 - CI bygger och testar assetflodet.
 - Dokumentationen visar ett komplett exempel fran PNG till `ana_load_image`.
 
+## Implementationsstatus
+
+- `ana-convert image` laser PNG och PPM P3/P6.
+- `ana-convert image` kan anvanda `--palette game.anapal`.
+- `ana-convert palette` skapar textbaserade `.anapal`-filer fran PNG/PPM.
+- `ana-convert build` bygger ett radbaserat `ANA_ASSETS 1`-manifest.
+- PNG-dekodning ligger vendrad och host-only i `tools/ana-convert/vendor/`.
+- `make assets`, `make examples/invaders-assets` och `make clean-assets` finns.
+- Invaders bildassets ligger som PNG-source assets under
+  `examples/invaders/assets/` och byggs till `.anaimg`.
+- Invaders generatorn skapar bara `hud.anafnt` och `.anasnd` tills font- och
+  ljudkonvertering finns som publika asset pipeline-steg.
+- Den gamla kodbaserade `.anaimg`-genereringen for Invaders ar borttagen.
+- Testsviten bygger PPM, PNG, `.anapal` och manifestfloden.

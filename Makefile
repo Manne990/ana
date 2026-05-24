@@ -12,6 +12,7 @@ CFLAGS ?= -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc
 LDFLAGS ?=
 HOST_CFLAGS ?= $(CFLAGS)
 HOST_LDFLAGS ?= $(LDFLAGS) $(HOST_NATIVE_LDFLAGS)
+TOOL_CFLAGS ?= -std=gnu99 -Wall -Wextra -Werror -Iinclude -Isrc
 AMIGA_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68000 -DANA_TARGET_AMIGA
 AMIGA_PRESENT_CFLAGS ?= -DANA_AMIGA_DIRECT_PRESENT
 AMIGA_CFLAGS ?= $(AMIGA_BASE_CFLAGS) $(AMIGA_PRESENT_CFLAGS)
@@ -59,6 +60,8 @@ INVADERS_SRCS := \
 	examples/invaders/invaders_assets.c
 INVADERS_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/invaders
 INVADERS_ASSET_DIR := $(INVADERS_ASSET_BUILD_DIR)/assets
+INVADERS_ASSET_MANIFEST := examples/invaders/assets/assets.ana
+INVADERS_ASSET_SOURCES := $(wildcard examples/invaders/assets/*)
 INVADERS_ASSET_BUILDER := \
 	$(BUILD_DIR)/examples/invaders-build-assets/build-assets
 INVADERS_ASSET_STAMP := $(INVADERS_ASSET_BUILD_DIR)/.stamp
@@ -84,13 +87,15 @@ ADF_FILES := \
 INVADERS_DEBUG_ADF := $(ADF_DIR)/invaders-debug.adf
 INVADERS_SYNC_ADF := $(ADF_DIR)/invaders-sync.adf
 
-.PHONY: all lib examples examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf release-package clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf release-package clean-assets clean
 
 all: lib examples tools
 
 lib: $(LIBANA)
 
 examples: $(EXAMPLE_BINS)
+
+assets: invaders-assets
 
 examples/invaders-assets: $(INVADERS_ASSET_STAMP)
 
@@ -135,18 +140,19 @@ $(INVADERS_ASSET_BUILDER): examples/invaders/build_assets.c
 	mkdir -p $(@D)
 	$(HOST_CC) $(HOST_CFLAGS) $< $(HOST_LDFLAGS) -o $@
 
-$(INVADERS_ASSET_STAMP): $(INVADERS_ASSET_BUILDER)
+$(INVADERS_ASSET_STAMP): $(INVADERS_ASSET_BUILDER) $(TOOL_BINS) $(INVADERS_ASSET_SOURCES)
 	mkdir -p $(INVADERS_ASSET_DIR)
 	$(INVADERS_ASSET_BUILDER) $(INVADERS_ASSET_DIR)
+	$(BUILD_DIR)/tools/ana-convert/ana-convert build $(INVADERS_ASSET_MANIFEST) --out $(INVADERS_ASSET_DIR)
 	touch $@
 
 $(BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INVADERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c $(LIBANA)
+$(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c tools/ana-convert/vendor/stb_image.h
 	mkdir -p $(@D)
-	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
+	$(HOST_CC) $(TOOL_CFLAGS) $< $(HOST_LDFLAGS) -o $@
 
 $(AMIGA_LIBANA): $(AMIGA_OBJS)
 	mkdir -p $(@D)
@@ -207,3 +213,6 @@ test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS) $(EXAMPLE_BINS)
 
 clean:
 	$(RM) $(BUILD_DIR)
+
+clean-assets:
+	$(RM) $(BUILD_DIR)/assets $(INVADERS_ASSET_BUILDER) $(TOOL_BINS)

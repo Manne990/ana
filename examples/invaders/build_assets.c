@@ -13,7 +13,6 @@
     (HUD_FONT_HEADER_SIZE + HUD_FONT_IMAGE_HEADER_SIZE + \
         (HUD_FONT_CHAR_COUNT * HUD_FONT_FRAME_SIZE))
 
-#define IMAGE_HEADER_SIZE 20
 #define SOUND_HEADER_SIZE 20
 #define SOUND_RATE 8000
 #define SOUND_FLAG_SIGNED_8BIT 1
@@ -22,93 +21,6 @@
 #define STEP_SOUND_SAMPLES 160
 #define GAME_OVER_SOUND_SAMPLES 480
 #define SOUND_SIZE(samples) (SOUND_HEADER_SIZE + (samples))
-
-#define PLAYER_WIDTH 16
-#define PLAYER_HEIGHT 10
-#define BULLET_WIDTH 2
-#define BULLET_HEIGHT 6
-#define INVADER_WIDTH 16
-#define INVADER_HEIGHT 8
-#define INVADER_FRAMES 2
-#define INVADER_COLOR 3
-#define EXPLOSION_WIDTH 16
-#define EXPLOSION_HEIGHT 10
-#define EXPLOSION_FRAMES 2
-
-#define IMAGE_SIZE(width, height, frames, bitplanes, masked) \
-    (IMAGE_HEADER_SIZE + \
-        ((frames) * ((((width) + 7) / 8) * (height)) * \
-            ((bitplanes) + ((masked) ? 1 : 0))))
-
-static const char* const player_rows[PLAYER_HEIGHT] = {
-    "......55........",
-    ".....5555.......",
-    "....555555......",
-    "...55555555.....",
-    "..5555555555....",
-    ".555555555555...",
-    "55555555555555..",
-    ".555555555555...",
-    "..5333333335....",
-    "....22..22......"
-};
-
-static const char* const bullet_rows[BULLET_HEIGHT] = {
-    "11",
-    "11",
-    "11",
-    "11",
-    "11",
-    "11"
-};
-
-static const char* const invader_frame_0[INVADER_HEIGHT] = {
-    "....##....##....",
-    "...##########...",
-    "..############..",
-    ".###..####..###.",
-    "################",
-    "..##.##..##.##..",
-    ".##..........##.",
-    "...##......##..."
-};
-
-static const char* const invader_frame_1[INVADER_HEIGHT] = {
-    "....##....##....",
-    ".##############.",
-    "################",
-    "###..######..###",
-    "################",
-    "...###....###...",
-    "..##..####..##..",
-    "##............##"
-};
-
-static const char* const explosion_frame_0[EXPLOSION_HEIGHT] = {
-    "................",
-    "......#..#......",
-    "...#..####..#...",
-    "....########....",
-    "..############..",
-    "....########....",
-    "...#..####..#...",
-    "......#..#......",
-    "................",
-    "................"
-};
-
-static const char* const explosion_frame_1[EXPLOSION_HEIGHT] = {
-    "....#......#....",
-    ".#....#..#....#.",
-    "...#........#...",
-    ".....##..##.....",
-    "#..##......##..#",
-    ".....##..##.....",
-    "...#........#...",
-    ".#....#..#....#.",
-    "....#......#....",
-    "................"
-};
 
 static const unsigned char hud_font_glyphs
     [HUD_FONT_CHAR_COUNT][HUD_FONT_HEIGHT] = {
@@ -157,14 +69,6 @@ static const unsigned char hud_font_glyphs
     { 0xf8, 0x08, 0x10, 0x20, 0x40, 0x80, 0xf8 }
 };
 
-static unsigned char player_image_data[
-    IMAGE_SIZE(PLAYER_WIDTH, PLAYER_HEIGHT, 1, 4, 1)];
-static unsigned char bullet_image_data[
-    IMAGE_SIZE(BULLET_WIDTH, BULLET_HEIGHT, 1, 1, 1)];
-static unsigned char invader_image_data[
-    IMAGE_SIZE(INVADER_WIDTH, INVADER_HEIGHT, INVADER_FRAMES, 4, 0)];
-static unsigned char explosion_image_data[
-    IMAGE_SIZE(EXPLOSION_WIDTH, EXPLOSION_HEIGHT, EXPLOSION_FRAMES, 4, 1)];
 static unsigned char hud_font_data[HUD_FONT_DATA_SIZE];
 static unsigned char fire_sound_data[SOUND_SIZE(FIRE_SOUND_SAMPLES)];
 static unsigned char explosion_sound_data[SOUND_SIZE(EXPLOSION_SOUND_SAMPLES)];
@@ -183,185 +87,6 @@ static void write_u32_le(unsigned char* bytes, long value)
     bytes[1] = (unsigned char)((value >> 8) & 0xff);
     bytes[2] = (unsigned char)((value >> 16) & 0xff);
     bytes[3] = (unsigned char)((value >> 24) & 0xff);
-}
-
-static void write_image_header(
-    unsigned char* bytes,
-    int width,
-    int height,
-    int frames,
-    int bitplanes,
-    int masked)
-{
-    bytes[0] = 'A';
-    bytes[1] = 'N';
-    bytes[2] = 'A';
-    bytes[3] = 'I';
-    bytes[4] = 'M';
-    bytes[5] = 'G';
-    bytes[6] = '0';
-    bytes[7] = '1';
-    write_u16_le(bytes + 8, width);
-    write_u16_le(bytes + 10, height);
-    write_u16_le(bytes + 12, frames);
-    bytes[14] = (unsigned char)bitplanes;
-    bytes[15] = masked ? 1u : 0u;
-    bytes[16] = 0u;
-    bytes[17] = 0u;
-    bytes[18] = 0u;
-    bytes[19] = 0u;
-}
-
-static void set_planar_bit(unsigned char* bytes, int row_bytes, int x, int y)
-{
-    bytes[(y * row_bytes) + (x >> 3)] =
-        (unsigned char)(
-            bytes[(y * row_bytes) + (x >> 3)] |
-            (0x80u >> (x & 7)));
-}
-
-static unsigned char color_from_char(char ch, unsigned char fallback)
-{
-    if (ch >= '0' && ch <= '9') {
-        return (unsigned char)(ch - '0');
-    }
-
-    if (ch >= 'A' && ch <= 'F') {
-        return (unsigned char)(10 + (ch - 'A'));
-    }
-
-    if (ch >= 'a' && ch <= 'f') {
-        return (unsigned char)(10 + (ch - 'a'));
-    }
-
-    return fallback;
-}
-
-static void write_color_frame(
-    unsigned char* image_data,
-    int width,
-    int height,
-    int bitplanes,
-    int frame,
-    const char* const* rows,
-    unsigned char fallback_color,
-    int masked)
-{
-    unsigned char* frame_base;
-    unsigned char* mask;
-    unsigned char* planes;
-    unsigned char color;
-    int row_bytes;
-    int plane_size;
-    int frame_size;
-    int x;
-    int y;
-    int plane;
-
-    row_bytes = (width + 7) / 8;
-    plane_size = row_bytes * height;
-    frame_size = plane_size * (bitplanes + (masked ? 1 : 0));
-    frame_base = image_data + IMAGE_HEADER_SIZE + (frame * frame_size);
-    mask = masked ? frame_base : NULL;
-    planes = masked ? frame_base + plane_size : frame_base;
-    memset(frame_base, 0, (size_t)frame_size);
-
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            if (rows[y][x] != '.' && rows[y][x] != ' ') {
-                color = color_from_char(rows[y][x], fallback_color);
-                if (mask != NULL) {
-                    set_planar_bit(mask, row_bytes, x, y);
-                }
-                for (plane = 0; plane < bitplanes; plane++) {
-                    if ((color & (1u << plane)) != 0u) {
-                        set_planar_bit(
-                            planes + (plane * plane_size),
-                            row_bytes,
-                            x,
-                            y);
-                    }
-                }
-            }
-        }
-    }
-}
-
-static void build_image_data(void)
-{
-    write_image_header(player_image_data, PLAYER_WIDTH, PLAYER_HEIGHT, 1, 4, 1);
-    write_color_frame(
-        player_image_data,
-        PLAYER_WIDTH,
-        PLAYER_HEIGHT,
-        4,
-        0,
-        player_rows,
-        5u,
-        1);
-
-    write_image_header(bullet_image_data, BULLET_WIDTH, BULLET_HEIGHT, 1, 1, 1);
-    write_color_frame(
-        bullet_image_data,
-        BULLET_WIDTH,
-        BULLET_HEIGHT,
-        1,
-        0,
-        bullet_rows,
-        1u,
-        1);
-
-    write_image_header(
-        invader_image_data,
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        INVADER_FRAMES,
-        4,
-        0);
-    write_color_frame(
-        invader_image_data,
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        4,
-        0,
-        invader_frame_0,
-        INVADER_COLOR,
-        0);
-    write_color_frame(
-        invader_image_data,
-        INVADER_WIDTH,
-        INVADER_HEIGHT,
-        4,
-        1,
-        invader_frame_1,
-        INVADER_COLOR,
-        0);
-
-    write_image_header(
-        explosion_image_data,
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        EXPLOSION_FRAMES,
-        4,
-        1);
-    write_color_frame(
-        explosion_image_data,
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        4,
-        0,
-        explosion_frame_0,
-        5u,
-        1);
-    write_color_frame(
-        explosion_image_data,
-        EXPLOSION_WIDTH,
-        EXPLOSION_HEIGHT,
-        4,
-        1,
-        explosion_frame_1,
-        2u,
-        1);
 }
 
 static void build_hud_font_data(void)
@@ -603,31 +328,10 @@ static int write_asset(
 
 static int write_all_assets(const char* dir)
 {
-    build_image_data();
     build_hud_font_data();
     build_sound_data();
 
     return
-        write_asset(
-            dir,
-            "player.anaimg",
-            player_image_data,
-            (long)sizeof(player_image_data)) &&
-        write_asset(
-            dir,
-            "bullet.anaimg",
-            bullet_image_data,
-            (long)sizeof(bullet_image_data)) &&
-        write_asset(
-            dir,
-            "invader.anaimg",
-            invader_image_data,
-            (long)sizeof(invader_image_data)) &&
-        write_asset(
-            dir,
-            "explosion.anaimg",
-            explosion_image_data,
-            (long)sizeof(explosion_image_data)) &&
         write_asset(
             dir,
             "hud.anafnt",
