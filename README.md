@@ -36,6 +36,10 @@ The practical showcase baseline is currently stock A1200-class hardware. A500
 performance remains useful feedback, but it is not the current floor for the
 complete Invaders demo.
 
+The Invaders example is split so `examples/invaders/main.c` stays close to the
+normal ANA application shape, while game rules and the Amiga-oriented dirty
+rectangle renderer live in separate modules.
+
 ## Quick Build
 
 Host build and tests:

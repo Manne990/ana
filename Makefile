@@ -57,7 +57,13 @@ EXAMPLE_BINS := \
 
 INVADERS_SRCS := \
 	examples/invaders/main.c \
+	examples/invaders/invaders_game.c \
+	examples/invaders/invaders_render.c \
 	examples/invaders/invaders_assets.c
+INVADERS_HEADERS := \
+	examples/invaders/invaders_assets.h \
+	examples/invaders/invaders_game.h \
+	examples/invaders/invaders_internal.h
 INVADERS_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/invaders
 INVADERS_ASSET_DIR := $(INVADERS_ASSET_BUILD_DIR)/assets
 INVADERS_ASSET_MANIFEST := examples/invaders/assets/assets.ana
@@ -146,7 +152,7 @@ $(INVADERS_ASSET_STAMP): $(INVADERS_ASSET_BUILDER) $(TOOL_BINS) $(INVADERS_ASSET
 	$(BUILD_DIR)/tools/ana-convert/ana-convert build $(INVADERS_ASSET_MANIFEST) --out $(INVADERS_ASSET_DIR)
 	touch $@
 
-$(BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(LIBANA) $(INVADERS_ASSET_STAMP)
+$(BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADERS) $(LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INVADERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
@@ -174,15 +180,15 @@ $(AMIGA_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_LIBANA)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(AMIGA_LIBANA) $(INVADERS_ASSET_STAMP)
+$(AMIGA_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_INVADERS_DEBUG_BIN): $(INVADERS_SRCS) $(AMIGA_LIBANA) $(INVADERS_ASSET_STAMP)
+$(AMIGA_INVADERS_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) -DANA_INVADERS_DEBUG_STATS $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_INVADERS_SYNC_BIN): $(INVADERS_SRCS) $(AMIGA_SYNC_LIBANA) $(INVADERS_ASSET_STAMP)
+$(AMIGA_INVADERS_SYNC_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_SYNC_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_SYNC_CFLAGS) -DANA_INVADERS_DEBUG_STATS $(INVADERS_SRCS) $(AMIGA_SYNC_LIBANA) $(AMIGA_LDFLAGS) -o $@
 

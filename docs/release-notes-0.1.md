@@ -31,6 +31,10 @@ runtime model explicit and performant.
 - `examples/hello`
 - `examples/invaders`
 
+`examples/invaders/main.c` is kept as a compact ANA entrypoint. The game rules
+and the optimized Amiga renderer are split into separate modules so the example
+can act both as a playable showcase and as readable sample code.
+
 ## Included tools
 
 - `tools/ana-convert`

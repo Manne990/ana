@@ -77,6 +77,11 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 - direkt hardvarukod, egen C eller assembler far anvandas nar det ar en medveten optimering och dokumenteras som en escape hatch
 - hall state och regler tillrackligt tydliga for lasare
 
+Exemplet ar uppdelat sa att `examples/invaders/main.c` visar den normala
+ANA-applikationsformen med `ANA_Game` och callbacks. Spelreglerna ligger i
+`invaders_game.c`, medan den optimerade dirty-rect-renderingen ligger i
+`invaders_render.c`.
+
 ## Inte i 0.1
 
 - Exakt arkadklon.
@@ -100,4 +105,6 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 - Space/fire startar spelet fran title och restartar fran clear/game over.
 - Skyddsblock stoppar bade spelar- och fiendeskott, bryts ner cell for cell,
   och forstors dar aliens ror sig igenom dem.
+- `main.c` ar ett kort entrypoint-exempel; spelregler och rendering ar
+  uppdelade i separata moduler.
 - Normal-ADF, debug-ADF och sync-ADF bygger samma showcase-assets.
