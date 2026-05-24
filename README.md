@@ -207,6 +207,7 @@ The 0.1 work is tracked in focused specs:
 12. [Documentation and release package](docs/012-dokumentation-och-releasepaket.md)
 13. [Asset pipeline 0.2](docs/013-asset-pipeline-02.md)
 14. [Music and channel policy](docs/014-musik-och-kanalpolicy.md)
+15. [Retained rendering helpers](docs/015-retained-rendering-helpers.md)
 
 ## License
 
