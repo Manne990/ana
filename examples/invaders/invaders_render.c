@@ -5,54 +5,15 @@ static int invaders_draw_slot_index(void)
     return demo_ticks & (INVADERS_DRAW_SLOTS - 1);
 }
 
-static int invaders_rect_overlaps_alive_enemy(ANA_Rect rect)
-{
-    ANA_Rect enemy;
-    int row;
-    int col;
-
-    if (invaders_remaining <= 0) {
-        return 0;
-    }
-
-    enemy.w = INVADER_WIDTH;
-    enemy.h = INVADER_HEIGHT;
-    for (row = 0; row < INVADER_ROWS; row++) {
-        enemy.y = invaders_enemy_y(row);
-        for (col = 0; col < INVADER_COLUMNS; col++) {
-            if (!invader_alive[row][col]) {
-                continue;
-            }
-
-            enemy.x = invaders_enemy_x(col);
-            if (ana_rect_intersects(rect, enemy)) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
-}
-
 static int invaders_bullet_should_draw(
     InvadersBullet bullet,
     int bullet_width,
     int bullet_height)
 {
-    ANA_Rect rect;
+    (void)bullet_width;
+    (void)bullet_height;
 
-    if (!bullet.active) {
-        return 0;
-    }
-
-    rect = ana_rect_make(
-        bullet.x,
-        bullet.y,
-        bullet_width,
-        bullet_height);
-
-    return !invaders_rect_overlaps_alive_enemy(rect) &&
-        !invaders_rect_overlaps_alive_shield(rect);
+    return bullet.active;
 }
 
 static void invaders_fill_rect_black(ANA_Rect rect)
@@ -159,6 +120,10 @@ static void invaders_repair_formation_overlap(ANA_Rect rect)
     int col;
     int enemy_x;
     int enemy_y;
+    int min_row;
+    int max_row;
+    int min_col;
+    int max_col;
 
     if (invader_image == 0 || invaders_remaining <= 0) {
         return;
@@ -173,13 +138,39 @@ static void invaders_repair_formation_overlap(ANA_Rect rect)
         return;
     }
 
+    min_col =
+        (rect.x - invader_formation_x - INVADER_WIDTH) / INVADER_SPACING_X;
+    max_col =
+        (rect.x + rect.w - invader_formation_x) / INVADER_SPACING_X;
+    min_row =
+        (rect.y - invader_formation_y - INVADER_HEIGHT) / INVADER_SPACING_Y;
+    max_row =
+        (rect.y + rect.h - invader_formation_y) / INVADER_SPACING_Y;
+
+    if (min_col < 0) {
+        min_col = 0;
+    }
+    if (min_row < 0) {
+        min_row = 0;
+    }
+    if (max_col >= INVADER_COLUMNS) {
+        max_col = INVADER_COLUMNS - 1;
+    }
+    if (max_row >= INVADER_ROWS) {
+        max_row = INVADER_ROWS - 1;
+    }
+
+    if (min_col > max_col || min_row > max_row) {
+        return;
+    }
+
     enemy_rect.w = INVADER_WIDTH;
     enemy_rect.h = INVADER_HEIGHT;
-    for (row = 0; row < INVADER_ROWS; row++) {
+    for (row = min_row; row <= max_row; row++) {
         enemy_y = invaders_enemy_y(row);
         enemy_rect.y = enemy_y;
 
-        for (col = 0; col < INVADER_COLUMNS; col++) {
+        for (col = min_col; col <= max_col; col++) {
             if (!invader_alive[row][col]) {
                 continue;
             }
@@ -480,6 +471,59 @@ static void invaders_init_hud_labels(InvadersDrawSlot* draw_slot)
     draw_slot->hud_labels_ready = 1;
 }
 
+static char* invaders_copy_text(char* out, const char* text)
+{
+    while (*text != '\0') {
+        *out++ = *text++;
+    }
+
+    return out;
+}
+
+static char* invaders_write_int(char* out, int value)
+{
+    char reversed[12];
+    int count;
+    int i;
+    unsigned int magnitude;
+
+    if (value < 0) {
+        *out++ = '-';
+        magnitude = (unsigned int)(-(value + 1)) + 1u;
+    } else {
+        magnitude = (unsigned int)value;
+    }
+
+    count = 0;
+    do {
+        reversed[count++] = (char)('0' + (magnitude % 10u));
+        magnitude /= 10u;
+    } while (magnitude != 0u && count < (int)sizeof(reversed));
+
+    for (i = count - 1; i >= 0; i--) {
+        *out++ = reversed[i];
+    }
+
+    return out;
+}
+
+static void invaders_make_hud_number_text(
+    char* out,
+    const char* label,
+    int value)
+{
+    out = invaders_copy_text(out, label);
+    out = invaders_write_int(out, value);
+    *out = '\0';
+}
+
+static void invaders_make_hud_status_text(char* out, const char* status)
+{
+    out = invaders_copy_text(out, "STATUS ");
+    out = invaders_copy_text(out, status);
+    *out = '\0';
+}
+
 static void invaders_draw_hud_slot(int slot)
 {
     InvadersDrawSlot* draw_slot;
@@ -496,9 +540,9 @@ static void invaders_draw_hud_slot(int slot)
     status = invaders_status_text();
     invaders_init_hud_labels(draw_slot);
 
-    sprintf(score_text, "SCORE %d", score);
-    sprintf(lives_text, "LIVES %d", lives);
-    sprintf(status_text, "STATUS %s", status);
+    invaders_make_hud_number_text(score_text, "SCORE ", score);
+    invaders_make_hud_number_text(lives_text, "LIVES ", lives);
+    invaders_make_hud_status_text(status_text, status);
 
     ana_label_set_text(&draw_slot->score_label, score_text);
     ana_label_set_text(&draw_slot->lives_label, lives_text);
@@ -632,7 +676,6 @@ void invaders_draw(void)
     }
     if (formation_dirty_slots[slot]) {
         redraw_explosions = 1;
-        shield_dirty_slots[slot] = 1;
         invaders_clear_formation_slot(slot);
     }
     invaders_draw_shields_slot(slot);

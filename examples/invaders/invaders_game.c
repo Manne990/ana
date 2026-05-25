@@ -209,6 +209,8 @@ static void invaders_reset_formation(void)
 
 static void invaders_start_new_game(void)
 {
+    ana_stop_music();
+
     player_x = 152;
     player_y = 220;
     score = 0;
@@ -226,6 +228,8 @@ static void invaders_start_new_game(void)
 
 static void invaders_enter_title(void)
 {
+    invaders_play_theme_music();
+
     player_x = 152;
     player_y = 220;
     score = 0;
@@ -243,6 +247,8 @@ static void invaders_enter_title(void)
 
 static void invaders_enter_clear(void)
 {
+    invaders_play_theme_music();
+
     game_state = INVADERS_STATE_CLEAR;
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
@@ -251,6 +257,8 @@ static void invaders_enter_clear(void)
 
 static void invaders_enter_game_over(void)
 {
+    invaders_play_theme_music();
+
     game_state = INVADERS_STATE_GAME_OVER;
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
@@ -514,6 +522,10 @@ static void invaders_damage_shields_for_formation(void)
     int col;
 
     if (invaders_remaining <= 0) {
+        return;
+    }
+
+    if (invader_formation_y + INVADER_FORMATION_HEIGHT <= SHIELD_Y) {
         return;
     }
 

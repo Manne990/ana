@@ -37,8 +37,8 @@ runtime model explicit and performant.
 `examples/invaders/main.c` is kept as a compact ANA entrypoint. The game rules
 and the optimized Amiga renderer are split into separate modules so the example
 can act both as a playable showcase and as readable sample code. Invaders also
-keeps a small MOD running while SFX play on reserved channels, which exercises
-the 0.1 music/SFX channel policy in the actual game loop.
+packages a small MOD and uses it on title, clear, and game-over screens while
+keeping active gameplay focused on SFX and frame rate.
 
 ## Included tools
 

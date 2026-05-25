@@ -37,6 +37,7 @@ Avoid:
 - full-screen redraws when only a few objects moved
 - large overlapping masked images
 - per-frame text redraws when the value did not change
+- forcing static layers to redraw as part of unrelated moving-object updates
 
 ## Renderer notes
 
@@ -75,6 +76,16 @@ Bitmap text is not free. Keep HUD redraws explicit:
 
 For stable HUD text, consider drawing it once and leaving it in the retained
 buffer until it changes.
+
+## Spike frames
+
+Average FPS can hide uneven frames. The Invaders renderer keeps shield redraws
+separate from formation movement, and only touches shield damage once the
+formation reaches the shield band. That keeps alien step frames closer to normal
+frames instead of periodically redrawing unrelated static state. It also bounds
+small mover repair work to the formation rows and columns a dirty rect can
+actually touch, which avoids whole-formation scans when bullets move through
+the playfield.
 
 ## Escape hatches
 

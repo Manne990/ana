@@ -43,9 +43,9 @@ complete Invaders demo.
 The Invaders example is split so `examples/invaders/main.c` stays close to the
 normal ANA application shape, while game rules and the Amiga-oriented dirty
 rectangle renderer live in separate modules. Its asset manifest also packages a
-small ProTracker MOD as `assets/theme.mod`. The example reserves two Paula
-channels for music and two for SFX so it demonstrates explicit channel policy
-under gameplay load.
+small ProTracker MOD as `assets/theme.mod`. The example plays music on title,
+clear, and game-over screens, then stops it during active gameplay so the normal
+ADF keeps the arcade loop close to the A1200 performance target.
 
 ## Quick Build
 

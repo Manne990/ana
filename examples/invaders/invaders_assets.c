@@ -61,12 +61,17 @@ int invaders_load_assets(void)
         return 0;
     }
 
+    invaders_play_theme_music();
+
+    return 1;
+}
+
+void invaders_play_theme_music(void)
+{
     if (theme_music != 0) {
         ana_set_music_volume(38);
         ana_play_music(theme_music, ANA_MUSIC_LOOP);
     }
-
-    return 1;
 }
 
 void invaders_free_assets(void)

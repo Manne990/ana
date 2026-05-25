@@ -15,6 +15,7 @@ extern ANA_Sound game_over_sound;
 extern ANA_Music theme_music;
 
 int invaders_load_assets(void);
+void invaders_play_theme_music(void);
 void invaders_free_assets(void);
 
 #endif

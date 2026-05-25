@@ -44,9 +44,8 @@ preview work.
 - Large MOD files can cause slow floppy startup, high Chip RAM pressure, and
   lower frame rate. Current examples should use small MOD assets.
 - Continuous MOD playback during busy gameplay can still cost too much CPU.
-  Invaders now keeps a deliberately tiny MOD running during gameplay to test
-  the channel policy, but larger modules are not recommended for the showcase
-  baseline yet.
+  Invaders currently keeps music to title, clear, and game-over screens for the
+  normal performance profile.
 
 ## Input
 
