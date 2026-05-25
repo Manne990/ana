@@ -10,6 +10,7 @@ Implemented for 0.1:
 - `.anaimg` for indexed images and animation frames
 - `.anafnt` for bitmap fonts used by the Invaders example
 - `.anasnd` for short sound effects used by the Invaders example
+- `.mod` for ProTracker music assets copied by manifests
 - `.anapal` for text palette files used by the host converter
 
 The public converter supports PNG and PPM image conversion. The Invaders
@@ -72,6 +73,7 @@ ANA_ASSETS 1
 palette game palette.png --colors 16
 image player player.png --palette game --transparent #ff00ff
 image explosion explosion.png --palette game --frame-width 16 --frame-height 16 --transparent #ff00ff
+music theme theme.mod
 ```
 
 Planned but not yet implemented:
@@ -139,7 +141,12 @@ assets/
   invader.anaimg
   player.anaimg
   step.anasnd
+  theme.mod
 ```
+
+When a manifest contains `music theme theme.mod`, the converter copies the
+source MOD to `theme.mod` in the output asset directory. Games load it with
+`ana_load_music("assets/theme.mod")` and start it with `ana_play_music`.
 
 Build it with:
 

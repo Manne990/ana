@@ -10,6 +10,7 @@ extern "C" {
 typedef struct ANA_ImageData* ANA_Image;
 typedef struct ANA_FontData* ANA_Font;
 typedef struct ANA_SoundData* ANA_Sound;
+typedef struct ANA_MusicData* ANA_Music;
 
 typedef struct ANA_Time {
     int tick;
@@ -35,4 +36,3 @@ typedef struct ANA_Game {
 #endif
 
 #endif
-

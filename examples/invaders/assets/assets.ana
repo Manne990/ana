@@ -6,3 +6,4 @@ image player player.png --palette game --transparent #ff00ff
 image bullet bullet.png --palette game --transparent #ff00ff
 image invader invader.png --palette game --frame-width 16 --frame-height 8 --transparent #ff00ff
 image explosion explosion.png --palette game --frame-width 16 --frame-height 10 --transparent #ff00ff
+music theme theme.mod

@@ -18,6 +18,35 @@ fordelas.
 - Default-beteende som later ett enkelt spel fa musik och SFX utan extra setup.
 - Ingen dold mjukvarumixning i 0.1/0.2.
 
+## Implementationsstatus
+
+Forsta implementationen finns i ramverket:
+
+- publik kanalpolicy via `ANA_AudioConfig`
+- SFX-spelaren respekterar `sfx_channels`
+- SFX kan blockeras fran musikkanaler eller tillatas stjala dem enligt policy
+- musik-API:t kan ladda, validera och aga ProTracker MOD-data
+- `ana_play_music`, pause/resume/stop och volym hanterar runtime-state
+- asset-manifest kan kopiera `.mod` med `music name file.mod`
+- Invaders-manifestet paketerar en liten ProTracker MOD som `assets/theme.mod`
+- Amiga-backenden lankar in Frank Wille/Phx `ptplayer`, som ar public domain
+- MOD-data allokeras i Chip RAM pa Amiga innan replay
+- ptplayer installeras lazy nar musik startas och tas bort igen nar musik/SFX
+  ar idle
+- Invaders laddar och startar `assets/theme.mod` under `load`, men stoppar
+  musiken nar gameplay borjar for att skydda FPS
+- Invaders behandlar musik som optional sa spelet kan starta aven om en stor
+  MOD inte far plats i minnet
+- Invaders satter en explicit kanalpolicy med tva musikkanaler och tva
+  SFX-kanaler
+
+Kvar att harda senare:
+
+- mer testning av kanalpolicy med musik och manga samtidiga SFX
+- battre rapportering om AmigaOS/audio.device inte kan allokera kanaler
+- budget/rekommendationer for MOD-storlek per malmaskin
+- host-side musikpreview om vi vill hora MOD aven utan emulator
+
 ## Rekommenderat musikformat
 
 Forsta musikformatet bor vara ProTracker MOD:
@@ -27,8 +56,8 @@ Forsta musikformatet bor vara ProTracker MOD:
 - kan spelas utan runtime-konvertering i forsta steget
 - kan senare valideras eller packas av asset pipeline
 
-0.1/0.2 bor inte forsoka bygga en egen tracker eller ett eget musikformat.
-Anvand eller porta en etablerad MOD-replayer om licensen fungerar.
+0.1/0.2 bygger inte en egen tracker eller ett eget musikformat. Amiga-backenden
+anvander en vendrad public-domain ProTracker-replayer.
 
 ## Foreslaget musik-API
 
@@ -213,24 +242,20 @@ Forsta implementationen ska valja en tydlig strategi:
 ## Timing
 
 Musik bor uppdateras stabilt, helst via VBlank/CIA eller annan Amiga-nara tick.
-
-Forsta implementationen far borja med ANA:s runtime-tick om:
-
-- spelet kor 50 FPS PAL
-- timing dokumenteras som enkel forsta version
-- implementationen kan flyttas till interrupt senare utan att publika API:t
-  behover andras
+Den forsta Amiga-implementationen anvander `ptplayer` i OS-kompatibelt lage,
+dar replayn registrerar CIA-B-interrupt via AmigaOS. Host-builden validerar och
+haller API-state, men spelar inte upp MOD-ljud.
 
 ## Asset pipeline
 
 Forsta steget:
 
 - `.mod` kan laddas direkt som musikasset
-- asset pipeline kan kopiera eller validera `.mod`
+- asset pipeline kan kopiera `.mod`
+- manifeststöd: `music theme theme.mod`
 
 Senare steg:
 
-- manifeststöd: `music theme theme.mod`
 - storlekskontroll
 - formatvalidering
 - eventuell packning
@@ -253,4 +278,3 @@ Senare steg:
 - SFX kan, om policy tillater det, stjala musikkanal.
 - `ana_stop_music` stoppar musik utan att stoppa aktiva SFX.
 - Dokumentationen visar minst tre kanalpolicys.
-

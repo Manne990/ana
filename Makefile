@@ -5,6 +5,7 @@ HOST_NATIVE_LDFLAGS := $(shell if command -v x86_64-linux-gnu-gcc >/dev/null 2>&
 HOST_CC ?= $(HOST_NATIVE_CC)
 AMIGA_CC ?= m68k-amigaos-gcc
 AMIGA_AR ?= m68k-amigaos-ar
+AMIGA_AS ?= $(shell command -v vasmm68k_mot 2>/dev/null || command -v /opt/m68k-amigaos/bin/vasmm68k_mot 2>/dev/null || echo vasmm68k_mot)
 ADFTOOL ?= gadf
 RM = rm -rf
 
@@ -17,6 +18,7 @@ AMIGA_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m6800
 AMIGA_PRESENT_CFLAGS ?= -DANA_AMIGA_DIRECT_PRESENT
 AMIGA_CFLAGS ?= $(AMIGA_BASE_CFLAGS) $(AMIGA_PRESENT_CFLAGS)
 AMIGA_SYNC_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_AMIGA_DIRECT_PRESENT -DANA_AMIGA_DIRECT_PRESENT_SYNC
+AMIGA_ASFLAGS ?= -quiet -Fhunk -m68000 -phxass
 AMIGA_LDFLAGS ?= -mcrt=nix13 -lamiga
 BUILD_DIR ?= build
 AMIGA_BUILD_DIR ?= $(BUILD_DIR)/amiga
@@ -39,6 +41,9 @@ ANA_SRCS := \
 	src/sound/ana_sound.c
 ANA_OBJS := $(ANA_SRCS:%.c=$(BUILD_DIR)/%.o)
 LIBANA := $(BUILD_DIR)/libana.a
+ANA_AMIGA_ASM_SRCS := \
+	src/sound/ana_ptplayer_wrap.asm \
+	src/sound/vendor/ptplayer/ptplayer.asm
 
 TEST_BINS := \
 	$(BUILD_DIR)/tests/platform_profile_test \
@@ -74,9 +79,11 @@ INVADERS_ASSET_STAMP := $(INVADERS_ASSET_BUILD_DIR)/.stamp
 
 TOOL_BINS := $(BUILD_DIR)/tools/ana-convert/ana-convert
 
-AMIGA_OBJS := $(ANA_SRCS:%.c=$(AMIGA_BUILD_DIR)/%.o)
+AMIGA_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_BUILD_DIR)/%.o)
+AMIGA_OBJS := $(ANA_SRCS:%.c=$(AMIGA_BUILD_DIR)/%.o) $(AMIGA_ASM_OBJS)
 AMIGA_LIBANA := $(AMIGA_BUILD_DIR)/libana.a
-AMIGA_SYNC_OBJS := $(ANA_SRCS:%.c=$(AMIGA_SYNC_BUILD_DIR)/%.o)
+AMIGA_SYNC_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_SYNC_BUILD_DIR)/%.o)
+AMIGA_SYNC_OBJS := $(ANA_SRCS:%.c=$(AMIGA_SYNC_BUILD_DIR)/%.o) $(AMIGA_SYNC_ASM_OBJS)
 AMIGA_SYNC_LIBANA := $(AMIGA_SYNC_BUILD_DIR)/libana.a
 
 AMIGA_EXAMPLE_BINS := \
@@ -175,6 +182,22 @@ $(AMIGA_BUILD_DIR)/%.o: %.c
 $(AMIGA_SYNC_BUILD_DIR)/%.o: %.c
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_SYNC_CFLAGS) -c $< -o $@
+
+$(AMIGA_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
+
+$(AMIGA_SYNC_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
+
+$(AMIGA_BUILD_DIR)/src/sound/ana_ptplayer_wrap.o: src/sound/ana_ptplayer_wrap.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -o $@ $<
+
+$(AMIGA_SYNC_BUILD_DIR)/src/sound/ana_ptplayer_wrap.o: src/sound/ana_ptplayer_wrap.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -o $@ $<
 
 $(AMIGA_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_LIBANA)
 	mkdir -p $(@D)

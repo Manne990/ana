@@ -33,6 +33,11 @@ void ana_sound_close(void);
 void ana_sound_update(void);
 int ana_sound_active_channel_count(void);
 int ana_sound_global_volume(void);
+int ana_music_is_playing(void);
+int ana_music_is_paused(void);
+int ana_music_looping(void);
+int ana_music_global_volume(void);
+ANA_AudioChannels ana_music_active_channel_mask(void);
 
 long ana_platform_time_ticks(void);
 long ana_platform_time_ticks_per_second(void);

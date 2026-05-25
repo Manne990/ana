@@ -12,6 +12,7 @@ extern ANA_Sound fire_sound;
 extern ANA_Sound explosion_sound;
 extern ANA_Sound step_sound;
 extern ANA_Sound game_over_sound;
+extern ANA_Music theme_music;
 
 int invaders_load_assets(void);
 void invaders_free_assets(void);

@@ -15,7 +15,7 @@ formatlogik.
 - PNG-input for bilder.
 - Gemensam palettfil for ett spel eller exempel.
 - Automatisk asset-build via `make`.
-- Ett enkelt manifestformat for bilder.
+- Ett enkelt manifestformat for bilder och pass-through assets.
 - Tydliga fel nar en asset inte passar malprofilen.
 - Invaders ska kunna byggas fran kallassets istallet for handbyggda byte-arrays.
 
@@ -114,7 +114,8 @@ Regler:
 ## Manifestformat
 
 Manifestet ska vara radbaserat och avsiktligt mindre avancerat an XNA:s
-content project. 0.2 behover bara bilder.
+content project. 0.2 fokuserar pa bilder, men kan aven kopiera `.mod`-musik
+utan runtime-konvertering.
 
 ```text
 ANA_ASSETS 1
@@ -124,15 +125,19 @@ palette game palette.png --colors 16
 image player player.png --palette game --transparent #ff00ff
 image invader invader.png --palette game
 image explosion explosion.png --palette game --frame-width 16 --frame-height 16 --transparent #ff00ff
+music theme theme.mod
 ```
 
 Regler:
 
-- Forsta token ar asset-typ: `palette` eller `image`.
+- Forsta token ar asset-typ: `palette`, `image` eller `music`.
 - Andra token ar asset-namn.
 - Tredje token ar source-fil relativt manifestet.
-- Outputnamn skapas fran asset-namnet: `player.anaimg`, `game.anapal`.
+- Outputnamn skapas fran asset-namnet: `player.anaimg`, `game.anapal`,
+  `theme.mod`.
 - CLI-flaggor efter source-filen fungerar som for direktkommandot.
+- `music` tar inga flaggor i forsta versionen utan kopierar `.mod` rakt av.
+  Runtime laddar sedan MOD-filen med `ana_load_music`.
 - Manifestet far inte krava JSON, XML eller ett externt byggsystem.
 
 ## PNG-stod

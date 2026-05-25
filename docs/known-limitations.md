@@ -29,14 +29,21 @@ preview work.
 
 - Public image converter supports PNG and PPM P3/P6.
 - Palette files and manifests exist, but are intentionally simple.
+- Manifest builds can copy `.mod` music assets.
 - Font and sound conversion are not yet exposed as general user-facing tools.
 - No XNA/MonoGame project import yet.
 
 ## Sound
 
 - Short SFX playback exists.
-- Music is specified separately but not implemented.
-- Explicit channel reservation and mixing policy are not implemented.
+- Explicit music/SFX channel policy exists for the four Paula channels.
+- MOD assets can be loaded and controlled through the music API.
+- Audible MOD replay exists on Amiga through the vendored `ptplayer` backend.
+- Host builds validate and track music state, but do not preview MOD audio.
+- Large MOD files can cause slow floppy startup, high Chip RAM pressure, and
+  lower frame rate. Current examples should use small MOD assets.
+- Continuous MOD playback during busy gameplay can still cost too much CPU.
+  Invaders currently demonstrates music on the title screen only.
 
 ## Input
 

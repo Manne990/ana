@@ -69,18 +69,19 @@ load.
 
 - Host-backenden validerar format, laddar samples och haller kanalstatus sa
   tester kan verifiera API-beteende.
-- Amiga-backenden allokerar sampledata i Chip RAM och spelar via fyra Paula-
-  kanaler.
+- Amiga-backenden allokerar sampledata i Chip RAM. Nar musikbackenden ar
+  installerad spelas SFX via samma `ptplayer`-kanalhantering som MOD-musiken;
+  annars finns den enklare direkta Paula-vagen kvar som fallback.
 - `ana_play_sound` ar fire-and-forget. Den valjer en ledig kanal nar det gar,
   annars ersatts en kanal enligt enkel prioritet/round-robin.
+- Spec 014 lagger till `ANA_AudioConfig`, sa SFX kan begransas till valda
+  Paula-kanaler eller tillatas stjala musikkanaler enligt spelets policy.
 - Runtime stoppar kanalen nar samplets beraknade langd har passerat, eftersom
   Paula annars loopar ljud-DMA kontinuerligt.
 - `ana_set_sound_volume` satter global volym 0-64.
 
 ## Inte i 0.1
 
-- Musiksystem.
-- Tracker/mod playback.
 - Mixning av manga samtidiga ljud i mjukvara.
 - Runtime-WAV-dekodning.
 - Avancerade effekter.

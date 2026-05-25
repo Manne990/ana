@@ -11,6 +11,7 @@ PALETTE="$WORK_DIR/game.anapal"
 PNG_OUTPUT="$WORK_DIR/ana_convert_sheet_png.anaimg"
 MANIFEST="$WORK_DIR/assets.ana"
 MANIFEST_OUT="$WORK_DIR/nested/manifest-assets"
+MOD_SOURCE="$WORK_DIR/theme.mod"
 
 mkdir -p "$WORK_DIR"
 
@@ -80,6 +81,16 @@ write_png(
 )
 PY
 
+python3 - "$MOD_SOURCE" <<'PY'
+import sys
+
+data = bytearray(1084)
+data[950] = 1
+data[1080:1084] = b"M.K."
+with open(sys.argv[1], "wb") as handle:
+    handle.write(data)
+PY
+
 "$CONVERT" palette "$PNG_PALETTE" \
     --out "$PALETTE" \
     --colors 7
@@ -97,11 +108,13 @@ cat > "$MANIFEST" <<EOF
 ANA_ASSETS 1
 palette game ana_convert_palette.png --colors 7
 image sheet ana_convert_sheet.png --palette game --frame-width 3 --frame-height 2 --transparent #ff00ff
+music theme theme.mod
 EOF
 
 "$CONVERT" build "$MANIFEST" --out "$MANIFEST_OUT"
 "$PROBE" "$MANIFEST_OUT/sheet.anaimg"
 test -f "$MANIFEST_OUT/game.anapal"
+cmp "$MOD_SOURCE" "$MANIFEST_OUT/theme.mod"
 
 rm -rf "$SOURCE" "$OUTPUT" "$PNG_SOURCE" "$PNG_PALETTE" "$PALETTE" \
-    "$PNG_OUTPUT" "$MANIFEST" "$MANIFEST_OUT"
+    "$PNG_OUTPUT" "$MANIFEST" "$MANIFEST_OUT" "$MOD_SOURCE"

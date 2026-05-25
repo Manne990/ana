@@ -26,9 +26,13 @@ Implemented today:
 - bitmap font text
 - semantic input directions/actions with keyboard mapping
 - short SFX playback
+- explicit music/SFX channel policy for Paula channels
+- MOD music asset loading and Amiga playback through a vendored ProTracker
+  replayer
 - small helpers for rectangles, clamp, and timers
 - host-side image conversion to `.anaimg`
-- PNG source assets, `.anapal` palettes, and simple asset manifests
+- PNG source assets, `.anapal` palettes, `.mod` music assets, and simple
+  asset manifests
 - Amiga executable and ADF builds
 - `hello` and `invaders` examples
 
@@ -38,7 +42,9 @@ complete Invaders demo.
 
 The Invaders example is split so `examples/invaders/main.c` stays close to the
 normal ANA application shape, while game rules and the Amiga-oriented dirty
-rectangle renderer live in separate modules.
+rectangle renderer live in separate modules. Its asset manifest also packages a
+small ProTracker MOD as `assets/theme.mod`. The example plays it only on the
+title screen so gameplay performance stays representative of an arcade game.
 
 ## Quick Build
 
@@ -168,9 +174,17 @@ Build a manifest:
 build/tools/ana-convert/ana-convert build assets.ana --out build/assets/game
 ```
 
-The current public converter supports PNG and PPM P3/P6 image input. Broader
-font conversion, sound conversion, and XNA/MonoGame import experiments are
-planned for later work.
+The current public converter supports PNG and PPM P3/P6 image input. Manifest
+builds can also copy `.mod` music assets for `ana_load_music`; examples should
+keep MOD files small enough for floppy load time, Chip RAM, and frame-rate
+budgets. Broader font conversion, sound conversion, and XNA/MonoGame import
+experiments are planned for later work.
+
+## Third-party Code
+
+The Amiga music backend vendors Frank Wille's public-domain `ptplayer` replay
+routine under `src/sound/vendor/ptplayer/`. It is assembled only for Amiga
+targets and is not linked into host tests/tools.
 
 ## Release Package
 

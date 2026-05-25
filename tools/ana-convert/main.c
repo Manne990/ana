@@ -89,6 +89,7 @@ static void print_usage(void)
     printf("  --transparent #RRGGBB   Transparent color as hex\n");
     printf("\n");
     printf("Image input formats: PNG and PPM P3/P6.\n");
+    printf("Manifest asset types: palette, image, music.\n");
 }
 
 static char* copy_string(const char* text)
@@ -249,6 +250,54 @@ static int ensure_dir(const char* path)
     fprintf(stderr, "ana-convert: could not create directory '%s'\n", path);
     free(copy);
     return 0;
+}
+
+static int copy_binary_file(const char* input_path, const char* output_path)
+{
+    unsigned char buffer[4096];
+    FILE* input;
+    FILE* output;
+    size_t bytes_read;
+    int ok;
+
+    input = fopen(input_path, "rb");
+    if (input == NULL) {
+        fprintf(stderr, "ana-convert: could not open '%s'\n", input_path);
+        return 0;
+    }
+
+    output = fopen(output_path, "wb");
+    if (output == NULL) {
+        fprintf(stderr, "ana-convert: could not open output '%s'\n", output_path);
+        fclose(input);
+        return 0;
+    }
+
+    ok = 1;
+    while ((bytes_read = fread(buffer, 1u, sizeof(buffer), input)) > 0u) {
+        if (fwrite(buffer, 1u, bytes_read, output) != bytes_read) {
+            ok = 0;
+            break;
+        }
+    }
+
+    if (ferror(input)) {
+        ok = 0;
+    }
+
+    if (fclose(input) != 0) {
+        ok = 0;
+    }
+
+    if (fclose(output) != 0) {
+        ok = 0;
+    }
+
+    if (!ok) {
+        fprintf(stderr, "ana-convert: failed while copying '%s'\n", input_path);
+    }
+
+    return ok;
 }
 
 static int parse_int(const char* text, int* value)
@@ -1588,6 +1637,49 @@ static int run_manifest_image(
     return result == 0;
 }
 
+static int run_manifest_music(
+    char** tokens,
+    int token_count,
+    const char* manifest_dir,
+    const char* output_dir,
+    int line_number)
+{
+    char* input_path;
+    char* output_path;
+    int ok;
+
+    if (token_count != 3) {
+        fprintf(stderr, "ana-convert: invalid music entry at line %d\n", line_number);
+        return 0;
+    }
+
+    if (!has_extension(tokens[2], ".mod")) {
+        fprintf(
+            stderr,
+            "ana-convert: unsupported music format at line %d (expected .mod)\n",
+            line_number);
+        return 0;
+    }
+
+    input_path = path_join(manifest_dir, tokens[2]);
+    output_path = asset_output_path(output_dir, tokens[1], ".mod");
+    if (input_path == NULL || output_path == NULL) {
+        free(input_path);
+        free(output_path);
+        fprintf(stderr, "ana-convert: out of memory while reading manifest\n");
+        return 0;
+    }
+
+    ok = copy_binary_file(input_path, output_path);
+    if (ok) {
+        printf("Wrote %s from %s\n", output_path, input_path);
+    }
+
+    free(input_path);
+    free(output_path);
+    return ok;
+}
+
 static int run_build_command(int argc, char** argv)
 {
     const char* manifest_path;
@@ -1675,6 +1767,13 @@ static int run_build_command(int argc, char** argv)
                 output_dir,
                 palettes,
                 palette_count,
+                line_number);
+        } else if (strcmp(tokens[0], "music") == 0) {
+            ok = run_manifest_music(
+                tokens,
+                token_count,
+                manifest_dir,
+                output_dir,
                 line_number);
         } else {
             fprintf(

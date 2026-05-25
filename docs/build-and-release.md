@@ -66,6 +66,10 @@ The Amiga Docker build uses:
 amigadev/crosstools:m68k-amigaos-gcc10_amd64
 ```
 
+The Amiga music backend also requires `vasmm68k_mot` to assemble the vendored
+`ptplayer` source. The Docker image above provides it under
+`/opt/m68k-amigaos/bin/`.
+
 ## Source release package
 
 Create a source package:

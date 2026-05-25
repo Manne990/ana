@@ -137,7 +137,7 @@ the same game-facing directions and actions.
 
 ## Sound
 
-0.1 sound is focused on short sound effects:
+0.1 sound is focused on short sound effects plus explicit Paula channel policy:
 
 - `ANA_Sound`
 - `ana_load_sound`
@@ -146,10 +146,25 @@ the same game-facing directions and actions.
 - `ana_play_sound`
 - `ana_stop_all_sounds`
 - `ana_set_sound_volume`
+- `ANA_AudioConfig`
+- `ana_configure_audio`
+- `ana_audio_config`
 
-Music and explicit channel policy are specified separately in
-`docs/014-musik-och-kanalpolicy.md` and are not part of the current
-implementation.
+Music API for MOD assets:
+
+- `ANA_Music`
+- `ana_load_music`
+- `ana_load_music_data`
+- `ana_free_music`
+- `ana_play_music`
+- `ana_stop_music`
+- `ana_pause_music`
+- `ana_resume_music`
+- `ana_set_music_volume`
+
+The host implementation validates and stores MOD data and applies channel
+policy state for tests. The Amiga implementation uses a vendored ProTracker
+replayer to play MOD data through Paula.
 
 ## Helpers
 
