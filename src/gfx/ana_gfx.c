@@ -30,6 +30,17 @@
 #define ANA_IMAGE_MAX_FRAMES 256
 #define ANA_FONT_HEADER_SIZE 16
 #define ANA_AMIGA_MAX_DIRTY_RECTS 64
+#define ANA_COPY_8_PIXELS(dest, src) \
+    do { \
+        (dest)[0] = (src)[0]; \
+        (dest)[1] = (src)[1]; \
+        (dest)[2] = (src)[2]; \
+        (dest)[3] = (src)[3]; \
+        (dest)[4] = (src)[4]; \
+        (dest)[5] = (src)[5]; \
+        (dest)[6] = (src)[6]; \
+        (dest)[7] = (src)[7]; \
+    } while (0)
 
 #ifdef ANA_TARGET_AMIGA
 #ifdef BORDERLESS
@@ -2727,55 +2738,63 @@ static int ana_draw_image_frame_fast(
                 x;
 
             bits = mask[(row * 2)];
-            if ((bits & 0x80u) != 0u) {
-                dest_row[0] = source_row[0];
-            }
-            if ((bits & 0x40u) != 0u) {
-                dest_row[1] = source_row[1];
-            }
-            if ((bits & 0x20u) != 0u) {
-                dest_row[2] = source_row[2];
-            }
-            if ((bits & 0x10u) != 0u) {
-                dest_row[3] = source_row[3];
-            }
-            if ((bits & 0x08u) != 0u) {
-                dest_row[4] = source_row[4];
-            }
-            if ((bits & 0x04u) != 0u) {
-                dest_row[5] = source_row[5];
-            }
-            if ((bits & 0x02u) != 0u) {
-                dest_row[6] = source_row[6];
-            }
-            if ((bits & 0x01u) != 0u) {
-                dest_row[7] = source_row[7];
+            if (bits == 0xffu) {
+                ANA_COPY_8_PIXELS(dest_row, source_row);
+            } else if (bits != 0u) {
+                if ((bits & 0x80u) != 0u) {
+                    dest_row[0] = source_row[0];
+                }
+                if ((bits & 0x40u) != 0u) {
+                    dest_row[1] = source_row[1];
+                }
+                if ((bits & 0x20u) != 0u) {
+                    dest_row[2] = source_row[2];
+                }
+                if ((bits & 0x10u) != 0u) {
+                    dest_row[3] = source_row[3];
+                }
+                if ((bits & 0x08u) != 0u) {
+                    dest_row[4] = source_row[4];
+                }
+                if ((bits & 0x04u) != 0u) {
+                    dest_row[5] = source_row[5];
+                }
+                if ((bits & 0x02u) != 0u) {
+                    dest_row[6] = source_row[6];
+                }
+                if ((bits & 0x01u) != 0u) {
+                    dest_row[7] = source_row[7];
+                }
             }
 
             bits = mask[(row * 2) + 1];
-            if ((bits & 0x80u) != 0u) {
-                dest_row[8] = source_row[8];
-            }
-            if ((bits & 0x40u) != 0u) {
-                dest_row[9] = source_row[9];
-            }
-            if ((bits & 0x20u) != 0u) {
-                dest_row[10] = source_row[10];
-            }
-            if ((bits & 0x10u) != 0u) {
-                dest_row[11] = source_row[11];
-            }
-            if ((bits & 0x08u) != 0u) {
-                dest_row[12] = source_row[12];
-            }
-            if ((bits & 0x04u) != 0u) {
-                dest_row[13] = source_row[13];
-            }
-            if ((bits & 0x02u) != 0u) {
-                dest_row[14] = source_row[14];
-            }
-            if ((bits & 0x01u) != 0u) {
-                dest_row[15] = source_row[15];
+            if (bits == 0xffu) {
+                ANA_COPY_8_PIXELS(dest_row + 8, source_row + 8);
+            } else if (bits != 0u) {
+                if ((bits & 0x80u) != 0u) {
+                    dest_row[8] = source_row[8];
+                }
+                if ((bits & 0x40u) != 0u) {
+                    dest_row[9] = source_row[9];
+                }
+                if ((bits & 0x20u) != 0u) {
+                    dest_row[10] = source_row[10];
+                }
+                if ((bits & 0x10u) != 0u) {
+                    dest_row[11] = source_row[11];
+                }
+                if ((bits & 0x08u) != 0u) {
+                    dest_row[12] = source_row[12];
+                }
+                if ((bits & 0x04u) != 0u) {
+                    dest_row[13] = source_row[13];
+                }
+                if ((bits & 0x02u) != 0u) {
+                    dest_row[14] = source_row[14];
+                }
+                if ((bits & 0x01u) != 0u) {
+                    dest_row[15] = source_row[15];
+                }
             }
         }
 

@@ -87,6 +87,11 @@ small mover repair work to the formation rows and columns a dirty rect can
 actually touch, which avoids whole-formation scans when bullets move through
 the playfield.
 
+ANA's image renderer has dedicated fast paths for common small masked BOB
+sizes. In particular, 16-pixel-wide masked images avoid per-pixel work for
+fully transparent and fully opaque mask bytes. Prefer asset widths that match
+these common byte-aligned sprite sizes when practical.
+
 ## Escape hatches
 
 ANA should not prevent lower-level optimization. Acceptable escape hatches:
