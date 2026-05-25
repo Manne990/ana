@@ -33,12 +33,14 @@ Forsta implementationen finns i ramverket:
 - MOD-data allokeras i Chip RAM pa Amiga innan replay
 - ptplayer installeras lazy nar musik startas och tas bort igen nar musik/SFX
   ar idle
-- Invaders laddar och startar `assets/theme.mod` under `load`, men stoppar
-  musiken nar gameplay borjar for att skydda FPS
+- Invaders laddar och startar `assets/theme.mod` under `load` och later den
+  fortsatta under gameplay for att demonstrera musik och SFX samtidigt
 - Invaders behandlar musik som optional sa spelet kan starta aven om en stor
   MOD inte far plats i minnet
 - Invaders satter en explicit kanalpolicy med tva musikkanaler och tva
   SFX-kanaler
+- Invaders genererade SFX har enkel attack/release-envelope sa de inte klickar
+  lika hardt nar de spelas via Paula eller ptplayer
 
 Kvar att harda senare:
 

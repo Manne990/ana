@@ -18,7 +18,7 @@
 #define SOUND_FLAG_SIGNED_8BIT 1
 #define FIRE_SOUND_SAMPLES 160
 #define EXPLOSION_SOUND_SAMPLES 320
-#define STEP_SOUND_SAMPLES 160
+#define STEP_SOUND_SAMPLES 120
 #define GAME_OVER_SOUND_SAMPLES 480
 #define SOUND_SIZE(samples) (SOUND_HEADER_SIZE + (samples))
 
@@ -177,6 +177,34 @@ static unsigned char signed_sample(int sample)
     return (unsigned char)(sample & 0xff);
 }
 
+static int enveloped_sample(
+    int sample,
+    int index,
+    int sample_count,
+    int attack_samples,
+    int release_samples)
+{
+    int scale;
+    int release_index;
+
+    scale = 64;
+    if (attack_samples > 0 && index < attack_samples) {
+        scale = (index * 64) / attack_samples;
+    }
+
+    release_index = sample_count - index;
+    if (release_samples > 0 && release_index < release_samples) {
+        int release_scale;
+
+        release_scale = (release_index * 64) / release_samples;
+        if (release_scale < scale) {
+            scale = release_scale;
+        }
+    }
+
+    return (sample * scale) / 64;
+}
+
 static void build_fire_sound(void)
 {
     unsigned char* out;
@@ -185,18 +213,19 @@ static void build_fire_sound(void)
     int period;
     int sample;
 
-    write_sound_header(fire_sound_data, FIRE_SOUND_SAMPLES, 42, 2);
+    write_sound_header(fire_sound_data, FIRE_SOUND_SAMPLES, 36, 2);
     out = fire_sound_data + SOUND_HEADER_SIZE;
     for (i = 0; i < FIRE_SOUND_SAMPLES; i++) {
-        amp = 58 - (i / 2);
-        if (amp < 8) {
-            amp = 8;
+        amp = 46 - (i / 3);
+        if (amp < 5) {
+            amp = 5;
         }
         period = 6 - (i / 24);
         if (period < 2) {
             period = 2;
         }
         sample = ((i / period) & 1) ? amp : -amp;
+        sample = enveloped_sample(sample, i, FIRE_SOUND_SAMPLES, 10, 34);
         out[i] = signed_sample(sample);
     }
 }
@@ -212,15 +241,16 @@ static void build_explosion_sound(void)
     write_sound_header(
         explosion_sound_data,
         EXPLOSION_SOUND_SAMPLES,
-        54,
+        44,
         4);
     out = explosion_sound_data + SOUND_HEADER_SIZE;
     state = 0x2468ace1UL;
     for (i = 0; i < EXPLOSION_SOUND_SAMPLES; i++) {
         state = (state * 1103515245UL) + 12345UL;
-        amp = 72 - ((i * 68) / EXPLOSION_SOUND_SAMPLES);
+        amp = 54 - ((i * 50) / EXPLOSION_SOUND_SAMPLES);
         sample = (int)((state >> 16) & 0x7fu) - 64;
         sample = (sample * amp) / 64;
+        sample = enveloped_sample(sample, i, EXPLOSION_SOUND_SAMPLES, 4, 80);
         out[i] = signed_sample(sample);
     }
 }
@@ -231,10 +261,11 @@ static void build_step_sound(void)
     int i;
     int sample;
 
-    write_sound_header(step_sound_data, STEP_SOUND_SAMPLES, 34, 1);
+    write_sound_header(step_sound_data, STEP_SOUND_SAMPLES, 24, 1);
     out = step_sound_data + SOUND_HEADER_SIZE;
     for (i = 0; i < STEP_SOUND_SAMPLES; i++) {
-        sample = ((i / 8) & 1) ? 42 : -42;
+        sample = ((i / 10) & 1) ? 28 : -28;
+        sample = enveloped_sample(sample, i, STEP_SOUND_SAMPLES, 6, 44);
         out[i] = signed_sample(sample);
     }
 }
@@ -247,15 +278,16 @@ static void build_game_over_sound(void)
     int period;
     int sample;
 
-    write_sound_header(game_over_sound_data, GAME_OVER_SOUND_SAMPLES, 52, 5);
+    write_sound_header(game_over_sound_data, GAME_OVER_SOUND_SAMPLES, 42, 5);
     out = game_over_sound_data + SOUND_HEADER_SIZE;
     for (i = 0; i < GAME_OVER_SOUND_SAMPLES; i++) {
-        amp = 58 - (i / 8);
-        if (amp < 20) {
-            amp = 20;
+        amp = 46 - (i / 10);
+        if (amp < 14) {
+            amp = 14;
         }
         period = 5 + (i / 32);
         sample = ((i / period) & 1) ? amp : -amp;
+        sample = enveloped_sample(sample, i, GAME_OVER_SOUND_SAMPLES, 10, 96);
         out[i] = signed_sample(sample);
     }
 }

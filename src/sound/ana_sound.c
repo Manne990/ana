@@ -653,7 +653,7 @@ static int ana_amiga_ptplayer_play_channel(int channel, ANA_Sound sound)
     int priority;
 
     if (!ana_ptplayer_installed || sound == NULL ||
-            sound->sample_memory == NULL || channel < 0 ||
+            sound->samples == NULL || channel < 0 ||
             channel >= ANA_SOUND_MAX_CHANNELS) {
         return 0;
     }
@@ -667,8 +667,8 @@ static int ana_amiga_ptplayer_play_channel(int channel, ANA_Sound sound)
     }
 
     sfx = &ana_pt_sfx_requests[channel];
-    sfx->sfx_ptr = sound->sample_memory;
-    sfx->sfx_len = (unsigned short)((sound->sample_alloc_size + 2L) / 2L);
+    sfx->sfx_ptr = sound->samples;
+    sfx->sfx_len = (unsigned short)(sound->sample_alloc_size / 2L);
     sfx->sfx_per = ana_amiga_audio_period_for_rate(sound->sample_rate);
     sfx->sfx_vol = ana_amiga_audio_volume_for_sound(sound);
     sfx->sfx_cha = (signed char)channel;

@@ -209,8 +209,6 @@ static void invaders_reset_formation(void)
 
 static void invaders_start_new_game(void)
 {
-    ana_stop_music();
-
     player_x = 152;
     player_y = 220;
     score = 0;
