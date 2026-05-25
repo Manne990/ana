@@ -244,11 +244,30 @@ Format-helpern kan vanta. Det viktiga i 0.2 ar dirty text-cache.
 - API:t dokumenteras som en hog-niva render-helper, inte som krav for enkla
   spel.
 
+## Implementationsstatus
+
+Implementerat:
+
+- `ANA_Rect`-helpers i `include/ana/ana_helpers.h`.
+- `ANA_Bob` med explicit `clear_previous`, `draw` och `commit`.
+- `ANA_RetainedLayer` for callback-baserad overlap repair.
+- `ANA_DrawLayer` for sma retained grupper.
+- `ANA_Label` for dirty HUD/text-cache utan heap per frame.
+- Host-tester for rect helpers, retained BOB, layer callback och label-cache.
+- Invaders anvander `ana_rect_make`, `ana_rect_align_x8`, `ANA_Bob` for
+  player-state och `ANA_Label` for HUD.
+
+Medvetet kvar i Invaders:
+
+- Exakt lagerordning for formation, shields, explosioner, bullets och player.
+- Spel-specifik overlap repair for formation och shields.
+- Bullet/explosion-state, eftersom det fortfarande ar kopplat till Invaders
+  regler och prestandaval.
+
 ## Oppna fragor
 
 - Ska `ANA_Bob` vara det publika namnet, eller ska det heta `ANA_DrawObject` for
   att kannas mer hog-niva?
-- Ska `ana_rect_align_x8` vara publikt advanced-API eller intern helper?
 - Ska layer-repair leva i gfx-modulen eller i en separat `ana_scene`/
   `ana_render_helpers`-modul?
 - Hur mycket state ska ANA spara per draw-slot nar direct-present bara anvander

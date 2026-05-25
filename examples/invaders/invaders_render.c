@@ -5,36 +5,6 @@ static int invaders_draw_slot_index(void)
     return demo_ticks & (INVADERS_DRAW_SLOTS - 1);
 }
 
-static ANA_Rect invaders_make_rect(int x, int y, int w, int h)
-{
-    ANA_Rect rect;
-
-    rect.x = x;
-    rect.y = y;
-    rect.w = w;
-    rect.h = h;
-
-    return rect;
-}
-
-static ANA_Rect invaders_align_rect_for_dirty(ANA_Rect rect)
-{
-    int max_x;
-
-    max_x = rect.x + rect.w;
-    rect.x &= ~7;
-    max_x = (max_x + 7) & ~7;
-    if (rect.x < 0) {
-        rect.x = 0;
-    }
-    if (max_x > ANA_DEFAULT_WIDTH) {
-        max_x = ANA_DEFAULT_WIDTH;
-    }
-    rect.w = max_x - rect.x;
-
-    return rect;
-}
-
 static int invaders_rect_overlaps_alive_enemy(ANA_Rect rect)
 {
     ANA_Rect enemy;
@@ -75,7 +45,7 @@ static int invaders_bullet_should_draw(
         return 0;
     }
 
-    rect = invaders_make_rect(
+    rect = ana_rect_make(
         bullet.x,
         bullet.y,
         bullet_width,
@@ -87,7 +57,7 @@ static int invaders_bullet_should_draw(
 
 static void invaders_fill_rect_black(ANA_Rect rect)
 {
-    rect = invaders_align_rect_for_dirty(rect);
+    rect = ana_rect_align_x8(rect, 0, ANA_DEFAULT_WIDTH);
     ana_fill_rect(0u, rect.x, rect.y, rect.w, rect.h);
 }
 
@@ -137,7 +107,7 @@ static int invaders_explosion_frame_for_age(int age)
 
 static ANA_Rect invaders_explosion_rect(const InvadersExplosion* explosion)
 {
-    return invaders_make_rect(
+    return ana_rect_make(
         explosion->x,
         explosion->y,
         EXPLOSION_WIDTH,
@@ -194,7 +164,7 @@ static void invaders_repair_formation_overlap(ANA_Rect rect)
         return;
     }
 
-    formation_rect = invaders_make_rect(
+    formation_rect = ana_rect_make(
         invader_formation_x,
         invader_formation_y,
         INVADER_FORMATION_WIDTH,
@@ -229,7 +199,7 @@ static void invaders_repair_formation_overlap(ANA_Rect rect)
 
 static int invaders_clear_previous_rect(int slot, ANA_Rect rect)
 {
-    rect = invaders_align_rect_for_dirty(rect);
+    rect = ana_rect_align_x8(rect, 0, ANA_DEFAULT_WIDTH);
     invaders_fill_rect_black(rect);
     if (!formation_dirty_slots[slot]) {
         invaders_repair_formation_overlap(rect);
@@ -246,8 +216,6 @@ static int invaders_clear_movers_from_state(
     const InvadersDrawSlot* draw_slot)
 {
     ANA_Rect rect;
-    int player_width;
-    int player_height;
     int bullet_width;
     int bullet_height;
     int redraw_explosions;
@@ -257,18 +225,12 @@ static int invaders_clear_movers_from_state(
         return 0;
     }
 
-    player_width = player_image != 0 ? ana_image_width(player_image) : 16;
-    player_height = player_image != 0 ? ana_image_height(player_image) : 10;
     bullet_width = bullet_image != 0 ? ana_image_width(bullet_image) : 2;
     bullet_height = bullet_image != 0 ? ana_image_height(bullet_image) : 6;
     redraw_explosions = 0;
 
-    if (draw_slot->has_player) {
-        rect = invaders_make_rect(
-            draw_slot->player_x,
-            draw_slot->player_y,
-            player_width,
-            player_height);
+    rect = ana_bob_previous_rect(&draw_slot->player_bob);
+    if (!ana_rect_is_empty(rect)) {
         if (invaders_clear_previous_rect(slot, rect)) {
             redraw_explosions = 1;
         }
@@ -276,7 +238,7 @@ static int invaders_clear_movers_from_state(
 
     for (i = 0; i < PLAYER_BULLET_SLOTS; i++) {
         if (draw_slot->bullets[i].active) {
-            rect = invaders_make_rect(
+            rect = ana_rect_make(
                 draw_slot->bullets[i].x,
                 draw_slot->bullets[i].y,
                 bullet_width,
@@ -289,7 +251,7 @@ static int invaders_clear_movers_from_state(
 
     for (i = 0; i < ALIEN_BULLET_SLOTS; i++) {
         if (draw_slot->alien_bullets[i].active) {
-            rect = invaders_make_rect(
+            rect = ana_rect_make(
                 draw_slot->alien_bullets[i].x,
                 draw_slot->alien_bullets[i].y,
                 bullet_width,
@@ -338,7 +300,10 @@ static int invaders_process_removed_enemies(int slot)
 
     redraw_explosions = 0;
     for (i = 0; i < removed_enemy_counts[slot]; i++) {
-        rect = invaders_align_rect_for_dirty(removed_enemy_rects[slot][i]);
+        rect = ana_rect_align_x8(
+            removed_enemy_rects[slot][i],
+            0,
+            ANA_DEFAULT_WIDTH);
         invaders_fill_rect_black(rect);
         if (invaders_rect_overlaps_active_explosion(rect)) {
             redraw_explosions = 1;
@@ -376,7 +341,7 @@ static void invaders_clear_formation_state(
             INVADER_WIDTH +
             ((max_col - min_col) * INVADER_SPACING_X);
         invaders_fill_rect_black(
-            invaders_make_rect(
+            ana_rect_make(
                 formation_x + (min_col * INVADER_SPACING_X),
                 formation_y + (row * INVADER_SPACING_Y),
                 width,
@@ -484,30 +449,43 @@ static void invaders_draw_shields_slot(int slot)
     shield_dirty_slots[slot] = 0;
 }
 
-static int invaders_hud_needs_redraw(
-    const InvadersDrawSlot* draw_slot,
-    const char* status)
+static void invaders_init_hud_labels(InvadersDrawSlot* draw_slot)
 {
-    return !draw_slot->hud_drawn ||
-        draw_slot->hud_score != score ||
-        draw_slot->hud_lives != lives ||
-        strcmp(draw_slot->hud_status, status) != 0;
-}
+    if (draw_slot->hud_labels_ready) {
+        return;
+    }
 
-static void invaders_store_hud_state(
-    InvadersDrawSlot* draw_slot,
-    const char* status)
-{
-    draw_slot->hud_drawn = 1;
-    draw_slot->hud_score = score;
-    draw_slot->hud_lives = lives;
-    strncpy(draw_slot->hud_status, status, HUD_STATUS_TEXT_SIZE - 1);
-    draw_slot->hud_status[HUD_STATUS_TEXT_SIZE - 1] = '\0';
+    ana_label_init(
+        &draw_slot->score_label,
+        hud_font,
+        HUD_SCORE_X,
+        HUD_SCORE_Y,
+        HUD_SCORE_CLEAR_WIDTH);
+    ana_label_init(
+        &draw_slot->lives_label,
+        hud_font,
+        HUD_LIVES_X,
+        HUD_LIVES_Y,
+        HUD_LIVES_CLEAR_WIDTH);
+    ana_label_init(
+        &draw_slot->status_label,
+        hud_font,
+        HUD_STATUS_X,
+        HUD_STATUS_Y,
+        HUD_STATUS_CLEAR_WIDTH);
+
+    draw_slot->score_label.color = 5u;
+    draw_slot->lives_label.color = 5u;
+    draw_slot->status_label.color = 5u;
+    draw_slot->hud_labels_ready = 1;
 }
 
 static void invaders_draw_hud_slot(int slot)
 {
     InvadersDrawSlot* draw_slot;
+    char score_text[32];
+    char lives_text[32];
+    char status_text[32];
     const char* status;
 
     if (hud_font == 0) {
@@ -516,49 +494,18 @@ static void invaders_draw_hud_slot(int slot)
 
     draw_slot = &draw_slots[slot];
     status = invaders_status_text();
-    if (!invaders_hud_needs_redraw(draw_slot, status)) {
-        return;
-    }
+    invaders_init_hud_labels(draw_slot);
 
-    ana_fill_rect(
-        0u,
-        HUD_SCORE_X,
-        HUD_SCORE_Y,
-        HUD_SCORE_CLEAR_WIDTH,
-        HUD_FONT_HEIGHT);
-    ana_fill_rect(
-        0u,
-        HUD_LIVES_X,
-        HUD_LIVES_Y,
-        HUD_LIVES_CLEAR_WIDTH,
-        HUD_FONT_HEIGHT);
-    ana_fill_rect(
-        0u,
-        HUD_STATUS_X,
-        HUD_STATUS_Y,
-        HUD_STATUS_CLEAR_WIDTH,
-        HUD_FONT_HEIGHT);
+    sprintf(score_text, "SCORE %d", score);
+    sprintf(lives_text, "LIVES %d", lives);
+    sprintf(status_text, "STATUS %s", status);
 
-    ana_draw_text(hud_font, HUD_SCORE_X, HUD_SCORE_Y, "SCORE");
-    ana_draw_int(
-        hud_font,
-        HUD_SCORE_X + ana_text_width(hud_font, "SCORE "),
-        HUD_SCORE_Y,
-        score);
-    ana_draw_text(hud_font, HUD_LIVES_X, HUD_LIVES_Y, "LIVES");
-    ana_draw_int(
-        hud_font,
-        HUD_LIVES_X + ana_text_width(hud_font, "LIVES "),
-        HUD_LIVES_Y,
-        lives);
-    ana_draw_text(hud_font, HUD_STATUS_X, HUD_STATUS_Y, "STATUS");
-    ana_draw_text(
-        hud_font,
-        HUD_STATUS_X + ana_text_width(hud_font, "STATUS "),
-        HUD_STATUS_Y,
-        status);
-
-    invaders_store_hud_state(draw_slot, status);
+    ana_label_set_text(&draw_slot->score_label, score_text);
+    ana_label_set_text(&draw_slot->lives_label, lives_text);
+    ana_label_set_text(&draw_slot->status_label, status_text);
+    ana_label_draw_if_dirty(&draw_slot->score_label);
+    ana_label_draw_if_dirty(&draw_slot->lives_label);
+    ana_label_draw_if_dirty(&draw_slot->status_label);
 }
 
 static void invaders_draw_centered_text(int y, const char* text)
@@ -605,10 +552,13 @@ static void invaders_store_draw_slot(int slot)
     draw_slot = &draw_slots[slot];
     bullet_width = bullet_image != 0 ? ana_image_width(bullet_image) : 2;
     bullet_height = bullet_image != 0 ? ana_image_height(bullet_image) : 6;
-    draw_slot->has_player =
-        game_state == INVADERS_STATE_PLAYING && player_image != 0;
-    draw_slot->player_x = player_x;
-    draw_slot->player_y = player_y;
+
+    ana_bob_init(&draw_slot->player_bob, player_image);
+    ana_bob_set_position(&draw_slot->player_bob, player_x, player_y);
+    ana_bob_set_visible(
+        &draw_slot->player_bob,
+        game_state == INVADERS_STATE_PLAYING && player_image != 0);
+    ana_bob_commit(&draw_slot->player_bob);
 
     for (i = 0; i < PLAYER_BULLET_SLOTS; i++) {
         draw_slot->bullets[i] = player_bullets[i];
@@ -650,6 +600,7 @@ void invaders_draw(void)
     int frame;
     int slot;
     int redraw_explosions;
+    ANA_Bob player_bob;
 
     slot = invaders_draw_slot_index();
     redraw_explosions = 0;
@@ -746,7 +697,9 @@ void invaders_draw(void)
     }
 
     if (player_image != 0) {
-        ana_draw_image(player_image, player_x, player_y);
+        ana_bob_init(&player_bob, player_image);
+        ana_bob_set_position(&player_bob, player_x, player_y);
+        ana_bob_draw(&player_bob);
     }
 
     invaders_store_draw_slot(slot);

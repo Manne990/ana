@@ -2406,6 +2406,104 @@ int ana_text_width(ANA_Font font, const char* text)
     return count * font->char_width;
 }
 
+void ana_layer_mark_dirty(ANA_DrawLayer* layer)
+{
+    if (layer == NULL) {
+        return;
+    }
+
+    layer->dirty = 1;
+}
+
+void ana_layer_draw_if_dirty(ANA_DrawLayer* layer)
+{
+    ANA_Rect rect;
+
+    if (layer == NULL || !layer->dirty) {
+        return;
+    }
+
+    if (layer->redraw != NULL) {
+        rect = ana_rect_make(0, 0, 0, 0);
+        layer->redraw(rect, layer->user_data);
+    }
+
+    layer->dirty = 0;
+}
+
+void ana_label_init(
+    ANA_Label* label,
+    ANA_Font font,
+    int x,
+    int y,
+    int clear_width)
+{
+    if (label == NULL) {
+        return;
+    }
+
+    label->font = font;
+    label->x = x;
+    label->y = y;
+    label->color = (unsigned char)ANA_DEFAULT_COLORS;
+    label->clear_color = 0u;
+    label->clear_width = clear_width;
+    label->text[0] = '\0';
+    label->dirty = 1;
+}
+
+void ana_label_set_text(ANA_Label* label, const char* text)
+{
+    const char* source;
+
+    if (label == NULL) {
+        return;
+    }
+
+    source = text != NULL ? text : "";
+    if (strcmp(label->text, source) == 0) {
+        return;
+    }
+
+    strncpy(label->text, source, sizeof(label->text) - 1u);
+    label->text[sizeof(label->text) - 1u] = '\0';
+    label->dirty = 1;
+}
+
+void ana_label_draw_if_dirty(ANA_Label* label)
+{
+    int clear_height;
+
+    if (label == NULL || !label->dirty) {
+        return;
+    }
+
+    if (label->font == NULL) {
+        label->dirty = 0;
+        return;
+    }
+
+    clear_height = label->font->char_height;
+    if (label->clear_width > 0 && clear_height > 0) {
+        ana_fill_rect(
+            label->clear_color,
+            label->x,
+            label->y,
+            label->clear_width,
+            clear_height);
+    }
+
+    if (label->color < ANA_DEFAULT_COLORS) {
+        ana_set_font_color(label->font, label->color);
+    }
+
+    if (label->text[0] != '\0') {
+        ana_draw_text(label->font, label->x, label->y, label->text);
+    }
+
+    label->dirty = 0;
+}
+
 void ana_free_image(ANA_Image image)
 {
     if (image == NULL) {
@@ -2712,6 +2810,140 @@ int ana_image_frame_count(ANA_Image image)
     }
 
     return image->frame_count;
+}
+
+void ana_bob_init(ANA_Bob* bob, ANA_Image image)
+{
+    if (bob == NULL) {
+        return;
+    }
+
+    bob->image = image;
+    bob->frame = 0;
+    bob->x = 0;
+    bob->y = 0;
+    bob->previous_x = 0;
+    bob->previous_y = 0;
+    bob->visible = 1;
+    bob->previous_visible = 0;
+    bob->clear_color = 0u;
+}
+
+void ana_bob_set_position(ANA_Bob* bob, int x, int y)
+{
+    if (bob == NULL) {
+        return;
+    }
+
+    bob->x = x;
+    bob->y = y;
+}
+
+void ana_bob_set_frame(ANA_Bob* bob, int frame)
+{
+    if (bob == NULL) {
+        return;
+    }
+
+    bob->frame = frame;
+}
+
+void ana_bob_set_visible(ANA_Bob* bob, int visible)
+{
+    if (bob == NULL) {
+        return;
+    }
+
+    bob->visible = visible ? 1 : 0;
+}
+
+ANA_Rect ana_bob_rect(const ANA_Bob* bob)
+{
+    if (bob == NULL || bob->image == NULL || !bob->visible) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    return ana_rect_make(
+        bob->x,
+        bob->y,
+        ana_image_width(bob->image),
+        ana_image_height(bob->image));
+}
+
+ANA_Rect ana_bob_previous_rect(const ANA_Bob* bob)
+{
+    if (bob == NULL || bob->image == NULL || !bob->previous_visible) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    return ana_rect_make(
+        bob->previous_x,
+        bob->previous_y,
+        ana_image_width(bob->image),
+        ana_image_height(bob->image));
+}
+
+void ana_bob_clear_previous(const ANA_Bob* bob)
+{
+    ANA_Rect rect;
+
+    if (bob == NULL) {
+        return;
+    }
+
+    rect = ana_bob_previous_rect(bob);
+    if (!ana_rect_is_empty(rect)) {
+        ana_fill_rect(bob->clear_color, rect.x, rect.y, rect.w, rect.h);
+    }
+}
+
+void ana_bob_clear_previous_with_layers(
+    const ANA_Bob* bob,
+    const ANA_RetainedLayer* layers,
+    int layer_count)
+{
+    ANA_Rect rect;
+    int i;
+
+    if (bob == NULL) {
+        return;
+    }
+
+    rect = ana_bob_previous_rect(bob);
+    if (ana_rect_is_empty(rect)) {
+        return;
+    }
+
+    ana_fill_rect(bob->clear_color, rect.x, rect.y, rect.w, rect.h);
+    if (layers == NULL || layer_count <= 0) {
+        return;
+    }
+
+    for (i = 0; i < layer_count; i++) {
+        if (layers[i].redraw != NULL) {
+            layers[i].redraw(rect, layers[i].user_data);
+        }
+    }
+}
+
+void ana_bob_draw(const ANA_Bob* bob)
+{
+    if (bob == NULL || bob->image == NULL || !bob->visible) {
+        return;
+    }
+
+    ana_draw_image_frame(bob->image, bob->frame, bob->x, bob->y);
+}
+
+void ana_bob_commit(ANA_Bob* bob)
+{
+    if (bob == NULL) {
+        return;
+    }
+
+    bob->previous_x = bob->x;
+    bob->previous_y = bob->y;
+    bob->previous_visible = bob->visible;
 }
 
 void ana_gfx_close(void)

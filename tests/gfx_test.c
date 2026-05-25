@@ -89,6 +89,25 @@ static const unsigned char memory_test_font_bytes[] = {
     0xa0, 0xa0, 0xa0, 0xa0
 };
 
+static int retained_redraw_calls;
+static ANA_Rect retained_redraw_rect;
+
+static void retained_test_redraw(ANA_Rect rect, void* user_data)
+{
+    int* marker;
+
+    marker = (int*)user_data;
+    retained_redraw_calls++;
+    retained_redraw_rect = rect;
+    if (marker != 0) {
+        *marker = 123;
+    }
+
+    if (!ana_rect_is_empty(rect)) {
+        ana_fill_rect(6, rect.x, rect.y, rect.w, rect.h);
+    }
+}
+
 static void write_test_image_file(const char* path)
 {
     FILE* file;
@@ -254,6 +273,96 @@ static void test_font_loading_and_drawing(void)
     remove(path);
 }
 
+static void test_retained_render_helpers(void)
+{
+    ANA_Image image;
+    ANA_Font font;
+    ANA_Bob bob;
+    ANA_RetainedLayer retained_layer;
+    ANA_DrawLayer draw_layer;
+    ANA_Label label;
+    ANA_Rect rect;
+    int marker;
+
+    image = ana_load_image_data(
+        memory_test_image_bytes,
+        (long)sizeof(memory_test_image_bytes));
+    assert(image != 0);
+
+    font = ana_load_font_data(
+        memory_test_font_bytes,
+        (long)sizeof(memory_test_font_bytes));
+    assert(font != 0);
+
+    assert(ana_gfx_open(ana_default_profile()) == ANA_OK);
+    ana_clear(9);
+
+    ana_bob_init(&bob, image);
+    bob.clear_color = 4u;
+    ana_bob_set_frame(&bob, 1);
+    ana_bob_set_position(&bob, 10, 11);
+    rect = ana_bob_rect(&bob);
+    assert(rect.x == 10);
+    assert(rect.y == 11);
+    assert(rect.w == 3);
+    assert(rect.h == 2);
+    assert(ana_rect_is_empty(ana_bob_previous_rect(&bob)));
+
+    ana_bob_draw(&bob);
+    assert(ana_gfx_draw_pixel(10, 11) == 2);
+    ana_bob_commit(&bob);
+
+    ana_bob_set_position(&bob, 20, 21);
+    ana_bob_clear_previous(&bob);
+    assert(ana_gfx_draw_pixel(10, 11) == 4);
+    ana_bob_draw(&bob);
+    assert(ana_gfx_draw_pixel(20, 21) == 2);
+    ana_bob_commit(&bob);
+
+    retained_redraw_calls = 0;
+    marker = 0;
+    retained_layer.redraw = retained_test_redraw;
+    retained_layer.user_data = &marker;
+    ana_bob_set_position(&bob, 30, 31);
+    ana_bob_clear_previous_with_layers(&bob, &retained_layer, 1);
+    assert(retained_redraw_calls == 1);
+    assert(retained_redraw_rect.x == 20);
+    assert(retained_redraw_rect.y == 21);
+    assert(marker == 123);
+    assert(ana_gfx_draw_pixel(20, 21) == 6);
+
+    draw_layer.redraw = retained_test_redraw;
+    draw_layer.user_data = &marker;
+    draw_layer.dirty = 0;
+    ana_layer_mark_dirty(&draw_layer);
+    assert(draw_layer.dirty);
+    ana_layer_draw_if_dirty(&draw_layer);
+    assert(!draw_layer.dirty);
+    assert(retained_redraw_calls == 2);
+    assert(ana_rect_is_empty(retained_redraw_rect));
+
+    ana_label_init(&label, font, 5, 6, 24);
+    label.color = 5u;
+    ana_label_set_text(&label, "012");
+    assert(label.dirty);
+    ana_label_draw_if_dirty(&label);
+    assert(!label.dirty);
+    assert(ana_gfx_draw_pixel(5, 6) == 5);
+    ana_label_set_text(&label, "012");
+    assert(!label.dirty);
+
+    ana_label_set_text(&label, "1");
+    assert(label.dirty);
+    ana_label_draw_if_dirty(&label);
+    assert(!label.dirty);
+    assert(ana_gfx_draw_pixel(5, 6) == 0);
+    assert(ana_gfx_draw_pixel(6, 6) == 5);
+
+    ana_gfx_close();
+    ana_free_font(font);
+    ana_free_image(image);
+}
+
 static void test_image_rejects_invalid_files(void)
 {
     const char* path;
@@ -287,6 +396,7 @@ int main(void)
     test_palette_accepts_supported_colors();
     test_image_loading_and_drawing();
     test_font_loading_and_drawing();
+    test_retained_render_helpers();
     test_image_rejects_invalid_files();
 
     return 0;

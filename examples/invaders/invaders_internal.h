@@ -61,7 +61,6 @@
 #define HUD_SCORE_CLEAR_WIDTH 90
 #define HUD_LIVES_CLEAR_WIDTH 70
 #define HUD_STATUS_CLEAR_WIDTH 150
-#define HUD_STATUS_TEXT_SIZE 16
 
 #define SHIELD_COUNT 4
 #define SHIELD_COLUMNS 8
@@ -95,16 +94,14 @@ typedef struct InvadersBullet {
 } InvadersBullet;
 
 typedef struct InvadersDrawSlot {
-    int has_player;
-    int player_x;
-    int player_y;
+    ANA_Bob player_bob;
     InvadersBullet bullets[PLAYER_BULLET_SLOTS];
     InvadersBullet alien_bullets[ALIEN_BULLET_SLOTS];
     InvadersExplosion explosions[EXPLOSION_SLOTS];
-    int hud_drawn;
-    int hud_score;
-    int hud_lives;
-    char hud_status[HUD_STATUS_TEXT_SIZE];
+    ANA_Label score_label;
+    ANA_Label lives_label;
+    ANA_Label status_label;
+    int hud_labels_ready;
 } InvadersDrawSlot;
 
 extern unsigned char invader_alive[INVADER_ROWS][INVADER_COLUMNS];

@@ -93,7 +93,7 @@ static void invaders_request_full_clear(void)
         formation_dirty_slots[i] = 1;
         shield_dirty_slots[i] = 1;
         removed_enemy_counts[i] = 0;
-        draw_slots[i].hud_drawn = 0;
+        draw_slots[i].hud_labels_ready = 0;
     }
 }
 

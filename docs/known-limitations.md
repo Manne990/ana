@@ -18,7 +18,8 @@ preview work.
 
 ## Graphics
 
-- No general sprite manager.
+- Retained BOB and label helpers exist, but there is no full sprite manager or
+  scene graph.
 - No tilemap system.
 - No scrolling background support.
 - No hardware sprite API yet.

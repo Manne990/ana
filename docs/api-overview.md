@@ -91,6 +91,31 @@ Fonts:
 Images and fonts are expected to be converted before runtime. The current file
 formats are `.anaimg` and `.anafnt`.
 
+Retained rendering helpers:
+
+- `ANA_Bob`
+- `ana_bob_init`
+- `ana_bob_set_position`
+- `ana_bob_set_frame`
+- `ana_bob_set_visible`
+- `ana_bob_rect`
+- `ana_bob_previous_rect`
+- `ana_bob_clear_previous`
+- `ana_bob_clear_previous_with_layers`
+- `ana_bob_draw`
+- `ana_bob_commit`
+- `ANA_RetainedLayer`
+- `ANA_DrawLayer`
+- `ana_layer_mark_dirty`
+- `ana_layer_draw_if_dirty`
+- `ANA_Label`
+- `ana_label_init`
+- `ana_label_set_text`
+- `ana_label_draw_if_dirty`
+
+These helpers keep dirty rendering explicit. They do not replace a game's draw
+order, collision rules, or custom performance work.
+
 ## Input
 
 ANA uses semantic input names rather than device-specific names.
@@ -172,6 +197,12 @@ Small game helpers:
 
 - `ANA_Rect`
 - `ANA_Timer`
+- `ana_rect_make`
+- `ana_rect_clip`
+- `ana_rect_union`
+- `ana_rect_align_x8`
+- `ana_rect_is_empty`
+- `ana_rect_contains`
 - `ana_rect_intersects`
 - `ana_clamp_int`
 - `ana_timer_reset`
