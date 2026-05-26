@@ -365,8 +365,17 @@ static void test_retained_render_helpers(void)
     ana_bob_draw(&bob);
     assert(ana_gfx_draw_pixel(10, 11) == 2);
     ana_bob_commit(&bob);
+    assert(ana_bob_is_unchanged(&bob));
+    ana_bob_set_image(&bob, 0);
+    rect = ana_bob_previous_rect(&bob);
+    assert(rect.x == 10);
+    assert(rect.y == 11);
+    assert(rect.w == 3);
+    assert(rect.h == 2);
+    ana_bob_set_image(&bob, image);
 
     ana_bob_set_position(&bob, 20, 21);
+    assert(!ana_bob_is_unchanged(&bob));
     ana_bob_clear_previous(&bob);
     assert(ana_gfx_draw_pixel(10, 11) == 4);
     ana_bob_draw(&bob);
@@ -378,8 +387,21 @@ static void test_retained_render_helpers(void)
     retained_layer.redraw = retained_test_redraw;
     retained_layer.user_data = &marker;
     ana_bob_set_position(&bob, 30, 31);
-    ana_bob_clear_previous_with_layers(&bob, &retained_layer, 1);
+    rect = ana_bob_clear_previous_x8_with_layers(
+        &bob,
+        0,
+        ANA_DEFAULT_WIDTH,
+        &retained_layer,
+        1);
+    assert(rect.x == 16);
+    assert(rect.y == 21);
+    assert(rect.w == 8);
+    assert(rect.h == 2);
     assert(retained_redraw_calls == 1);
+    assert(retained_redraw_rect.x == 16);
+    assert(marker == 123);
+    ana_bob_clear_previous_with_layers(&bob, &retained_layer, 1);
+    assert(retained_redraw_calls == 2);
     assert(retained_redraw_rect.x == 20);
     assert(retained_redraw_rect.y == 21);
     assert(marker == 123);
@@ -392,7 +414,7 @@ static void test_retained_render_helpers(void)
     assert(draw_layer.dirty);
     ana_layer_draw_if_dirty(&draw_layer);
     assert(!draw_layer.dirty);
-    assert(retained_redraw_calls == 2);
+    assert(retained_redraw_calls == 3);
     assert(ana_rect_is_empty(retained_redraw_rect));
 
     ana_label_init(&label, font, 5, 6, 24);

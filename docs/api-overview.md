@@ -101,16 +101,21 @@ Retained rendering helpers:
 
 - `ANA_Bob`
 - `ana_bob_init`
+- `ana_bob_set_image`
 - `ana_bob_set_position`
 - `ana_bob_set_frame`
 - `ana_bob_set_visible`
+- `ana_bob_is_unchanged`
 - `ana_bob_rect`
 - `ana_bob_previous_rect`
 - `ana_bob_clear_previous`
 - `ana_bob_clear_previous_with_layers`
+- `ana_bob_clear_previous_x8_with_layers`
 - `ana_bob_draw`
 - `ana_bob_commit`
 - `ANA_RetainedLayer`
+- `ana_retained_clear_rect`
+- `ana_retained_clear_rect_x8`
 - `ANA_DrawLayer`
 - `ana_layer_mark_dirty`
 - `ana_layer_draw_if_dirty`

@@ -29,7 +29,8 @@ Implemented today:
 - explicit music/SFX channel policy for Paula channels
 - MOD music asset loading and Amiga playback through a vendored ProTracker
   replayer
-- small helpers for rectangles, clamp, timers, retained BOBs, and dirty labels
+- small helpers for rectangles, clamp, timers, retained BOBs, retained clear
+  repair, and dirty labels
 - host-side image/font conversion to `.anaimg` and `.anafnt`
 - PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests

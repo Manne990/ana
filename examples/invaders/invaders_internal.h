@@ -99,9 +99,9 @@ typedef struct InvadersBullet {
 
 typedef struct InvadersDrawSlot {
     ANA_Bob player_bob;
-    InvadersBullet bullets[PLAYER_BULLET_SLOTS];
-    InvadersBullet alien_bullets[ALIEN_BULLET_SLOTS];
-    InvadersExplosion explosions[EXPLOSION_SLOTS];
+    ANA_Bob player_bullet_bobs[PLAYER_BULLET_SLOTS];
+    ANA_Bob alien_bullet_bobs[ALIEN_BULLET_SLOTS];
+    ANA_Bob explosion_bobs[EXPLOSION_SLOTS];
     ANA_Label score_label;
     ANA_Label lives_label;
     ANA_Label status_label;

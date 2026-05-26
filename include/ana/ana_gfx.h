@@ -44,11 +44,15 @@ typedef struct ANA_RetainedLayer {
 
 typedef struct ANA_Bob {
     ANA_Image image;
+    ANA_Image previous_image;
     int frame;
     int x;
     int y;
     int previous_x;
     int previous_y;
+    int previous_frame;
+    int previous_w;
+    int previous_h;
     int visible;
     int previous_visible;
     unsigned char clear_color;
@@ -86,15 +90,36 @@ int ana_image_width(ANA_Image image);
 int ana_image_height(ANA_Image image);
 int ana_image_frame_count(ANA_Image image);
 
+ANA_Rect ana_retained_clear_rect(
+    ANA_Rect rect,
+    unsigned char clear_color,
+    const ANA_RetainedLayer* layers,
+    int layer_count);
+ANA_Rect ana_retained_clear_rect_x8(
+    ANA_Rect rect,
+    unsigned char clear_color,
+    int min_x,
+    int max_x,
+    const ANA_RetainedLayer* layers,
+    int layer_count);
+
 void ana_bob_init(ANA_Bob* bob, ANA_Image image);
+void ana_bob_set_image(ANA_Bob* bob, ANA_Image image);
 void ana_bob_set_position(ANA_Bob* bob, int x, int y);
 void ana_bob_set_frame(ANA_Bob* bob, int frame);
 void ana_bob_set_visible(ANA_Bob* bob, int visible);
+int ana_bob_is_unchanged(const ANA_Bob* bob);
 ANA_Rect ana_bob_rect(const ANA_Bob* bob);
 ANA_Rect ana_bob_previous_rect(const ANA_Bob* bob);
 void ana_bob_clear_previous(const ANA_Bob* bob);
 void ana_bob_clear_previous_with_layers(
     const ANA_Bob* bob,
+    const ANA_RetainedLayer* layers,
+    int layer_count);
+ANA_Rect ana_bob_clear_previous_x8_with_layers(
+    const ANA_Bob* bob,
+    int min_x,
+    int max_x,
     const ANA_RetainedLayer* layers,
     int layer_count);
 void ana_bob_draw(const ANA_Bob* bob);

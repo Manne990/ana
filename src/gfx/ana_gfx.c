@@ -2875,6 +2875,52 @@ int ana_image_frame_count(ANA_Image image)
     return image->frame_count;
 }
 
+static void ana_retained_redraw_layers(
+    ANA_Rect rect,
+    const ANA_RetainedLayer* layers,
+    int layer_count)
+{
+    int i;
+
+    if (layers == NULL || layer_count <= 0) {
+        return;
+    }
+
+    for (i = 0; i < layer_count; i++) {
+        if (layers[i].redraw != NULL) {
+            layers[i].redraw(rect, layers[i].user_data);
+        }
+    }
+}
+
+ANA_Rect ana_retained_clear_rect(
+    ANA_Rect rect,
+    unsigned char clear_color,
+    const ANA_RetainedLayer* layers,
+    int layer_count)
+{
+    if (ana_rect_is_empty(rect)) {
+        return rect;
+    }
+
+    ana_fill_rect(clear_color, rect.x, rect.y, rect.w, rect.h);
+    ana_retained_redraw_layers(rect, layers, layer_count);
+
+    return rect;
+}
+
+ANA_Rect ana_retained_clear_rect_x8(
+    ANA_Rect rect,
+    unsigned char clear_color,
+    int min_x,
+    int max_x,
+    const ANA_RetainedLayer* layers,
+    int layer_count)
+{
+    rect = ana_rect_align_x8(rect, min_x, max_x);
+    return ana_retained_clear_rect(rect, clear_color, layers, layer_count);
+}
+
 void ana_bob_init(ANA_Bob* bob, ANA_Image image)
 {
     if (bob == NULL) {
@@ -2882,14 +2928,27 @@ void ana_bob_init(ANA_Bob* bob, ANA_Image image)
     }
 
     bob->image = image;
+    bob->previous_image = NULL;
     bob->frame = 0;
     bob->x = 0;
     bob->y = 0;
     bob->previous_x = 0;
     bob->previous_y = 0;
+    bob->previous_frame = 0;
+    bob->previous_w = 0;
+    bob->previous_h = 0;
     bob->visible = 1;
     bob->previous_visible = 0;
     bob->clear_color = 0u;
+}
+
+void ana_bob_set_image(ANA_Bob* bob, ANA_Image image)
+{
+    if (bob == NULL) {
+        return;
+    }
+
+    bob->image = image;
 }
 
 void ana_bob_set_position(ANA_Bob* bob, int x, int y)
@@ -2920,6 +2979,26 @@ void ana_bob_set_visible(ANA_Bob* bob, int visible)
     bob->visible = visible ? 1 : 0;
 }
 
+int ana_bob_is_unchanged(const ANA_Bob* bob)
+{
+    if (bob == NULL) {
+        return 1;
+    }
+
+    if (bob->visible != bob->previous_visible) {
+        return 0;
+    }
+
+    if (!bob->visible) {
+        return 1;
+    }
+
+    return bob->x == bob->previous_x &&
+        bob->y == bob->previous_y &&
+        bob->frame == bob->previous_frame &&
+        bob->image == bob->previous_image;
+}
+
 ANA_Rect ana_bob_rect(const ANA_Bob* bob)
 {
     if (bob == NULL || bob->image == NULL || !bob->visible) {
@@ -2935,15 +3014,15 @@ ANA_Rect ana_bob_rect(const ANA_Bob* bob)
 
 ANA_Rect ana_bob_previous_rect(const ANA_Bob* bob)
 {
-    if (bob == NULL || bob->image == NULL || !bob->previous_visible) {
+    if (bob == NULL || !bob->previous_visible) {
         return ana_rect_make(0, 0, 0, 0);
     }
 
     return ana_rect_make(
         bob->previous_x,
         bob->previous_y,
-        ana_image_width(bob->image),
-        ana_image_height(bob->image));
+        bob->previous_w,
+        bob->previous_h);
 }
 
 void ana_bob_clear_previous(const ANA_Bob* bob)
@@ -2966,27 +3045,36 @@ void ana_bob_clear_previous_with_layers(
     int layer_count)
 {
     ANA_Rect rect;
-    int i;
 
     if (bob == NULL) {
         return;
     }
 
     rect = ana_bob_previous_rect(bob);
-    if (ana_rect_is_empty(rect)) {
-        return;
+    ana_retained_clear_rect(rect, bob->clear_color, layers, layer_count);
+}
+
+ANA_Rect ana_bob_clear_previous_x8_with_layers(
+    const ANA_Bob* bob,
+    int min_x,
+    int max_x,
+    const ANA_RetainedLayer* layers,
+    int layer_count)
+{
+    ANA_Rect rect;
+
+    if (bob == NULL) {
+        return ana_rect_make(0, 0, 0, 0);
     }
 
-    ana_fill_rect(bob->clear_color, rect.x, rect.y, rect.w, rect.h);
-    if (layers == NULL || layer_count <= 0) {
-        return;
-    }
-
-    for (i = 0; i < layer_count; i++) {
-        if (layers[i].redraw != NULL) {
-            layers[i].redraw(rect, layers[i].user_data);
-        }
-    }
+    rect = ana_bob_previous_rect(bob);
+    return ana_retained_clear_rect_x8(
+        rect,
+        bob->clear_color,
+        min_x,
+        max_x,
+        layers,
+        layer_count);
 }
 
 void ana_bob_draw(const ANA_Bob* bob)
@@ -3000,12 +3088,19 @@ void ana_bob_draw(const ANA_Bob* bob)
 
 void ana_bob_commit(ANA_Bob* bob)
 {
+    ANA_Rect rect;
+
     if (bob == NULL) {
         return;
     }
 
+    rect = ana_bob_rect(bob);
+    bob->previous_image = bob->image;
     bob->previous_x = bob->x;
     bob->previous_y = bob->y;
+    bob->previous_frame = bob->frame;
+    bob->previous_w = rect.w;
+    bob->previous_h = rect.h;
     bob->previous_visible = bob->visible;
 }
 

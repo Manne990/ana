@@ -75,20 +75,26 @@ Foreslaget forsta API:
 ```c
 typedef struct ANA_Bob {
     ANA_Image image;
+    ANA_Image previous_image;
     int frame;
     int x;
     int y;
     int previous_x;
     int previous_y;
+    int previous_frame;
+    int previous_w;
+    int previous_h;
     int visible;
     int previous_visible;
     unsigned char clear_color;
 } ANA_Bob;
 
 void ana_bob_init(ANA_Bob* bob, ANA_Image image);
+void ana_bob_set_image(ANA_Bob* bob, ANA_Image image);
 void ana_bob_set_position(ANA_Bob* bob, int x, int y);
 void ana_bob_set_frame(ANA_Bob* bob, int frame);
 void ana_bob_set_visible(ANA_Bob* bob, int visible);
+int ana_bob_is_unchanged(const ANA_Bob* bob);
 ANA_Rect ana_bob_rect(const ANA_Bob* bob);
 ANA_Rect ana_bob_previous_rect(const ANA_Bob* bob);
 ```
@@ -128,11 +134,18 @@ typedef struct ANA_RetainedLayer {
 } ANA_RetainedLayer;
 ```
 
-`ana_bob_clear_previous` kan senare fa en variant som reparerar overlapp:
+`ana_bob_clear_previous` har varianter som reparerar overlapp:
 
 ```c
 void ana_bob_clear_previous_with_layers(
     const ANA_Bob* bob,
+    const ANA_RetainedLayer* layers,
+    int layer_count);
+
+ANA_Rect ana_bob_clear_previous_x8_with_layers(
+    const ANA_Bob* bob,
+    int min_x,
+    int max_x,
     const ANA_RetainedLayer* layers,
     int layer_count);
 ```
@@ -249,13 +262,16 @@ Format-helpern kan vanta. Det viktiga i 0.2 ar dirty text-cache.
 Implementerat:
 
 - `ANA_Rect`-helpers i `include/ana/ana_helpers.h`.
-- `ANA_Bob` med explicit `clear_previous`, `draw` och `commit`.
+- `ANA_Bob` med explicit `clear_previous`, `draw`, `commit`, image-byte,
+  unchanged-check och previous frame/size-state.
 - `ANA_RetainedLayer` for callback-baserad overlap repair.
+- `ana_retained_clear_rect` och `ana_retained_clear_rect_x8` for generisk
+  retained clear med valfri layer-repair.
 - `ANA_DrawLayer` for sma retained grupper.
 - `ANA_Label` for dirty HUD/text-cache utan heap per frame.
 - Host-tester for rect helpers, retained BOB, layer callback och label-cache.
 - Invaders anvander `ana_rect_make`, `ana_rect_align_x8`, `ANA_Bob` for
-  player-state och `ANA_Label` for HUD.
+  player/bullet/explosion-state och `ANA_Label` for HUD.
 
 Medvetet kvar i Invaders:
 
