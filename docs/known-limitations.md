@@ -7,7 +7,8 @@ preview work.
 
 - PAL lores `320x256` is the only documented screen mode.
 - 16 colors / 4 bitplanes is the practical baseline.
-- Stock A1200 is the current showcase baseline.
+- Stock A1200 without Fast RAM is the current showcase baseline.
+- Invaders is not yet stable at 50 fps on the baseline machine profile.
 - A500/OCS performance is not yet a release target for the full Invaders demo.
 
 ## API stability

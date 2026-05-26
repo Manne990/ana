@@ -5,9 +5,43 @@ both framework discipline and game-side discipline.
 
 ## Baseline target
 
-The practical 0.1 baseline is stock A1200-class hardware for the Invaders
-showcase. A500/OCS remains interesting, but it is not the current performance
-floor for the complete showcase.
+The practical 0.1 baseline is a stock A1200 without Fast RAM for the Invaders
+showcase. The target is stable 50 fps on that machine class, which means the
+normal frame budget is 20 ms. A500/OCS remains interesting, but it is not the
+current performance floor for the complete showcase.
+
+Current measured baseline, 2026-05-26:
+
+- Machine profile: A1200, no Fast RAM.
+- Build/profile: Invaders debug/sync measurement.
+- Result: about 29 fps in active gameplay.
+- Comparison: the same class of run with 1 MB Fast RAM reaches close to 50 fps;
+  8 MB Fast RAM reached about 47 fps in one measured run.
+- Main timing pressure: draw and present work, especially chunky-to-planar
+  conversion and dirty object redraw.
+
+This is now the optimization reference until a newer stock-A1200 measurement
+replaces it.
+
+The Fast RAM delta is important: even a small amount of Fast RAM is enough to
+move the demo close to target speed. That suggests the current bottleneck is
+strongly memory-bandwidth related rather than total memory size. On a stock
+A1200 without Fast RAM, CPU code, data, and stack compete with display/audio DMA
+in Chip RAM. Optimizations should therefore prioritize fewer Chip RAM
+reads/writes, smaller dirty regions, less C2P work, and less per-frame renderer
+bookkeeping before adding more gameplay features.
+
+Additional A500 measurements, 2026-05-26:
+
+- A500, 512 KB Chip RAM, 2 MB Fast RAM: about 12 fps.
+- A500, 2 MB Chip RAM, 2 MB Fast RAM: about 15 fps.
+- A500 with Terrible Fire 536, 512 KB Chip RAM, 1 MB Fast RAM: about 50 fps.
+
+This indicates a second hard limit: the stock 68000-class CPU is not fast enough
+for the current Invaders renderer, even when it has Fast RAM. More Chip RAM does
+not add meaningful memory bandwidth; it mostly changes available address space.
+The accelerated A500 result shows that CPU throughput, especially for dirty
+object drawing and chunky-to-planar/present work, is also a primary constraint.
 
 The API still keeps OCS/ECS constraints in mind:
 

@@ -37,9 +37,10 @@ Implemented today:
 - Amiga executable and ADF builds
 - `hello` and `invaders` examples
 
-The practical showcase baseline is currently stock A1200-class hardware. A500
-performance remains useful feedback, but it is not the current floor for the
-complete Invaders demo.
+The practical showcase baseline is currently a stock A1200 without Fast RAM.
+The performance goal for the complete Invaders demo is stable 50 fps on that
+machine class. A500 performance remains useful feedback, but it is not the
+current floor for the full showcase.
 
 The Invaders example is split so `examples/invaders/main.c` stays close to the
 normal ANA application shape, `invaders_game.c` owns the game rules, and
