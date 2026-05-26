@@ -109,7 +109,14 @@ void invaders_render_queue_removed_enemy_rect(int x, int y)
 
 static int invaders_draw_slot_index(void)
 {
-    return demo_ticks & (INVADERS_DRAW_SLOTS - 1);
+    ANA_RenderStats stats;
+
+    if (INVADERS_DRAW_SLOTS <= 1) {
+        return 0;
+    }
+
+    stats = ana_render_stats();
+    return (int)(stats.frames & (INVADERS_DRAW_SLOTS - 1));
 }
 
 static int invaders_bullet_should_draw(InvadersBullet bullet)
@@ -124,10 +131,16 @@ static void invaders_fill_rect_black(ANA_Rect rect)
 
 static void invaders_repair_shields_overlap(int slot, ANA_Rect rect)
 {
+    ANA_Rect shield_rect;
     ANA_Rect cell_rect;
     int shield;
+    int shield_x;
     int row;
     int col;
+    int min_row;
+    int max_row;
+    int min_col;
+    int max_col;
     int dirty_mask;
 
     dirty_mask = shield_dirty_slots[slot];
@@ -136,12 +149,27 @@ static void invaders_repair_shields_overlap(int slot, ANA_Rect rect)
             continue;
         }
 
-        if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
+        shield_rect = invaders_shield_rect(shield);
+        if (!ana_rect_intersects(rect, shield_rect)) {
             continue;
         }
 
-        for (row = 0; row < SHIELD_ROWS; row++) {
-            for (col = 0; col < SHIELD_COLUMNS; col++) {
+        shield_x = invaders_shield_x(shield);
+        min_col = rect.x <= shield_x ?
+            0 :
+            (rect.x - shield_x) / SHIELD_CELL_SIZE;
+        max_col = rect.x + rect.w >= shield_x + SHIELD_WIDTH ?
+            SHIELD_COLUMNS - 1 :
+            ((rect.x + rect.w - 1) - shield_x) / SHIELD_CELL_SIZE;
+        min_row = rect.y <= SHIELD_Y ?
+            0 :
+            (rect.y - SHIELD_Y) / SHIELD_CELL_SIZE;
+        max_row = rect.y + rect.h >= SHIELD_Y + SHIELD_HEIGHT ?
+            SHIELD_ROWS - 1 :
+            ((rect.y + rect.h - 1) - SHIELD_Y) / SHIELD_CELL_SIZE;
+
+        for (row = min_row; row <= max_row; row++) {
+            for (col = min_col; col <= max_col; col++) {
                 if (!shield_cells[shield][row][col]) {
                     continue;
                 }
@@ -185,6 +213,10 @@ static int invaders_rect_overlaps_active_explosion(ANA_Rect rect)
 {
     ANA_Rect explosion_rect;
     int i;
+
+    if (ana_rect_is_empty(rect)) {
+        return 0;
+    }
 
     for (i = 0; i < EXPLOSION_SLOTS; i++) {
         if (!explosions[i].active) {
@@ -283,6 +315,50 @@ static void invaders_repair_formation_overlap(ANA_Rect rect)
     }
 }
 
+static int invaders_rect_overlaps_formation_layer(int slot, ANA_Rect rect)
+{
+    ANA_Rect formation_rect;
+
+    if (ana_rect_is_empty(rect) ||
+            formation_dirty_slots[slot] ||
+            !formation_drawn_slots[slot] ||
+            invader_image == 0 ||
+            invaders_remaining <= 0) {
+        return 0;
+    }
+
+    formation_rect = ana_rect_make(
+        invader_formation_x,
+        invader_formation_y,
+        INVADER_FORMATION_WIDTH,
+        INVADER_FORMATION_HEIGHT);
+
+    return ana_rect_intersects(rect, formation_rect);
+}
+
+static int invaders_rect_overlaps_shield_layer(int slot, ANA_Rect rect)
+{
+    int dirty_mask;
+    int shield;
+
+    if (ana_rect_is_empty(rect)) {
+        return 0;
+    }
+
+    dirty_mask = shield_dirty_slots[slot];
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if ((dirty_mask & (1 << shield)) != 0) {
+            continue;
+        }
+
+        if (ana_rect_intersects(rect, invaders_shield_rect(shield))) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static void invaders_repair_formation_layer(ANA_Rect rect, void* user_data)
 {
     int slot;
@@ -305,24 +381,40 @@ static int invaders_clear_previous_bob(int slot, const ANA_Bob* bob)
 {
     ANA_RetainedLayer layers[2];
     ANA_Rect rect;
+    int layer_count;
     int layer_slot;
 
     if (bob == NULL) {
         return 0;
     }
 
-    layer_slot = slot;
-    layers[0].redraw = invaders_repair_formation_layer;
-    layers[0].user_data = &layer_slot;
-    layers[1].redraw = invaders_repair_shields_layer;
-    layers[1].user_data = &layer_slot;
+    rect = ana_rect_align_x8(
+        ana_bob_previous_rect(bob),
+        0,
+        ANA_DEFAULT_WIDTH);
+    if (ana_rect_is_empty(rect)) {
+        return 0;
+    }
 
-    rect = ana_bob_clear_previous_x8_with_layers(
+    layer_slot = slot;
+    layer_count = 0;
+    if (invaders_rect_overlaps_formation_layer(slot, rect)) {
+        layers[layer_count].redraw = invaders_repair_formation_layer;
+        layers[layer_count].user_data = &layer_slot;
+        layer_count++;
+    }
+    if (invaders_rect_overlaps_shield_layer(slot, rect)) {
+        layers[layer_count].redraw = invaders_repair_shields_layer;
+        layers[layer_count].user_data = &layer_slot;
+        layer_count++;
+    }
+
+    rect = ana_bob_clear_previous_masked_x8_with_layers(
         bob,
         0,
         ANA_DEFAULT_WIDTH,
         layers,
-        2);
+        layer_count);
 
     return invaders_rect_overlaps_active_explosion(rect);
 }
@@ -830,7 +922,7 @@ void invaders_draw(void)
     redraw_explosions = 0;
 
     if (full_clear_slots[slot]) {
-        ana_fill_rect(0u, 0, 0, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT);
+        ana_clear(0u);
         memset(draw_slot, 0, sizeof(*draw_slot));
         formation_drawn_slots[slot] = 0;
         formation_dirty_slots[slot] = 1;

@@ -148,7 +148,19 @@ ANA_Rect ana_bob_clear_previous_x8_with_layers(
     int max_x,
     const ANA_RetainedLayer* layers,
     int layer_count);
+
+ANA_Rect ana_bob_clear_previous_masked_x8_with_layers(
+    const ANA_Bob* bob,
+    int min_x,
+    int max_x,
+    const ANA_RetainedLayer* layers,
+    int layer_count);
 ```
+
+`ana_bob_clear_previous_masked_x8_with_layers` is an optimized variant for
+masked images. It keeps the byte-aligned dirty rectangle but only writes clear
+pixels where the previous image frame was opaque, then redraws retained layers
+for the aligned rectangle.
 
 Invaders skulle da kunna registrera:
 

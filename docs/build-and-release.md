@@ -37,16 +37,33 @@ Outputs:
 - `build/amiga/examples/hello/hello`
 - `build/amiga/examples/invaders/invaders`
 
+A1200 baseline builds use `-m68020`:
+
+```sh
+make amiga-a1200-examples
+make amiga-invaders-a1200-debug
+```
+
+Outputs:
+
+- `build/amiga-a1200/libana.a`
+- `build/amiga-a1200/examples/hello/hello`
+- `build/amiga-a1200/examples/invaders/invaders`
+- `build/amiga-a1200-debug/examples/invaders-a1200-debug/invaders`
+
 Build ADFs:
 
 ```sh
 make adfs
+make invaders-a1200-adf invaders-a1200-debug-adf
 ```
 
 Outputs:
 
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
+- `build/adf/invaders-a1200.adf`
+- `build/adf/invaders-a1200-debug.adf`
 
 ## CI build
 
@@ -57,7 +74,7 @@ GitHub Actions currently runs:
 - host tests
 - PNG, palette, and manifest asset conversion tests
 - Amiga executable build in Docker
-- ADF packaging
+- portable and A1200 ADF packaging
 - ADF artifact upload as `ana-example-adfs`
 
 The Amiga Docker build uses:

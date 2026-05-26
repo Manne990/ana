@@ -407,6 +407,30 @@ static void test_retained_render_helpers(void)
     assert(marker == 123);
     assert(ana_gfx_draw_pixel(20, 21) == 6);
 
+    ana_clear(9);
+    bob.clear_color = 4u;
+    ana_bob_set_frame(&bob, 0);
+    ana_bob_set_position(&bob, 40, 40);
+    ana_bob_draw(&bob);
+    ana_bob_commit(&bob);
+    ana_bob_set_position(&bob, 50, 50);
+    rect = ana_bob_clear_previous_masked_x8_with_layers(
+        &bob,
+        0,
+        ANA_DEFAULT_WIDTH,
+        0,
+        0);
+    assert(rect.x == 40);
+    assert(rect.y == 40);
+    assert(rect.w == 8);
+    assert(rect.h == 2);
+    assert(ana_gfx_draw_pixel(40, 40) == 4);
+    assert(ana_gfx_draw_pixel(41, 40) == 4);
+    assert(ana_gfx_draw_pixel(42, 40) == 9);
+    assert(ana_gfx_draw_pixel(40, 41) == 9);
+    assert(ana_gfx_draw_pixel(41, 41) == 4);
+    assert(ana_gfx_draw_pixel(42, 41) == 4);
+
     draw_layer.redraw = retained_test_redraw;
     draw_layer.user_data = &marker;
     draw_layer.dirty = 0;

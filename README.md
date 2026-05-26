@@ -29,8 +29,8 @@ Implemented today:
 - explicit music/SFX channel policy for Paula channels
 - MOD music asset loading and Amiga playback through a vendored ProTracker
   replayer
-- small helpers for rectangles, clamp, timers, retained BOBs, retained clear
-  repair, and dirty labels
+- small helpers for rectangles, clamp, timers, retained BOBs, masked retained
+  clear repair, and dirty labels
 - host-side image/font conversion to `.anaimg` and `.anafnt`
 - PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests
@@ -71,13 +71,30 @@ make amiga-examples
 make adfs
 ```
 
+A1200 baseline examples use the same assets and renderer but compile the C
+code with `-m68020`:
+
+```sh
+make amiga-a1200-examples
+make invaders-a1200-adf
+```
+
 ADF images are written to `build/adf/`:
 
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
+- `build/adf/invaders-a1200.adf`
 
-The GitHub Actions workflow uploads the same ADFs as the `ana-example-adfs`
-artifact.
+Additional Invaders profiling ADFs can be built into the same directory with
+`make invaders-debug-adf`, `make invaders-sync-adf`,
+`make invaders-buffered-debug-adf`, and `make invaders-a1200-debug-adf` after
+their matching Amiga binaries have been built.
+
+Use `invaders-a1200.adf` for normal A1200 performance checks. The debug ADFs
+compile in runtime/render instrumentation and are intended for diagnostics.
+
+The GitHub Actions workflow uploads the normal and A1200 ADFs as the
+`ana-example-adfs` artifact.
 
 ## Documentation
 

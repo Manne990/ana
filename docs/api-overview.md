@@ -111,6 +111,7 @@ Retained rendering helpers:
 - `ana_bob_clear_previous`
 - `ana_bob_clear_previous_with_layers`
 - `ana_bob_clear_previous_x8_with_layers`
+- `ana_bob_clear_previous_masked_x8_with_layers`
 - `ana_bob_draw`
 - `ana_bob_commit`
 - `ANA_RetainedLayer`

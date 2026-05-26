@@ -507,11 +507,14 @@ static void ana_gfx_load_default_palette(void)
 static void ana_gfx_reset_stats(void)
 {
     memset(&ana_gfx_stats, 0, sizeof(ana_gfx_stats));
+#ifdef ANA_DEBUG_STATS
     ana_gfx_stats.perf_ticks_per_second =
         (long)ana_platform_perf_ticks_per_second();
+#endif
 }
 
 #ifdef ANA_TARGET_AMIGA
+#ifdef ANA_DEBUG_STATS
 static void ana_gfx_record_perf_ticks(
     long* total,
     unsigned long start_ticks,
@@ -526,6 +529,7 @@ static void ana_gfx_record_perf_ticks(
     elapsed = end_ticks - start_ticks;
     *total += (long)elapsed;
 }
+#endif
 
 static long ana_gfx_dirty_rect_area(const struct ANA_AmigaDirtyRect* rect)
 {
@@ -538,6 +542,7 @@ static long ana_gfx_dirty_rect_area(const struct ANA_AmigaDirtyRect* rect)
         (long)(rect->max_y - rect->min_y);
 }
 
+#ifdef ANA_DEBUG_STATS
 static long ana_gfx_dirty_rects_area(
     const struct ANA_AmigaDirtyRect* rects,
     int rect_count)
@@ -633,6 +638,13 @@ static void ana_gfx_record_present_dirty_rects(
         ana_gfx_stats.max_converted_pixels = pixels;
     }
 }
+#else
+#define ana_gfx_record_chunky_clear_rects(rects, rect_count) ((void)0)
+#define ana_gfx_record_chunky_clear_fullscreen() ((void)0)
+#define ana_gfx_record_planar_clear_rects(rects, rect_count) ((void)0)
+#define ana_gfx_record_planar_clear_fullscreen() ((void)0)
+#define ana_gfx_record_present_dirty_rects(rects, rect_count) ((void)0)
+#endif
 static int ana_amiga_rect_contains(
     const struct ANA_AmigaDirtyRect* outer,
     const struct ANA_AmigaDirtyRect* inner)
@@ -1732,23 +1744,31 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
     struct BitMap* next_visible;
     struct BitMap* previous_visible;
     struct ANA_AmigaBitmapState* next_state;
+#ifdef ANA_DEBUG_STATS
     unsigned long total_start;
     unsigned long stage_start;
+#endif
     int i;
 
     if (ana_amiga_screen == NULL) {
         return;
     }
 
+#ifdef ANA_DEBUG_STATS
     total_start = ana_platform_perf_ticks();
+#endif
 
 #ifdef ANA_AMIGA_DIRECT_PRESENT_SYNC
+#ifdef ANA_DEBUG_STATS
     stage_start = ana_platform_perf_ticks();
+#endif
     WaitTOF();
+#ifdef ANA_DEBUG_STATS
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_flip_perf_ticks,
         stage_start,
         ana_platform_perf_ticks());
+#endif
 #endif
 
 #ifdef ANA_AMIGA_DIRECT_PRESENT
@@ -1765,7 +1785,9 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 
     next_state = ana_amiga_bitmap_state_for(next_visible);
 
+#ifdef ANA_DEBUG_STATS
     stage_start = ana_platform_perf_ticks();
+#endif
     if (ana_amiga_clear_requested) {
         if (next_state == NULL ||
                 !next_state->clear_color_valid ||
@@ -1813,12 +1835,16 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             0u,
             &ana_amiga_planar_clear_rects[i]);
     }
+#ifdef ANA_DEBUG_STATS
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_clear_perf_ticks,
         stage_start,
         ana_platform_perf_ticks());
+#endif
 
+#ifdef ANA_DEBUG_STATS
     stage_start = ana_platform_perf_ticks();
+#endif
     ana_gfx_record_present_dirty_rects(
         ana_amiga_dirty_rects,
         ana_amiga_dirty_count);
@@ -1832,34 +1858,48 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
             ana_amiga_dirty_rects[i].max_x,
             ana_amiga_dirty_rects[i].max_y);
     }
+#ifdef ANA_DEBUG_STATS
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_convert_perf_ticks,
         stage_start,
         ana_platform_perf_ticks());
+#endif
 
     ana_amiga_store_bitmap_dirty_state(next_state);
 
+#ifdef ANA_DEBUG_STATS
     stage_start = ana_platform_perf_ticks();
+#endif
 #ifdef ANA_AMIGA_DIRECT_PRESENT
 #ifndef ANA_AMIGA_DIRECT_PRESENT_SYNC
+#ifdef ANA_DEBUG_STATS
     ana_gfx_stats.direct_flips++;
+#endif
 #endif
 #else
     if (!ana_amiga_set_screen_bitmap(next_visible)) {
+#ifdef ANA_DEBUG_STATS
         ana_gfx_stats.direct_flips++;
+#endif
         WaitTOF();
     } else {
+#ifdef ANA_DEBUG_STATS
         ana_gfx_stats.screen_buffer_flips++;
+#endif
     }
 #endif
 #ifndef ANA_AMIGA_DIRECT_PRESENT_SYNC
+#ifdef ANA_DEBUG_STATS
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_flip_perf_ticks,
         stage_start,
         ana_platform_perf_ticks());
 #endif
+#endif
 #ifdef ANA_AMIGA_DIRECT_PRESENT_SYNC
+#ifdef ANA_DEBUG_STATS
     ana_gfx_stats.direct_flips++;
+#endif
 #endif
 
 #ifndef ANA_AMIGA_DIRECT_PRESENT
@@ -1867,10 +1907,12 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
     ana_amiga_draw_bitmap = previous_visible;
 #endif
     ana_amiga_reset_frame_state();
+#ifdef ANA_DEBUG_STATS
     ana_gfx_record_perf_ticks(
         &ana_gfx_stats.present_total_perf_ticks,
         total_start,
         ana_platform_perf_ticks());
+#endif
 }
 #endif
 
@@ -3025,6 +3067,78 @@ ANA_Rect ana_bob_previous_rect(const ANA_Bob* bob)
         bob->previous_h);
 }
 
+static int ana_fill_image_mask(
+    ANA_Image image,
+    int frame,
+    int x,
+    int y,
+    unsigned char color_index,
+    ANA_Rect dirty_rect)
+{
+    ANA_Rect image_rect;
+    ANA_Rect clip_rect;
+    ANA_Rect screen_rect;
+    const unsigned char* mask;
+    const unsigned char* mask_row;
+    unsigned char* dest_row;
+    int dest_x;
+    int dest_y;
+    int src_x;
+    int src_y;
+
+    if (image == NULL ||
+            frame < 0 ||
+            frame >= image->frame_count ||
+            !ana_image_has_mask(image)) {
+        return 0;
+    }
+
+    image_rect = ana_rect_make(x, y, image->width, image->height);
+    screen_rect = ana_rect_make(0, 0, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT);
+    clip_rect = ana_rect_clip(image_rect, screen_rect);
+    if (ana_rect_is_empty(clip_rect)) {
+        return 1;
+    }
+
+    mask = ana_image_mask_base(image, frame);
+    if (mask == NULL) {
+        return 0;
+    }
+
+    color_index = (unsigned char)(color_index & 0x0f);
+
+#ifdef ANA_TARGET_AMIGA
+    if (!ana_rect_is_empty(dirty_rect)) {
+        ana_amiga_mark_dirty_rect(
+            dirty_rect.x,
+            dirty_rect.y,
+            dirty_rect.x + dirty_rect.w,
+            dirty_rect.y + dirty_rect.h);
+    }
+#else
+    (void)dirty_rect;
+#endif
+
+    for (dest_y = clip_rect.y; dest_y < clip_rect.y + clip_rect.h; dest_y++) {
+        src_y = dest_y - y;
+        mask_row = mask + ((long)src_y * image->row_bytes);
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)dest_y * ANA_DEFAULT_WIDTH);
+
+        for (dest_x = clip_rect.x;
+                dest_x < clip_rect.x + clip_rect.w;
+                dest_x++) {
+            src_x = dest_x - x;
+            if ((mask_row[src_x >> 3] & (0x80u >> (src_x & 7))) != 0u) {
+                dest_row[dest_x] = color_index;
+            }
+        }
+    }
+
+    return 1;
+}
+
 void ana_bob_clear_previous(const ANA_Bob* bob)
 {
     ANA_Rect rect;
@@ -3073,6 +3187,44 @@ ANA_Rect ana_bob_clear_previous_x8_with_layers(
         bob->clear_color,
         min_x,
         max_x,
+        layers,
+        layer_count);
+}
+
+ANA_Rect ana_bob_clear_previous_masked_x8_with_layers(
+    const ANA_Bob* bob,
+    int min_x,
+    int max_x,
+    const ANA_RetainedLayer* layers,
+    int layer_count)
+{
+    ANA_Rect rect;
+    ANA_Rect aligned_rect;
+
+    if (bob == NULL) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    rect = ana_bob_previous_rect(bob);
+    aligned_rect = ana_rect_align_x8(rect, min_x, max_x);
+    if (ana_rect_is_empty(aligned_rect)) {
+        return aligned_rect;
+    }
+
+    if (ana_fill_image_mask(
+            bob->previous_image,
+            bob->previous_frame,
+            bob->previous_x,
+            bob->previous_y,
+            bob->clear_color,
+            aligned_rect)) {
+        ana_retained_redraw_layers(aligned_rect, layers, layer_count);
+        return aligned_rect;
+    }
+
+    return ana_retained_clear_rect(
+        aligned_rect,
+        bob->clear_color,
         layers,
         layer_count);
 }

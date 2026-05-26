@@ -18,14 +18,21 @@ AMIGA_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m6800
 AMIGA_PRESENT_CFLAGS ?= -DANA_AMIGA_DIRECT_PRESENT
 AMIGA_CFLAGS ?= $(AMIGA_BASE_CFLAGS) $(AMIGA_PRESENT_CFLAGS)
 AMIGA_DEBUG_CFLAGS ?= $(AMIGA_CFLAGS) -DANA_DEBUG_STATS
+AMIGA_BUFFERED_DEBUG_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_SYNC_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_AMIGA_DIRECT_PRESENT -DANA_AMIGA_DIRECT_PRESENT_SYNC -DANA_DEBUG_STATS
+AMIGA_A1200_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68020 -DANA_TARGET_AMIGA -DANA_AMIGA_A1200_BASELINE
+AMIGA_A1200_CFLAGS ?= $(AMIGA_A1200_BASE_CFLAGS) $(AMIGA_PRESENT_CFLAGS)
+AMIGA_A1200_DEBUG_CFLAGS ?= $(AMIGA_A1200_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_ASFLAGS ?= -quiet -Fhunk -m68000 -phxass
 AMIGA_LDFLAGS ?= -mcrt=nix13 -lamiga
 BUILD_DIR ?= build
 AMIGA_BUILD_DIR ?= $(BUILD_DIR)/amiga
 ADF_DIR ?= $(BUILD_DIR)/adf
 AMIGA_DEBUG_BUILD_DIR := $(BUILD_DIR)/amiga-debug
+AMIGA_BUFFERED_DEBUG_BUILD_DIR := $(BUILD_DIR)/amiga-buffered-debug
 AMIGA_SYNC_BUILD_DIR := $(BUILD_DIR)/amiga-sync
+AMIGA_A1200_BUILD_DIR := $(BUILD_DIR)/amiga-a1200
+AMIGA_A1200_DEBUG_BUILD_DIR := $(BUILD_DIR)/amiga-a1200-debug
 RELEASE_VERSION ?= $(shell grep ANA_VERSION_STRING include/ana/ana_version.h | cut -d '"' -f 2)
 RELEASE_NAME ?= ana-$(RELEASE_VERSION)
 RELEASE_ROOT := $(BUILD_DIR)/release
@@ -85,25 +92,42 @@ AMIGA_LIBANA := $(AMIGA_BUILD_DIR)/libana.a
 AMIGA_DEBUG_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_DEBUG_BUILD_DIR)/%.o)
 AMIGA_DEBUG_OBJS := $(ANA_SRCS:%.c=$(AMIGA_DEBUG_BUILD_DIR)/%.o) $(AMIGA_DEBUG_ASM_OBJS)
 AMIGA_DEBUG_LIBANA := $(AMIGA_DEBUG_BUILD_DIR)/libana.a
+AMIGA_BUFFERED_DEBUG_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/%.o)
+AMIGA_BUFFERED_DEBUG_OBJS := $(ANA_SRCS:%.c=$(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/%.o) $(AMIGA_BUFFERED_DEBUG_ASM_OBJS)
+AMIGA_BUFFERED_DEBUG_LIBANA := $(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/libana.a
 AMIGA_SYNC_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_SYNC_BUILD_DIR)/%.o)
 AMIGA_SYNC_OBJS := $(ANA_SRCS:%.c=$(AMIGA_SYNC_BUILD_DIR)/%.o) $(AMIGA_SYNC_ASM_OBJS)
 AMIGA_SYNC_LIBANA := $(AMIGA_SYNC_BUILD_DIR)/libana.a
+AMIGA_A1200_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_A1200_BUILD_DIR)/%.o)
+AMIGA_A1200_OBJS := $(ANA_SRCS:%.c=$(AMIGA_A1200_BUILD_DIR)/%.o) $(AMIGA_A1200_ASM_OBJS)
+AMIGA_A1200_LIBANA := $(AMIGA_A1200_BUILD_DIR)/libana.a
+AMIGA_A1200_DEBUG_ASM_OBJS := $(ANA_AMIGA_ASM_SRCS:%.asm=$(AMIGA_A1200_DEBUG_BUILD_DIR)/%.o)
+AMIGA_A1200_DEBUG_OBJS := $(ANA_SRCS:%.c=$(AMIGA_A1200_DEBUG_BUILD_DIR)/%.o) $(AMIGA_A1200_DEBUG_ASM_OBJS)
+AMIGA_A1200_DEBUG_LIBANA := $(AMIGA_A1200_DEBUG_BUILD_DIR)/libana.a
 
 AMIGA_EXAMPLE_BINS := \
 	$(AMIGA_BUILD_DIR)/examples/hello/hello \
 	$(AMIGA_BUILD_DIR)/examples/invaders/invaders
+AMIGA_A1200_EXAMPLE_BINS := \
+	$(AMIGA_A1200_BUILD_DIR)/examples/hello/hello \
+	$(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders
 
 AMIGA_INVADERS_DEBUG_BIN := $(AMIGA_DEBUG_BUILD_DIR)/examples/invaders-debug/invaders
+AMIGA_INVADERS_BUFFERED_DEBUG_BIN := $(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/examples/invaders-buffered-debug/invaders
 AMIGA_INVADERS_SYNC_BIN := $(AMIGA_SYNC_BUILD_DIR)/examples/invaders-sync/invaders
+AMIGA_INVADERS_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/invaders-a1200-debug/invaders
 
 ADF_FILES := \
 	$(ADF_DIR)/hello.adf \
 	$(ADF_DIR)/invaders.adf
 
 INVADERS_DEBUG_ADF := $(ADF_DIR)/invaders-debug.adf
+INVADERS_BUFFERED_DEBUG_ADF := $(ADF_DIR)/invaders-buffered-debug.adf
 INVADERS_SYNC_ADF := $(ADF_DIR)/invaders-sync.adf
+INVADERS_A1200_ADF := $(ADF_DIR)/invaders-a1200.adf
+INVADERS_A1200_DEBUG_ADF := $(ADF_DIR)/invaders-a1200-debug.adf
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-invaders-debug amiga-invaders-sync adfs invaders-debug-adf invaders-sync-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf release-package clean-assets clean
 
 all: lib examples tools
 
@@ -123,15 +147,29 @@ amiga-lib: $(AMIGA_LIBANA)
 
 amiga-examples: $(AMIGA_EXAMPLE_BINS)
 
+amiga-a1200-lib: $(AMIGA_A1200_LIBANA)
+
+amiga-a1200-examples: $(AMIGA_A1200_EXAMPLE_BINS)
+
 amiga-invaders-debug: $(AMIGA_INVADERS_DEBUG_BIN)
 
+amiga-invaders-buffered-debug: $(AMIGA_INVADERS_BUFFERED_DEBUG_BIN)
+
 amiga-invaders-sync: $(AMIGA_INVADERS_SYNC_BIN)
+
+amiga-invaders-a1200-debug: $(AMIGA_INVADERS_A1200_DEBUG_BIN)
 
 adfs: $(ADF_FILES)
 
 invaders-debug-adf: $(INVADERS_DEBUG_ADF)
 
+invaders-buffered-debug-adf: $(INVADERS_BUFFERED_DEBUG_ADF)
+
 invaders-sync-adf: $(INVADERS_SYNC_ADF)
+
+invaders-a1200-adf: $(INVADERS_A1200_ADF)
+
+invaders-a1200-debug-adf: $(INVADERS_A1200_DEBUG_ADF)
 
 release-package:
 	$(RM) $(RELEASE_ROOT)
@@ -177,6 +215,18 @@ $(AMIGA_DEBUG_LIBANA): $(AMIGA_DEBUG_OBJS)
 	mkdir -p $(@D)
 	$(AMIGA_AR) rcs $@ $^
 
+$(AMIGA_BUFFERED_DEBUG_LIBANA): $(AMIGA_BUFFERED_DEBUG_OBJS)
+	mkdir -p $(@D)
+	$(AMIGA_AR) rcs $@ $^
+
+$(AMIGA_A1200_LIBANA): $(AMIGA_A1200_OBJS)
+	mkdir -p $(@D)
+	$(AMIGA_AR) rcs $@ $^
+
+$(AMIGA_A1200_DEBUG_LIBANA): $(AMIGA_A1200_DEBUG_OBJS)
+	mkdir -p $(@D)
+	$(AMIGA_AR) rcs $@ $^
+
 $(AMIGA_BUILD_DIR)/%.o: %.c
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) -c $< -o $@
@@ -185,9 +235,21 @@ $(AMIGA_DEBUG_BUILD_DIR)/%.o: %.c
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_DEBUG_CFLAGS) -c $< -o $@
 
+$(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_BUFFERED_DEBUG_CFLAGS) -c $< -o $@
+
 $(AMIGA_SYNC_BUILD_DIR)/%.o: %.c
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_SYNC_CFLAGS) -c $< -o $@
+
+$(AMIGA_A1200_BUILD_DIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) -c $< -o $@
+
+$(AMIGA_A1200_DEBUG_BUILD_DIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) -c $< -o $@
 
 $(AMIGA_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
 	mkdir -p $(@D)
@@ -198,6 +260,18 @@ $(AMIGA_SYNC_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/p
 	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
 
 $(AMIGA_DEBUG_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
+
+$(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
+
+$(AMIGA_A1200_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
+
+$(AMIGA_A1200_DEBUG_BUILD_DIR)/src/sound/vendor/ptplayer/ptplayer.o: src/sound/vendor/ptplayer/ptplayer.asm
 	mkdir -p $(@D)
 	$(AMIGA_AS) $(AMIGA_ASFLAGS) -DOSCOMPAT=1 -o $@ $<
 
@@ -213,6 +287,18 @@ $(AMIGA_DEBUG_BUILD_DIR)/src/sound/ana_ptplayer_wrap.o: src/sound/ana_ptplayer_w
 	mkdir -p $(@D)
 	$(AMIGA_AS) $(AMIGA_ASFLAGS) -o $@ $<
 
+$(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/src/sound/ana_ptplayer_wrap.o: src/sound/ana_ptplayer_wrap.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -o $@ $<
+
+$(AMIGA_A1200_BUILD_DIR)/src/sound/ana_ptplayer_wrap.o: src/sound/ana_ptplayer_wrap.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -o $@ $<
+
+$(AMIGA_A1200_DEBUG_BUILD_DIR)/src/sound/ana_ptplayer_wrap.o: src/sound/ana_ptplayer_wrap.asm
+	mkdir -p $(@D)
+	$(AMIGA_AS) $(AMIGA_ASFLAGS) -o $@ $<
+
 $(AMIGA_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_LIBANA)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $< $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
@@ -221,13 +307,29 @@ $(AMIGA_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADE
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
+$(AMIGA_A1200_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_A1200_LIBANA)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $< $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
+$(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_A1200_LIBANA) $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $(INVADERS_SRCS) $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
 $(AMIGA_INVADERS_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_DEBUG_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_DEBUG_CFLAGS) $(INVADERS_SRCS) $(AMIGA_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
+$(AMIGA_INVADERS_BUFFERED_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_BUFFERED_DEBUG_LIBANA) $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_BUFFERED_DEBUG_CFLAGS) $(INVADERS_SRCS) $(AMIGA_BUFFERED_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
 $(AMIGA_INVADERS_SYNC_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_SYNC_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_SYNC_CFLAGS) $(INVADERS_SRCS) $(AMIGA_SYNC_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
+$(AMIGA_INVADERS_A1200_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_A1200_DEBUG_LIBANA) $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) $(INVADERS_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
 $(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
 	mkdir -p $(@D)
@@ -237,13 +339,25 @@ $(ADF_DIR)/invaders.adf: $(AMIGA_BUILD_DIR)/examples/invaders/invaders $(INVADER
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInvaders $(INVADERS_ASSET_DIR)
 
+$(INVADERS_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l ANAInv1200 $(INVADERS_ASSET_DIR)
+
 $(INVADERS_DEBUG_ADF): $(AMIGA_INVADERS_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInvDbg $(INVADERS_ASSET_DIR)
 
+$(INVADERS_BUFFERED_DEBUG_ADF): $(AMIGA_INVADERS_BUFFERED_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l ANAInvBuf $(INVADERS_ASSET_DIR)
+
 $(INVADERS_SYNC_ADF): $(AMIGA_INVADERS_SYNC_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInvSync $(INVADERS_ASSET_DIR)
+
+$(INVADERS_A1200_DEBUG_ADF): $(AMIGA_INVADERS_A1200_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l ANAInv12Dbg $(INVADERS_ASSET_DIR)
 
 $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)

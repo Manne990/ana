@@ -122,6 +122,12 @@ ANA_Rect ana_bob_clear_previous_x8_with_layers(
     int max_x,
     const ANA_RetainedLayer* layers,
     int layer_count);
+ANA_Rect ana_bob_clear_previous_masked_x8_with_layers(
+    const ANA_Bob* bob,
+    int min_x,
+    int max_x,
+    const ANA_RetainedLayer* layers,
+    int layer_count);
 void ana_bob_draw(const ANA_Bob* bob);
 void ana_bob_commit(ANA_Bob* bob);
 

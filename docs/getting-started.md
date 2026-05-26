@@ -69,9 +69,23 @@ docker run --rm \
   make clean amiga-examples
 ```
 
+For the stock-A1200 baseline build:
+
+```sh
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" \
+  -w /work \
+  amigadev/crosstools:m68k-amigaos-gcc10_amd64 \
+  make clean amiga-a1200-examples amiga-invaders-a1200-debug
+```
+
+The A1200 targets compile the C code with `-m68020`. They keep the same PAL
+lores 320x256, 16-color display profile as the portable Amiga targets.
+
 ## Build ADF images
 
-After `make amiga-examples`:
+After the matching Amiga executable targets:
 
 ```sh
 make adfs
@@ -87,6 +101,7 @@ ADF images are written to `build/adf/`:
 
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
+- `build/adf/invaders-a1200.adf`
 
 The CI artifact is called `ana-example-adfs`.
 
@@ -164,6 +179,15 @@ make invaders-debug-adf
 
 This writes `build/adf/invaders-debug.adf`.
 
+For stock-A1200 baseline measurements:
+
+```sh
+make amiga-invaders-a1200-debug
+make invaders-a1200-debug-adf
+```
+
+This writes `build/adf/invaders-a1200-debug.adf`.
+
 For the direct-present path with synchronization:
 
 ```sh
@@ -172,3 +196,12 @@ make invaders-sync-adf
 ```
 
 This writes `build/adf/invaders-sync.adf`.
+
+For comparison with the non-direct screen-buffer path:
+
+```sh
+make amiga-invaders-buffered-debug
+make invaders-buffered-debug-adf
+```
+
+This writes `build/adf/invaders-buffered-debug.adf`.

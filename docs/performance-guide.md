@@ -13,8 +13,8 @@ current performance floor for the complete showcase.
 Current measured baseline, 2026-05-26:
 
 - Machine profile: A1200, no Fast RAM.
-- Build/profile: Invaders debug/sync measurement.
-- Result: about 29 fps in active gameplay.
+- Build/profile: Invaders A1200 debug measurement.
+- Result: about 37 fps in active gameplay with debug timing enabled.
 - Comparison: the same class of run with 1 MB Fast RAM reaches close to 50 fps;
   8 MB Fast RAM reached about 47 fps in one measured run.
 - Main timing pressure: draw and present work, especially chunky-to-planar
@@ -22,6 +22,23 @@ Current measured baseline, 2026-05-26:
 
 This is now the optimization reference until a newer stock-A1200 measurement
 replaces it.
+
+Use the A1200 build targets for baseline measurements:
+
+```sh
+make amiga-a1200-examples
+make amiga-invaders-a1200-debug
+make invaders-a1200-adf invaders-a1200-debug-adf
+```
+
+Use `build/adf/invaders-a1200.adf` to judge normal game feel and
+`build/adf/invaders-a1200-debug.adf` to collect timing data. The debug ADF
+enables `ANA_DEBUG_STATS`, so it measures frame stages and render counters at
+runtime. That diagnostic work is intentionally compiled out of release builds.
+
+These targets compile C code with `-m68020` and keep the current 320x256,
+16-color display profile. That treats the A1200 as the baseline CPU while
+avoiding a higher bitplane count that would increase Chip RAM traffic.
 
 The Fast RAM delta is important: even a small amount of Fast RAM is enough to
 move the demo close to target speed. That suggests the current bottleneck is
@@ -85,6 +102,30 @@ This path was chosen because the previous screen-buffer path was too expensive
 for the current Invaders sample. It is fast enough for the showcase, but it
 requires careful dirty-rect handling.
 
+Use `ana_clear` for true full-frame resets. A fullscreen black `ana_fill_rect`
+is just another draw operation and can leave stale buffer contents in
+screen-buffer diagnostic builds.
+
+If a renderer keeps per-buffer retained state, choose the slot from ANA's
+presented frame count rather than game ticks. Game ticks can reset or skip;
+the framebuffer rotation cannot.
+
+A buffered debug ADF is available as a comparison point when investigating
+frame pacing and visible judder:
+
+```sh
+make amiga-invaders-buffered-debug
+make invaders-buffered-debug-adf
+```
+
+It uses the screen-buffer path instead of direct-present, so it may be smoother
+while also costing more on Chip RAM-only systems.
+
+Masked BOB clears can use `ana_bob_clear_previous_masked_x8_with_layers`.
+This keeps the same byte-aligned dirty rectangle but only writes clear pixels
+where the previous masked image was opaque. On Chip RAM-only systems this can
+reduce draw-time memory traffic for sparse sprites and bullets.
+
 Debug builds can print timing counters when the game sets
 `ANA_Game.debug_stats = 1`:
 
@@ -92,6 +133,10 @@ Debug builds can print timing counters when the game sets
 make amiga-invaders-debug
 make invaders-debug-adf
 ```
+
+Release builds do not collect per-stage timing, dirty-area totals, or flip path
+counters. They still track the presented frame count because retained renderers
+use it to select their draw slot.
 
 The output includes:
 
@@ -130,6 +175,15 @@ fully transparent and fully opaque mask bytes. Small unmasked images and common
 masked widths use pointer-increment loops instead of repeated row offset
 calculation. Prefer asset widths that match these common byte-aligned sprite
 sizes when practical.
+
+Retained repair callbacks should be filtered before they run. A moving BOB
+only needs formation/shield repair layers when its previous dirty rectangle can
+actually overlap those layers. Passing every retained layer to every BOB clear
+adds CPU work even when the layer callback returns quickly.
+
+Repair callbacks should also bound their own scans to the incoming dirty
+rectangle. For example, shield repair should only inspect the shield cells that
+can overlap the dirty rectangle instead of scanning the whole shield.
 
 ## Escape hatches
 
