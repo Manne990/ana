@@ -72,6 +72,7 @@
 #define SHIELD_Y 178
 #define SHIELD_SPACING_X 72
 #define SHIELD_COLOR 3
+#define SHIELD_DIRTY_ALL ((1 << SHIELD_COUNT) - 1)
 
 typedef enum InvadersGameState {
     INVADERS_STATE_TITLE,

@@ -2632,6 +2632,7 @@ static int ana_draw_image_frame_fast(
     int y)
 {
     const unsigned char* mask;
+    const unsigned char* mask_row;
     const unsigned char* pixels;
     const unsigned char* source_row;
     unsigned char* dest_row;
@@ -2655,28 +2656,57 @@ static int ana_draw_image_frame_fast(
 
     mask = ana_image_mask_base(image, frame);
     if (mask == NULL) {
+        source_row = pixels;
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)y * ANA_DEFAULT_WIDTH) +
+            x;
+
+        if (image->width == 2) {
+            for (row = 0; row < image->height; row++) {
+                dest_row[0] = source_row[0];
+                dest_row[1] = source_row[1];
+                source_row += 2;
+                dest_row += ANA_DEFAULT_WIDTH;
+            }
+
+            return 1;
+        }
+
+        if (image->width == 16) {
+            for (row = 0; row < image->height; row++) {
+                ANA_COPY_8_PIXELS(dest_row, source_row);
+                ANA_COPY_8_PIXELS(dest_row + 8, source_row + 8);
+                source_row += 16;
+                dest_row += ANA_DEFAULT_WIDTH;
+            }
+
+            return 1;
+        }
+
         for (row = 0; row < image->height; row++) {
             memcpy(
-                ana_framebuffers[ana_draw_buffer] +
-                    ((long)(y + row) * ANA_DEFAULT_WIDTH) +
-                    x,
-                pixels + ((long)row * image->width),
+                dest_row,
+                source_row,
                 (size_t)image->width);
+            source_row += image->width;
+            dest_row += ANA_DEFAULT_WIDTH;
         }
 
         return 1;
     }
 
     if (image->row_bytes == 1 && image->width == 2) {
-        for (row = 0; row < image->height; row++) {
-            bits = mask[row];
-            if (bits != 0u) {
-                source_row = pixels + ((long)row * image->width);
-                dest_row =
-                    ana_framebuffers[ana_draw_buffer] +
-                    ((long)(y + row) * ANA_DEFAULT_WIDTH) +
-                    x;
+        mask_row = mask;
+        source_row = pixels;
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)y * ANA_DEFAULT_WIDTH) +
+            x;
 
+        for (row = 0; row < image->height; row++) {
+            bits = *mask_row;
+            if (bits != 0u) {
                 if ((bits & 0x80u) != 0u) {
                     dest_row[0] = source_row[0];
                 }
@@ -2684,21 +2714,26 @@ static int ana_draw_image_frame_fast(
                     dest_row[1] = source_row[1];
                 }
             }
+
+            mask_row++;
+            source_row += 2;
+            dest_row += ANA_DEFAULT_WIDTH;
         }
 
         return 1;
     }
 
     if (image->row_bytes == 1 && image->width <= 8) {
-        for (row = 0; row < image->height; row++) {
-            bits = mask[row];
-            if (bits != 0u) {
-                source_row = pixels + ((long)row * image->width);
-                dest_row =
-                    ana_framebuffers[ana_draw_buffer] +
-                    ((long)(y + row) * ANA_DEFAULT_WIDTH) +
-                    x;
+        mask_row = mask;
+        source_row = pixels;
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)y * ANA_DEFAULT_WIDTH) +
+            x;
 
+        for (row = 0; row < image->height; row++) {
+            bits = *mask_row;
+            if (bits != 0u) {
                 if ((bits & 0x80u) != 0u) {
                     dest_row[0] = source_row[0];
                 }
@@ -2724,20 +2759,25 @@ static int ana_draw_image_frame_fast(
                     dest_row[7] = source_row[7];
                 }
             }
+
+            mask_row++;
+            source_row += image->width;
+            dest_row += ANA_DEFAULT_WIDTH;
         }
 
         return 1;
     }
 
     if (image->row_bytes == 2 && image->width == 16) {
-        for (row = 0; row < image->height; row++) {
-            source_row = pixels + ((long)row * image->width);
-            dest_row =
-                ana_framebuffers[ana_draw_buffer] +
-                ((long)(y + row) * ANA_DEFAULT_WIDTH) +
-                x;
+        mask_row = mask;
+        source_row = pixels;
+        dest_row =
+            ana_framebuffers[ana_draw_buffer] +
+            ((long)y * ANA_DEFAULT_WIDTH) +
+            x;
 
-            bits = mask[(row * 2)];
+        for (row = 0; row < image->height; row++) {
+            bits = mask_row[0];
             if (bits == 0xffu) {
                 ANA_COPY_8_PIXELS(dest_row, source_row);
             } else if (bits != 0u) {
@@ -2767,7 +2807,7 @@ static int ana_draw_image_frame_fast(
                 }
             }
 
-            bits = mask[(row * 2) + 1];
+            bits = mask_row[1];
             if (bits == 0xffu) {
                 ANA_COPY_8_PIXELS(dest_row + 8, source_row + 8);
             } else if (bits != 0u) {
@@ -2796,6 +2836,10 @@ static int ana_draw_image_frame_fast(
                     dest_row[15] = source_row[15];
                 }
             }
+
+            mask_row += 2;
+            source_row += 16;
+            dest_row += ANA_DEFAULT_WIDTH;
         }
 
         return 1;

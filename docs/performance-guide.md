@@ -85,12 +85,16 @@ formation reaches the shield band. That keeps alien step frames closer to normal
 frames instead of periodically redrawing unrelated static state. It also bounds
 small mover repair work to the formation rows and columns a dirty rect can
 actually touch, which avoids whole-formation scans when bullets move through
-the playfield.
+the playfield. Shield damage tracks dirty state per shield, so one bullet hit
+does not force all four shields or the alien formation to redraw unless the
+damaged shield actually overlaps the formation.
 
 ANA's image renderer has dedicated fast paths for common small masked BOB
 sizes. In particular, 16-pixel-wide masked images avoid per-pixel work for
-fully transparent and fully opaque mask bytes. Prefer asset widths that match
-these common byte-aligned sprite sizes when practical.
+fully transparent and fully opaque mask bytes. Small unmasked images and common
+masked widths use pointer-increment loops instead of repeated row offset
+calculation. Prefer asset widths that match these common byte-aligned sprite
+sizes when practical.
 
 ## Escape hatches
 

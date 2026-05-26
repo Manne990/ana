@@ -89,6 +89,13 @@ static const unsigned char memory_test_mask16_image_bytes[] = {
     0x00, 0x00, 0x00, 0x00
 };
 
+static const unsigned char memory_test_unmasked2_image_bytes[] = {
+    0x41, 0x4e, 0x41, 0x49, 0x4d, 0x47, 0x30, 0x31,
+    0x02, 0x00, 0x02, 0x00, 0x01, 0x00, 0x02, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x80, 0x80, 0x40, 0x80
+};
+
 static const unsigned char memory_test_font_bytes[] = {
     0x41, 0x4e, 0x41, 0x46, 0x4e, 0x54, 0x30, 0x31,
     0x03, 0x00, 0x02, 0x00, 0x30, 0x03, 0x00, 0x00,
@@ -160,6 +167,7 @@ static void test_image_loading_and_drawing(void)
     ANA_Image image;
     ANA_Image memory_image;
     ANA_Image mask16_image;
+    ANA_Image unmasked2_image;
 
     path = "build/tests/gfx_test_image.anaimg";
     write_test_image_file(path);
@@ -228,7 +236,22 @@ static void test_image_loading_and_drawing(void)
     assert(ana_gfx_draw_pixel(18, 11) == 1);
     assert(ana_gfx_draw_pixel(25, 11) == 1);
 
+    unmasked2_image = ana_load_image_data(
+        memory_test_unmasked2_image_bytes,
+        (long)sizeof(memory_test_unmasked2_image_bytes));
+    assert(unmasked2_image != 0);
+    assert(ana_image_width(unmasked2_image) == 2);
+    assert(ana_image_height(unmasked2_image) == 2);
+
+    ana_clear(8);
+    ana_draw_image(unmasked2_image, 30, 30);
+    assert(ana_gfx_draw_pixel(30, 30) == 1);
+    assert(ana_gfx_draw_pixel(31, 30) == 2);
+    assert(ana_gfx_draw_pixel(30, 31) == 3);
+    assert(ana_gfx_draw_pixel(31, 31) == 0);
+
     ana_gfx_close();
+    ana_free_image(unmasked2_image);
     ana_free_image(mask16_image);
     ana_free_image(memory_image);
     ana_free_image(image);

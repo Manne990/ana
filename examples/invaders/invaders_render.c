@@ -22,14 +22,20 @@ static void invaders_fill_rect_black(ANA_Rect rect)
     ana_fill_rect(0u, rect.x, rect.y, rect.w, rect.h);
 }
 
-static void invaders_repair_shields_overlap(ANA_Rect rect)
+static void invaders_repair_shields_overlap(int slot, ANA_Rect rect)
 {
     ANA_Rect cell_rect;
     int shield;
     int row;
     int col;
+    int dirty_mask;
 
+    dirty_mask = shield_dirty_slots[slot];
     for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if ((dirty_mask & (1 << shield)) != 0) {
+            continue;
+        }
+
         if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
             continue;
         }
@@ -195,9 +201,7 @@ static int invaders_clear_previous_rect(int slot, ANA_Rect rect)
     if (!formation_dirty_slots[slot]) {
         invaders_repair_formation_overlap(rect);
     }
-    if (!shield_dirty_slots[slot]) {
-        invaders_repair_shields_overlap(rect);
-    }
+    invaders_repair_shields_overlap(slot, rect);
 
     return invaders_rect_overlaps_active_explosion(rect);
 }
@@ -403,12 +407,18 @@ static void invaders_draw_shields_slot(int slot)
     int row;
     int col;
     int run_start;
+    int dirty_mask;
 
-    if (!shield_dirty_slots[slot]) {
+    dirty_mask = shield_dirty_slots[slot];
+    if (dirty_mask == 0) {
         return;
     }
 
     for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if ((dirty_mask & (1 << shield)) == 0) {
+            continue;
+        }
+
         shield_rect = invaders_shield_rect(shield);
         invaders_fill_rect_black(shield_rect);
 
@@ -438,6 +448,36 @@ static void invaders_draw_shields_slot(int slot)
     }
 
     shield_dirty_slots[slot] = 0;
+}
+
+static int invaders_dirty_shields_overlap_formation(int slot)
+{
+    ANA_Rect formation_rect;
+    int shield;
+    int dirty_mask;
+
+    dirty_mask = shield_dirty_slots[slot];
+    if (dirty_mask == 0 || invaders_remaining <= 0) {
+        return 0;
+    }
+
+    formation_rect = ana_rect_make(
+        invader_formation_x,
+        invader_formation_y,
+        INVADER_FORMATION_WIDTH,
+        INVADER_FORMATION_HEIGHT);
+
+    for (shield = 0; shield < SHIELD_COUNT; shield++) {
+        if ((dirty_mask & (1 << shield)) == 0) {
+            continue;
+        }
+
+        if (ana_rect_intersects(formation_rect, invaders_shield_rect(shield))) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static void invaders_init_hud_labels(InvadersDrawSlot* draw_slot)
@@ -654,7 +694,7 @@ void invaders_draw(void)
         memset(&draw_slots[slot], 0, sizeof(draw_slots[slot]));
         formation_drawn_slots[slot] = 0;
         formation_dirty_slots[slot] = 1;
-        shield_dirty_slots[slot] = 1;
+        shield_dirty_slots[slot] = SHIELD_DIRTY_ALL;
         full_clear_slots[slot] = 0;
         redraw_explosions = 1;
     } else {
@@ -671,7 +711,8 @@ void invaders_draw(void)
     if (invaders_process_removed_enemies(slot)) {
         redraw_explosions = 1;
     }
-    if (shield_dirty_slots[slot] && formation_drawn_slots[slot]) {
+    if (formation_drawn_slots[slot] &&
+            invaders_dirty_shields_overlap_formation(slot)) {
         formation_dirty_slots[slot] = 1;
     }
     if (formation_dirty_slots[slot]) {

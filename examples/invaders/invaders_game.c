@@ -91,7 +91,7 @@ static void invaders_request_full_clear(void)
     for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
         full_clear_slots[i] = 1;
         formation_dirty_slots[i] = 1;
-        shield_dirty_slots[i] = 1;
+        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
         removed_enemy_counts[i] = 0;
         draw_slots[i].hud_labels_ready = 0;
     }
@@ -112,7 +112,22 @@ static void invaders_mark_shields_dirty(void)
     int i;
 
     for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
-        shield_dirty_slots[i] = 1;
+        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
+    }
+}
+
+static void invaders_mark_shield_dirty(int shield)
+{
+    int i;
+    int bit;
+
+    if (shield < 0 || shield >= SHIELD_COUNT) {
+        return;
+    }
+
+    bit = 1 << shield;
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        shield_dirty_slots[i] |= bit;
     }
 }
 
@@ -179,7 +194,7 @@ static void invaders_reset_draw_slots(void)
             formation_row_min_slots[i][row] = INVADER_COLUMNS;
             formation_row_max_slots[i][row] = -1;
         }
-        shield_dirty_slots[i] = 1;
+        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
         full_clear_slots[i] = 1;
     }
 }
@@ -445,16 +460,35 @@ int invaders_rect_overlaps_alive_shield(ANA_Rect rect)
 {
     ANA_Rect cell_rect;
     int shield;
+    int shield_x;
     int row;
     int col;
+    int min_row;
+    int max_row;
+    int min_col;
+    int max_col;
 
     for (shield = 0; shield < SHIELD_COUNT; shield++) {
         if (!ana_rect_intersects(rect, invaders_shield_rect(shield))) {
             continue;
         }
 
-        for (row = 0; row < SHIELD_ROWS; row++) {
-            for (col = 0; col < SHIELD_COLUMNS; col++) {
+        shield_x = invaders_shield_x(shield);
+        min_col = rect.x <= shield_x ?
+            0 :
+            (rect.x - shield_x) / SHIELD_CELL_SIZE;
+        max_col = rect.x + rect.w >= shield_x + SHIELD_WIDTH ?
+            SHIELD_COLUMNS - 1 :
+            ((rect.x + rect.w - 1) - shield_x) / SHIELD_CELL_SIZE;
+        min_row = rect.y <= SHIELD_Y ?
+            0 :
+            (rect.y - SHIELD_Y) / SHIELD_CELL_SIZE;
+        max_row = rect.y + rect.h >= SHIELD_Y + SHIELD_HEIGHT ?
+            SHIELD_ROWS - 1 :
+            ((rect.y + rect.h - 1) - SHIELD_Y) / SHIELD_CELL_SIZE;
+
+        for (row = min_row; row <= max_row; row++) {
+            for (col = min_col; col <= max_col; col++) {
                 if (!shield_cells[shield][row][col]) {
                     continue;
                 }
@@ -474,8 +508,13 @@ static int invaders_damage_shield_cells_at_rect(ANA_Rect rect, int stop_after_fi
 {
     ANA_Rect cell_rect;
     int shield;
+    int shield_x;
     int row;
     int col;
+    int min_row;
+    int max_row;
+    int min_col;
+    int max_col;
     int damaged;
 
     damaged = 0;
@@ -484,8 +523,22 @@ static int invaders_damage_shield_cells_at_rect(ANA_Rect rect, int stop_after_fi
             continue;
         }
 
-        for (row = 0; row < SHIELD_ROWS; row++) {
-            for (col = 0; col < SHIELD_COLUMNS; col++) {
+        shield_x = invaders_shield_x(shield);
+        min_col = rect.x <= shield_x ?
+            0 :
+            (rect.x - shield_x) / SHIELD_CELL_SIZE;
+        max_col = rect.x + rect.w >= shield_x + SHIELD_WIDTH ?
+            SHIELD_COLUMNS - 1 :
+            ((rect.x + rect.w - 1) - shield_x) / SHIELD_CELL_SIZE;
+        min_row = rect.y <= SHIELD_Y ?
+            0 :
+            (rect.y - SHIELD_Y) / SHIELD_CELL_SIZE;
+        max_row = rect.y + rect.h >= SHIELD_Y + SHIELD_HEIGHT ?
+            SHIELD_ROWS - 1 :
+            ((rect.y + rect.h - 1) - SHIELD_Y) / SHIELD_CELL_SIZE;
+
+        for (row = min_row; row <= max_row; row++) {
+            for (col = min_col; col <= max_col; col++) {
                 if (!shield_cells[shield][row][col]) {
                     continue;
                 }
@@ -494,17 +547,13 @@ static int invaders_damage_shield_cells_at_rect(ANA_Rect rect, int stop_after_fi
                 if (ana_rect_intersects(rect, cell_rect)) {
                     shield_cells[shield][row][col] = 0u;
                     damaged = 1;
+                    invaders_mark_shield_dirty(shield);
                     if (stop_after_first) {
-                        invaders_mark_shields_dirty();
                         return 1;
                     }
                 }
             }
         }
-    }
-
-    if (damaged) {
-        invaders_mark_shields_dirty();
     }
 
     return damaged;
