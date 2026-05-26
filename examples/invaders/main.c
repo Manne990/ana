@@ -1,3 +1,6 @@
+/* Entry point for the ANA Invaders example. Wires the game callbacks and
+   runtime profile into ANA, then prints a small AmigaDOS run summary. */
+
 #include "ana.h"
 #include "invaders_game.h"
 

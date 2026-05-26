@@ -30,8 +30,8 @@ Implemented today:
 - MOD music asset loading and Amiga playback through a vendored ProTracker
   replayer
 - small helpers for rectangles, clamp, timers, retained BOBs, and dirty labels
-- host-side image conversion to `.anaimg`
-- PNG source assets, `.anapal` palettes, `.mod` music assets, and simple
+- host-side image/font conversion to `.anaimg` and `.anafnt`
+- PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests
 - Amiga executable and ADF builds
 - `hello` and `invaders` examples
@@ -176,11 +176,12 @@ Build a manifest:
 build/tools/ana-convert/ana-convert build assets.ana --out build/assets/game
 ```
 
-The current public converter supports PNG and PPM P3/P6 image input. Manifest
-builds can also copy `.mod` music assets for `ana_load_music`; examples should
-keep MOD files small enough for floppy load time, Chip RAM, and frame-rate
-budgets. Broader font conversion, sound conversion, and XNA/MonoGame import
-experiments are planned for later work.
+The current public converter supports PNG and PPM P3/P6 image input for images
+and fixed-width bitmap fonts, plus small text-based SFX recipes that become
+`.anasnd` files. Manifest builds can also copy `.mod` music assets for
+`ana_load_music`; examples should keep MOD files small enough for floppy load
+time, Chip RAM, and frame-rate budgets. XNA/MonoGame import experiments are
+planned for later work.
 
 ## Third-party Code
 

@@ -1,3 +1,6 @@
+/* Core ANA Invaders gameplay state and rules: setup, input handling, alien
+   movement, shooting, collisions, shields, scoring, and lifecycle callbacks. */
+
 #include "invaders_internal.h"
 
 unsigned char invader_alive[INVADER_ROWS][INVADER_COLUMNS];

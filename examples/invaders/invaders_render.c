@@ -1,3 +1,6 @@
+/* Dirty-rect retained renderer for ANA Invaders. Tracks previous object
+   positions and redraw dependencies to keep Amiga frame updates small. */
+
 #include "invaders_internal.h"
 
 static int invaders_draw_slot_index(void)

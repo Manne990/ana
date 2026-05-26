@@ -1,3 +1,6 @@
+/* Public asset handles and loading helpers used by the ANA Invaders game and
+   renderer modules. */
+
 #ifndef INVADERS_ASSETS_H
 #define INVADERS_ASSETS_H
 

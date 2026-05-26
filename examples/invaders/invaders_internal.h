@@ -1,3 +1,6 @@
+/* Shared internal state, constants, and helper declarations for the ANA
+   Invaders gameplay and renderer modules. Not part of the public example API. */
+
 #ifndef INVADERS_INTERNAL_H
 #define INVADERS_INTERNAL_H
 

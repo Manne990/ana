@@ -22,7 +22,7 @@ runtime model explicit and performant.
 - MOD music asset loading and Amiga playback through `ptplayer`
 - small helpers for rectangles, clamp, and timers
 - retained rendering helpers for BOB state, dirty labels, and small draw layers
-- host-side `ana-convert` image converter
+- host-side `ana-convert` image, font, and SFX converter
 - PNG image input
 - text palette files (`.anapal`)
 - simple asset manifests

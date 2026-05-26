@@ -92,3 +92,4 @@ load.
 - Invaders kan spela explosionsljud.
 - Enemy step/game over-ljud kan spelas utan att spelkod hanterar kanaler direkt.
 - Ljud-API:t allokerar inte i normal playback.
+- Asset pipelinen kan bygga enkla `.anasnd`-filer fran `.anasfx`-recept.

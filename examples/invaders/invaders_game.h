@@ -1,3 +1,5 @@
+/* Public lifecycle callbacks for registering ANA Invaders with the ANA runtime. */
+
 #ifndef INVADERS_GAME_H
 #define INVADERS_GAME_H
 

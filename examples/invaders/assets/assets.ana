@@ -6,4 +6,9 @@ image player player.png --palette game --transparent #ff00ff
 image bullet bullet.png --palette game --transparent #ff00ff
 image invader invader.png --palette game --frame-width 16 --frame-height 8 --transparent #ff00ff
 image explosion explosion.png --palette game --frame-width 16 --frame-height 10 --transparent #ff00ff
+font hud hud_font.png --colors 2 --char-width 6 --char-height 7 --first-char 48 --chars 43 --transparent #ff00ff
+sound fire fire.anasfx
+sound explosion explosion.anasfx
+sound step step.anasfx
+sound gameover gameover.anasfx
 music theme theme.mod

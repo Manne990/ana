@@ -75,8 +75,6 @@ INVADERS_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/invaders
 INVADERS_ASSET_DIR := $(INVADERS_ASSET_BUILD_DIR)/assets
 INVADERS_ASSET_MANIFEST := examples/invaders/assets/assets.ana
 INVADERS_ASSET_SOURCES := $(wildcard examples/invaders/assets/*)
-INVADERS_ASSET_BUILDER := \
-	$(BUILD_DIR)/examples/invaders-build-assets/build-assets
 INVADERS_ASSET_STAMP := $(INVADERS_ASSET_BUILD_DIR)/.stamp
 
 TOOL_BINS := $(BUILD_DIR)/tools/ana-convert/ana-convert
@@ -154,13 +152,8 @@ $(BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(LIBANA)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
 
-$(INVADERS_ASSET_BUILDER): examples/invaders/build_assets.c
-	mkdir -p $(@D)
-	$(HOST_CC) $(HOST_CFLAGS) $< $(HOST_LDFLAGS) -o $@
-
-$(INVADERS_ASSET_STAMP): $(INVADERS_ASSET_BUILDER) $(TOOL_BINS) $(INVADERS_ASSET_SOURCES)
+$(INVADERS_ASSET_STAMP): $(TOOL_BINS) $(INVADERS_ASSET_SOURCES)
 	mkdir -p $(INVADERS_ASSET_DIR)
-	$(INVADERS_ASSET_BUILDER) $(INVADERS_ASSET_DIR)
 	$(BUILD_DIR)/tools/ana-convert/ana-convert build $(INVADERS_ASSET_MANIFEST) --out $(INVADERS_ASSET_DIR)
 	touch $@
 
@@ -265,4 +258,4 @@ clean:
 	$(RM) $(BUILD_DIR)
 
 clean-assets:
-	$(RM) $(BUILD_DIR)/assets $(INVADERS_ASSET_BUILDER) $(TOOL_BINS)
+	$(RM) $(BUILD_DIR)/assets $(BUILD_DIR)/examples/invaders-build-assets $(TOOL_BINS)

@@ -1,3 +1,6 @@
+/* Asset loading and ownership for ANA Invaders. Keeps file paths, audio
+   channel setup, and resource cleanup in one small module. */
+
 #include "invaders_assets.h"
 
 #ifdef ANA_TARGET_AMIGA

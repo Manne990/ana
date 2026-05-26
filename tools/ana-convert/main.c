@@ -28,6 +28,19 @@
 #define ANA_CONVERT_MAX_TOKENS 32
 #define ANA_CONVERT_MAX_MANIFEST_PALETTES 16
 #define ANA_CONVERT_IMAGE_FLAG_MASKED 0x01u
+#define ANA_CONVERT_FONT_HEADER_SIZE 16
+#define ANA_CONVERT_SOUND_HEADER_SIZE 20
+#define ANA_CONVERT_SOUND_DEFAULT_RATE 8000
+#define ANA_CONVERT_SOUND_MIN_RATE 1000
+#define ANA_CONVERT_SOUND_MAX_RATE 30000
+#define ANA_CONVERT_SOUND_MAX_SAMPLES 131070L
+#define ANA_CONVERT_SOUND_FLAG_SIGNED_8BIT 0x01u
+
+typedef enum ANA_SoundWave {
+    ANA_SOUND_WAVE_NONE = 0,
+    ANA_SOUND_WAVE_SQUARE,
+    ANA_SOUND_WAVE_NOISE
+} ANA_SoundWave;
 
 typedef struct ANA_ConvertColor {
     int r;
@@ -53,6 +66,31 @@ typedef struct ANA_ImageOptions {
     ANA_ConvertColor transparent;
 } ANA_ImageOptions;
 
+typedef struct ANA_FontOptions {
+    ANA_ImageOptions image;
+    int char_width;
+    int char_height;
+    int first_char;
+    int char_count;
+} ANA_FontOptions;
+
+typedef struct ANA_SoundOptions {
+    const char* input_path;
+    const char* output_path;
+    ANA_SoundWave wave;
+    int sample_rate;
+    int sample_count;
+    int volume;
+    int priority;
+    int attack_samples;
+    int release_samples;
+    int amp_start;
+    int amp_end;
+    int period_start;
+    int period_end;
+    unsigned long seed;
+} ANA_SoundOptions;
+
 typedef struct ANA_Palette {
     ANA_ConvertColor colors[ANA_CONVERT_MAX_COLORS];
     int present[ANA_CONVERT_MAX_COLORS];
@@ -77,6 +115,8 @@ static void print_usage(void)
     printf("Usage:\n");
     printf("  ana-convert --version\n");
     printf("  ana-convert image input.png --out output.anaimg [options]\n");
+    printf("  ana-convert font input.png --out output.anafnt [options]\n");
+    printf("  ana-convert sound input.anasfx --out output.anasnd\n");
     printf("  ana-convert palette palette.png --out game.anapal --colors 16\n");
     printf("  ana-convert build assets.ana --out build/assets/game\n");
     printf("\n");
@@ -88,8 +128,17 @@ static void print_usage(void)
     printf("  --transparent R,G,B     Transparent color, for example 255,0,255\n");
     printf("  --transparent #RRGGBB   Transparent color as hex\n");
     printf("\n");
+    printf("Font options:\n");
+    printf("  --char-width N          Fixed glyph width in pixels\n");
+    printf("  --char-height N         Fixed glyph height in pixels\n");
+    printf("  --first-char N          First ASCII character code. Default: 32\n");
+    printf("  --chars N               Number of glyph frames\n");
+    printf("  plus image palette and transparent options.\n");
+    printf("\n");
+    printf("Sound input format: ANA_SOUND 1 text recipes.\n");
+    printf("\n");
     printf("Image input formats: PNG and PPM P3/P6.\n");
-    printf("Manifest asset types: palette, image, music.\n");
+    printf("Manifest asset types: palette, image, font, sound, music.\n");
 }
 
 static char* copy_string(const char* text)
@@ -873,6 +922,14 @@ static int write_u16_le(FILE* file, int value)
     return write_byte(file, value) && write_byte(file, value >> 8);
 }
 
+static int write_u32_le(FILE* file, long value)
+{
+    return write_byte(file, (int)value) &&
+        write_byte(file, (int)(value >> 8)) &&
+        write_byte(file, (int)(value >> 16)) &&
+        write_byte(file, (int)(value >> 24));
+}
+
 static int write_palette_file(const char* path, const ANA_Palette* palette)
 {
     FILE* file;
@@ -1092,13 +1149,12 @@ static int write_frame(
     return ok;
 }
 
-static int write_ana_image(
-    const char* path,
+static int write_ana_image_contents(
+    FILE* file,
     const ANA_SourceImage* image,
     const ANA_ImageOptions* options,
     const ANA_Palette* palette)
 {
-    FILE* file;
     int frame_width;
     int frame_height;
     int frames_x;
@@ -1136,12 +1192,6 @@ static int write_ana_image(
     row_bytes = (frame_width + 7) / 8;
     has_mask = image_has_transparency(image, options);
 
-    file = fopen(path, "wb");
-    if (file == NULL) {
-        fprintf(stderr, "ana-convert: could not open output '%s'\n", path);
-        return 0;
-    }
-
     ok = fwrite("ANAIMG01", 1u, 8u, file) == 8u &&
         write_u16_le(file, frame_width) &&
         write_u16_le(file, frame_height) &&
@@ -1171,6 +1221,92 @@ static int write_ana_image(
         }
     }
 
+    return ok;
+}
+
+static int write_ana_image(
+    const char* path,
+    const ANA_SourceImage* image,
+    const ANA_ImageOptions* options,
+    const ANA_Palette* palette)
+{
+    FILE* file;
+    int ok;
+
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "ana-convert: could not open output '%s'\n", path);
+        return 0;
+    }
+
+    ok = write_ana_image_contents(file, image, options, palette);
+
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+
+    if (!ok) {
+        fprintf(stderr, "ana-convert: failed while writing '%s'\n", path);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int write_ana_font(
+    const char* path,
+    const ANA_SourceImage* image,
+    const ANA_FontOptions* options,
+    const ANA_Palette* palette)
+{
+    ANA_ImageOptions image_options;
+    FILE* file;
+    int frames_x;
+    int frames_y;
+    int frame_count;
+    int ok;
+
+    if (options->char_width <= 0 ||
+            options->char_height <= 0 ||
+            options->char_width > ANA_DEFAULT_WIDTH ||
+            options->char_height > ANA_DEFAULT_HEIGHT ||
+            (image->width % options->char_width) != 0 ||
+            (image->height % options->char_height) != 0) {
+        fprintf(stderr, "ana-convert: invalid font glyph size\n");
+        return 0;
+    }
+
+    frames_x = image->width / options->char_width;
+    frames_y = image->height / options->char_height;
+    frame_count = frames_x * frames_y;
+
+    if (options->char_count <= 0 ||
+            options->first_char < 0 ||
+            options->first_char + options->char_count > 128 ||
+            frame_count < options->char_count) {
+        fprintf(stderr, "ana-convert: invalid font character range\n");
+        return 0;
+    }
+
+    image_options = options->image;
+    image_options.frame_width = options->char_width;
+    image_options.frame_height = options->char_height;
+
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "ana-convert: could not open output '%s'\n", path);
+        return 0;
+    }
+
+    ok = fwrite("ANAFNT01", 1u, 8u, file) == 8u &&
+        write_u16_le(file, options->char_width) &&
+        write_u16_le(file, options->char_height) &&
+        write_byte(file, options->first_char) &&
+        write_byte(file, options->char_count) &&
+        write_byte(file, 0) &&
+        write_byte(file, 0) &&
+        write_ana_image_contents(file, image, &image_options, palette);
+
     if (fclose(file) != 0) {
         ok = 0;
     }
@@ -1199,6 +1335,18 @@ static void image_options_init(
     options->transparent.g = 0;
     options->transparent.b = 0;
     options->transparent.a = 255;
+}
+
+static void font_options_init(
+    ANA_FontOptions* options,
+    const char* input_path,
+    const char* output_path)
+{
+    image_options_init(&options->image, input_path, output_path);
+    options->char_width = 0;
+    options->char_height = 0;
+    options->first_char = 32;
+    options->char_count = 0;
 }
 
 static int parse_image_flags(
@@ -1266,6 +1414,75 @@ static int parse_image_args(int argc, char** argv, ANA_ImageOptions* options)
     return parse_image_flags(argc, argv, 3, options);
 }
 
+static int parse_font_flags(
+    int argc,
+    char** argv,
+    int start_index,
+    ANA_FontOptions* options)
+{
+    int i;
+
+    i = start_index;
+    while (i < argc) {
+        if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+            options->image.output_path = argv[i + 1];
+            i += 2;
+        } else if (strcmp(argv[i], "--palette") == 0 && i + 1 < argc) {
+            options->image.palette_path = argv[i + 1];
+            i += 2;
+        } else if (strcmp(argv[i], "--colors") == 0 && i + 1 < argc) {
+            if (!parse_required_positive_int(argv[i + 1], &options->image.colors) ||
+                    options->image.colors > ANA_CONVERT_MAX_COLORS) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--char-width") == 0 && i + 1 < argc) {
+            if (!parse_required_positive_int(argv[i + 1], &options->char_width)) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--char-height") == 0 && i + 1 < argc) {
+            if (!parse_required_positive_int(argv[i + 1], &options->char_height)) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--first-char") == 0 && i + 1 < argc) {
+            if (!parse_int(argv[i + 1], &options->first_char)) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--chars") == 0 && i + 1 < argc) {
+            if (!parse_required_positive_int(argv[i + 1], &options->char_count)) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--transparent") == 0 && i + 1 < argc) {
+            if (!parse_color_triplet(argv[i + 1], &options->image.transparent)) {
+                return 0;
+            }
+            options->image.has_transparent = 1;
+            i += 2;
+        } else {
+            return 0;
+        }
+    }
+
+    return options->image.output_path != NULL &&
+        options->char_width > 0 &&
+        options->char_height > 0 &&
+        options->char_count > 0;
+}
+
+static int parse_font_args(int argc, char** argv, ANA_FontOptions* options)
+{
+    if (argc < 9) {
+        return 0;
+    }
+
+    font_options_init(options, argv[2], NULL);
+    return parse_font_flags(argc, argv, 3, options);
+}
+
 static int run_image_command(int argc, char** argv)
 {
     ANA_ImageOptions options;
@@ -1307,6 +1524,55 @@ static int run_image_command(int argc, char** argv)
         palette.count);
 
     return 0;
+}
+
+static int run_font_options(const ANA_FontOptions* options)
+{
+    ANA_SourceImage image;
+    ANA_Palette palette;
+    int ok;
+
+    image.width = 0;
+    image.height = 0;
+    image.pixels = NULL;
+
+    ok = read_source_image(options->image.input_path, &image);
+    if (ok) {
+        if (options->image.palette_path != NULL) {
+            ok = read_palette_file(options->image.palette_path, &palette);
+        } else {
+            ok = build_palette(&image, &options->image, &palette);
+        }
+    }
+    if (ok) {
+        ok = write_ana_font(options->image.output_path, &image, options, &palette);
+    }
+
+    source_image_free(&image);
+
+    if (!ok) {
+        return 1;
+    }
+
+    printf(
+        "Wrote %s from %s (%d colors)\n",
+        options->image.output_path,
+        options->image.input_path,
+        palette.count);
+
+    return 0;
+}
+
+static int run_font_command(int argc, char** argv)
+{
+    ANA_FontOptions options;
+
+    if (!parse_font_args(argc, argv, &options)) {
+        print_usage();
+        return 1;
+    }
+
+    return run_font_options(&options);
 }
 
 static int parse_palette_args(int argc, char** argv, ANA_PaletteOptions* options)
@@ -1425,6 +1691,382 @@ static int tokenize_line(char* line, char** tokens, int max_tokens)
     }
 
     return count;
+}
+
+static void sound_options_init(
+    ANA_SoundOptions* options,
+    const char* input_path,
+    const char* output_path)
+{
+    options->input_path = input_path;
+    options->output_path = output_path;
+    options->wave = ANA_SOUND_WAVE_NONE;
+    options->sample_rate = ANA_CONVERT_SOUND_DEFAULT_RATE;
+    options->sample_count = 0;
+    options->volume = 64;
+    options->priority = 1;
+    options->attack_samples = 0;
+    options->release_samples = 0;
+    options->amp_start = 32;
+    options->amp_end = 32;
+    options->period_start = 8;
+    options->period_end = 8;
+    options->seed = 0x2468ace1UL;
+}
+
+static int parse_sound_wave(const char* text, ANA_SoundWave* wave)
+{
+    if (strcmp(text, "square") == 0) {
+        *wave = ANA_SOUND_WAVE_SQUARE;
+        return 1;
+    }
+
+    if (strcmp(text, "noise") == 0) {
+        *wave = ANA_SOUND_WAVE_NOISE;
+        return 1;
+    }
+
+    return 0;
+}
+
+static int parse_sound_recipe_line(
+    ANA_SoundOptions* options,
+    char** tokens,
+    int token_count,
+    int line_number)
+{
+    if (strcmp(tokens[0], "wave") == 0 && token_count == 2) {
+        if (!parse_sound_wave(tokens[1], &options->wave)) {
+            fprintf(stderr, "ana-convert: invalid sound wave at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "rate") == 0 && token_count == 2) {
+        if (!parse_required_positive_int(tokens[1], &options->sample_rate)) {
+            fprintf(stderr, "ana-convert: invalid sound rate at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "samples") == 0 && token_count == 2) {
+        if (!parse_required_positive_int(tokens[1], &options->sample_count)) {
+            fprintf(stderr, "ana-convert: invalid sound sample count at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "volume") == 0 && token_count == 2) {
+        if (!parse_int(tokens[1], &options->volume)) {
+            fprintf(stderr, "ana-convert: invalid sound volume at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "priority") == 0 && token_count == 2) {
+        if (!parse_int(tokens[1], &options->priority)) {
+            fprintf(stderr, "ana-convert: invalid sound priority at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "attack") == 0 && token_count == 2) {
+        if (!parse_int(tokens[1], &options->attack_samples)) {
+            fprintf(stderr, "ana-convert: invalid sound attack at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "release") == 0 && token_count == 2) {
+        if (!parse_int(tokens[1], &options->release_samples)) {
+            fprintf(stderr, "ana-convert: invalid sound release at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "amplitude") == 0 && token_count == 3) {
+        if (!parse_int(tokens[1], &options->amp_start) ||
+                !parse_int(tokens[2], &options->amp_end)) {
+            fprintf(stderr, "ana-convert: invalid sound amplitude at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    if (strcmp(tokens[0], "period") == 0 && token_count == 3) {
+        if (!parse_required_positive_int(tokens[1], &options->period_start) ||
+                !parse_required_positive_int(tokens[2], &options->period_end)) {
+            fprintf(stderr, "ana-convert: invalid sound period at line %d\n", line_number);
+            return 0;
+        }
+        return 1;
+    }
+
+    fprintf(stderr, "ana-convert: invalid sound recipe at line %d\n", line_number);
+    return 0;
+}
+
+static int read_sound_recipe(const char* path, ANA_SoundOptions* options)
+{
+    FILE* file;
+    char line[256];
+    char* tokens[ANA_CONVERT_MAX_TOKENS];
+    int line_number;
+    int token_count;
+    int saw_header;
+    int ok;
+
+    file = fopen(path, "r");
+    if (file == NULL) {
+        fprintf(stderr, "ana-convert: could not open sound recipe '%s'\n", path);
+        return 0;
+    }
+
+    line_number = 0;
+    saw_header = 0;
+    ok = 1;
+    while (ok && fgets(line, (int)sizeof(line), file) != NULL) {
+        line_number++;
+        token_count = tokenize_line(line, tokens, ANA_CONVERT_MAX_TOKENS);
+        if (token_count == 0 || tokens[0][0] == '#') {
+            continue;
+        }
+
+        if (!saw_header) {
+            if (token_count != 2 ||
+                    strcmp(tokens[0], "ANA_SOUND") != 0 ||
+                    strcmp(tokens[1], "1") != 0) {
+                fprintf(stderr, "ana-convert: invalid sound recipe header in '%s'\n", path);
+                ok = 0;
+            }
+            saw_header = 1;
+            continue;
+        }
+
+        ok = parse_sound_recipe_line(options, tokens, token_count, line_number);
+    }
+
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+
+    if (ok && !saw_header) {
+        fprintf(stderr, "ana-convert: sound recipe '%s' is empty\n", path);
+        ok = 0;
+    }
+
+    return ok;
+}
+
+static int sound_lerp(int start, int end, int index, int count)
+{
+    if (count <= 1) {
+        return start;
+    }
+
+    return start + (((end - start) * index) / (count - 1));
+}
+
+static int sound_enveloped_sample(
+    int sample,
+    int index,
+    int sample_count,
+    int attack_samples,
+    int release_samples)
+{
+    int scale;
+    int release_index;
+
+    scale = 64;
+    if (attack_samples > 0 && index < attack_samples) {
+        scale = (index * 64) / attack_samples;
+    }
+
+    release_index = sample_count - index;
+    if (release_samples > 0 && release_index < release_samples) {
+        int release_scale;
+
+        release_scale = (release_index * 64) / release_samples;
+        if (release_scale < scale) {
+            scale = release_scale;
+        }
+    }
+
+    return (sample * scale) / 64;
+}
+
+static unsigned char sound_signed_sample(int sample)
+{
+    if (sample > 127) {
+        sample = 127;
+    }
+
+    if (sample < -128) {
+        sample = -128;
+    }
+
+    return (unsigned char)(sample & 0xff);
+}
+
+static int sound_recipe_is_valid(const ANA_SoundOptions* options)
+{
+    return options->wave != ANA_SOUND_WAVE_NONE &&
+        options->sample_rate >= ANA_CONVERT_SOUND_MIN_RATE &&
+        options->sample_rate <= ANA_CONVERT_SOUND_MAX_RATE &&
+        options->sample_count > 0 &&
+        options->sample_count <= ANA_CONVERT_SOUND_MAX_SAMPLES &&
+        options->volume >= 0 &&
+        options->volume <= 64 &&
+        options->priority >= 0 &&
+        options->priority <= 127 &&
+        options->attack_samples >= 0 &&
+        options->release_samples >= 0 &&
+        options->amp_start >= 0 &&
+        options->amp_start <= 127 &&
+        options->amp_end >= 0 &&
+        options->amp_end <= 127 &&
+        options->period_start > 0 &&
+        options->period_end > 0;
+}
+
+static int sound_sample_at(
+    const ANA_SoundOptions* options,
+    int index,
+    unsigned long* seed)
+{
+    int amp;
+    int period;
+    int sample;
+
+    amp = sound_lerp(
+        options->amp_start,
+        options->amp_end,
+        index,
+        options->sample_count);
+    period = sound_lerp(
+        options->period_start,
+        options->period_end,
+        index,
+        options->sample_count);
+    if (period < 1) {
+        period = 1;
+    }
+
+    if (options->wave == ANA_SOUND_WAVE_NOISE) {
+        *seed = (*seed * 1103515245UL) + 12345UL;
+        sample = (int)((*seed >> 16) & 0x7fu) - 64;
+        sample = (sample * amp) / 64;
+    } else {
+        sample = ((index / period) & 1) ? amp : -amp;
+    }
+
+    return sound_enveloped_sample(
+        sample,
+        index,
+        options->sample_count,
+        options->attack_samples,
+        options->release_samples);
+}
+
+static int write_ana_sound(const char* path, const ANA_SoundOptions* options)
+{
+    FILE* file;
+    unsigned long seed;
+    int i;
+    int ok;
+
+    if (!sound_recipe_is_valid(options)) {
+        fprintf(stderr, "ana-convert: invalid sound recipe in '%s'\n", options->input_path);
+        return 0;
+    }
+
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "ana-convert: could not open output '%s'\n", path);
+        return 0;
+    }
+
+    ok = fwrite("ANASND01", 1u, 8u, file) == 8u &&
+        write_u16_le(file, options->sample_rate) &&
+        write_u32_le(file, options->sample_count) &&
+        write_byte(file, options->volume) &&
+        write_byte(file, options->priority) &&
+        write_byte(file, ANA_CONVERT_SOUND_FLAG_SIGNED_8BIT) &&
+        write_byte(file, 0) &&
+        write_byte(file, 0) &&
+        write_byte(file, 0);
+
+    seed = options->seed;
+    for (i = 0; ok && i < options->sample_count; i++) {
+        ok = write_byte(file, sound_signed_sample(sound_sample_at(options, i, &seed)));
+    }
+
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+
+    if (!ok) {
+        fprintf(stderr, "ana-convert: failed while writing '%s'\n", path);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int run_sound_options(ANA_SoundOptions* options)
+{
+    if (!read_sound_recipe(options->input_path, options)) {
+        return 1;
+    }
+
+    if (!write_ana_sound(options->output_path, options)) {
+        return 1;
+    }
+
+    printf("Wrote %s from %s\n", options->output_path, options->input_path);
+    return 0;
+}
+
+static int parse_sound_args(int argc, char** argv, ANA_SoundOptions* options)
+{
+    int i;
+
+    if (argc < 5) {
+        return 0;
+    }
+
+    sound_options_init(options, argv[2], NULL);
+
+    i = 3;
+    while (i < argc) {
+        if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+            options->output_path = argv[i + 1];
+            i += 2;
+        } else {
+            return 0;
+        }
+    }
+
+    return options->output_path != NULL;
+}
+
+static int run_sound_command(int argc, char** argv)
+{
+    ANA_SoundOptions options;
+
+    if (!parse_sound_args(argc, argv, &options)) {
+        print_usage();
+        return 1;
+    }
+
+    return run_sound_options(&options);
 }
 
 static const char* manifest_find_palette(
@@ -1637,6 +2279,115 @@ static int run_manifest_image(
     return result == 0;
 }
 
+static int run_manifest_font(
+    char** tokens,
+    int token_count,
+    const char* manifest_dir,
+    const char* output_dir,
+    const ANA_ManifestPalette* palettes,
+    int palette_count,
+    int line_number)
+{
+    ANA_FontOptions options;
+    char* input_path;
+    char* output_path;
+    char* palette_path;
+    const char* manifest_palette_path;
+    int result;
+
+    if (token_count < 4) {
+        fprintf(stderr, "ana-convert: invalid font entry at line %d\n", line_number);
+        return 0;
+    }
+
+    input_path = path_join(manifest_dir, tokens[2]);
+    output_path = asset_output_path(output_dir, tokens[1], ".anafnt");
+    if (input_path == NULL || output_path == NULL) {
+        free(input_path);
+        free(output_path);
+        fprintf(stderr, "ana-convert: out of memory while reading manifest\n");
+        return 0;
+    }
+
+    font_options_init(&options, input_path, output_path);
+    if (!parse_font_flags(token_count, tokens, 3, &options)) {
+        fprintf(stderr, "ana-convert: invalid font options at line %d\n", line_number);
+        free(input_path);
+        free(output_path);
+        return 0;
+    }
+
+    palette_path = NULL;
+    if (options.image.palette_path != NULL) {
+        manifest_palette_path = manifest_find_palette(
+            palettes,
+            palette_count,
+            options.image.palette_path);
+        if (manifest_palette_path != NULL) {
+            options.image.palette_path = manifest_palette_path;
+        } else if (!has_extension(options.image.palette_path, ".anapal")) {
+            fprintf(
+                stderr,
+                "ana-convert: unknown palette '%s' at line %d\n",
+                options.image.palette_path,
+                line_number);
+            free(input_path);
+            free(output_path);
+            return 0;
+        } else {
+            palette_path = path_join(manifest_dir, options.image.palette_path);
+            if (palette_path == NULL) {
+                free(input_path);
+                free(output_path);
+                fprintf(stderr, "ana-convert: out of memory while reading manifest\n");
+                return 0;
+            }
+            options.image.palette_path = palette_path;
+        }
+    }
+
+    result = run_font_options(&options);
+
+    free(palette_path);
+    free(input_path);
+    free(output_path);
+    return result == 0;
+}
+
+static int run_manifest_sound(
+    char** tokens,
+    int token_count,
+    const char* manifest_dir,
+    const char* output_dir,
+    int line_number)
+{
+    ANA_SoundOptions options;
+    char* input_path;
+    char* output_path;
+    int result;
+
+    if (token_count != 3) {
+        fprintf(stderr, "ana-convert: invalid sound entry at line %d\n", line_number);
+        return 0;
+    }
+
+    input_path = path_join(manifest_dir, tokens[2]);
+    output_path = asset_output_path(output_dir, tokens[1], ".anasnd");
+    if (input_path == NULL || output_path == NULL) {
+        free(input_path);
+        free(output_path);
+        fprintf(stderr, "ana-convert: out of memory while reading manifest\n");
+        return 0;
+    }
+
+    sound_options_init(&options, input_path, output_path);
+    result = run_sound_options(&options);
+
+    free(input_path);
+    free(output_path);
+    return result == 0;
+}
+
 static int run_manifest_music(
     char** tokens,
     int token_count,
@@ -1768,6 +2519,22 @@ static int run_build_command(int argc, char** argv)
                 palettes,
                 palette_count,
                 line_number);
+        } else if (strcmp(tokens[0], "font") == 0) {
+            ok = run_manifest_font(
+                tokens,
+                token_count,
+                manifest_dir,
+                output_dir,
+                palettes,
+                palette_count,
+                line_number);
+        } else if (strcmp(tokens[0], "sound") == 0) {
+            ok = run_manifest_sound(
+                tokens,
+                token_count,
+                manifest_dir,
+                output_dir,
+                line_number);
         } else if (strcmp(tokens[0], "music") == 0) {
             ok = run_manifest_music(
                 tokens,
@@ -1808,6 +2575,14 @@ int main(int argc, char** argv)
 
     if (argc >= 2 && strcmp(argv[1], "image") == 0) {
         return run_image_command(argc, argv);
+    }
+
+    if (argc >= 2 && strcmp(argv[1], "font") == 0) {
+        return run_font_command(argc, argv);
+    }
+
+    if (argc >= 2 && strcmp(argv[1], "sound") == 0) {
+        return run_sound_command(argc, argv);
     }
 
     if (argc >= 2 && strcmp(argv[1], "palette") == 0) {

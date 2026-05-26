@@ -13,9 +13,10 @@ formatlogik.
 ## Mal for 0.2
 
 - PNG-input for bilder.
+- PNG/PPM-input for fasta bitmapfonter.
 - Gemensam palettfil for ett spel eller exempel.
 - Automatisk asset-build via `make`.
-- Ett enkelt manifestformat for bilder och pass-through assets.
+- Ett enkelt manifestformat for bilder, bitmapfonter och pass-through assets.
 - Tydliga fel nar en asset inte passar malprofilen.
 - Invaders ska kunna byggas fran kallassets istallet for handbyggda byte-arrays.
 
@@ -35,6 +36,7 @@ examples/invaders/
   assets/
     assets.ana
     palette.png
+    hud_font.png
     player.png
     invader.png
     explosion.png
@@ -56,6 +58,7 @@ build/assets/invaders/game.anapal
 build/assets/invaders/player.anaimg
 build/assets/invaders/invader.anaimg
 build/assets/invaders/explosion.anaimg
+build/assets/invaders/hud.anafnt
 ```
 
 Spelet laddar sedan assets via vanliga runtime-API:er:
@@ -74,6 +77,8 @@ Direkt konvertering ska fortsatt fungera:
 ```sh
 ana-convert image player.png --out player.anaimg --palette game.anapal --transparent '#ff00ff'
 ana-convert image explosion.png --out explosion.anaimg --palette game.anapal --frame-width 16 --frame-height 16
+ana-convert font hud_font.png --out hud.anafnt --colors 2 --char-width 6 --char-height 7 --first-char 48 --chars 43 --transparent '#ff00ff'
+ana-convert sound fire.anasfx --out fire.anasnd
 ```
 
 Palett kan skapas fran en masterbild:
@@ -114,8 +119,8 @@ Regler:
 ## Manifestformat
 
 Manifestet ska vara radbaserat och avsiktligt mindre avancerat an XNA:s
-content project. 0.2 fokuserar pa bilder, men kan aven kopiera `.mod`-musik
-utan runtime-konvertering.
+content project. 0.2 fokuserar pa bilder, fasta bitmapfonter och enkla SFX-
+recept, men kan aven kopiera `.mod`-musik utan runtime-konvertering.
 
 ```text
 ANA_ASSETS 1
@@ -125,16 +130,19 @@ palette game palette.png --colors 16
 image player player.png --palette game --transparent #ff00ff
 image invader invader.png --palette game
 image explosion explosion.png --palette game --frame-width 16 --frame-height 16 --transparent #ff00ff
+font hud hud_font.png --colors 2 --char-width 6 --char-height 7 --first-char 48 --chars 43 --transparent #ff00ff
+sound fire fire.anasfx
 music theme theme.mod
 ```
 
 Regler:
 
-- Forsta token ar asset-typ: `palette`, `image` eller `music`.
+- Forsta token ar asset-typ: `palette`, `image`, `font`, `sound` eller
+  `music`.
 - Andra token ar asset-namn.
 - Tredje token ar source-fil relativt manifestet.
-- Outputnamn skapas fran asset-namnet: `player.anaimg`, `game.anapal`,
-  `theme.mod`.
+- Outputnamn skapas fran asset-namnet: `player.anaimg`, `hud.anafnt`,
+  `fire.anasnd`, `game.anapal`, `theme.mod`.
 - CLI-flaggor efter source-filen fungerar som for direktkommandot.
 - `music` tar inga flaggor i forsta versionen utan kopierar `.mod` rakt av.
   Runtime laddar sedan MOD-filen med `ana_load_music`.
@@ -183,6 +191,7 @@ nyare.
 Runtime ska fortsatt vara enkel:
 
 - `ana_load_image(path)` laddar `.anaimg`.
+- `ana_load_font(path)` laddar `.anafnt`.
 - `ana_load_image_data(bytes, size)` finns kvar for inbaddade exempel.
 - Runtime validerar ANA-formatets header och storlek.
 - Runtime forsoker inte ladda PNG, tolka manifest eller matcha palett.
@@ -219,7 +228,6 @@ Felmeddelanden bor innehalla filnamn och, nar rimligt, pixelposition.
 ## Inte i 0.2
 
 - Ljudkonvertering.
-- Bitmapfont-konvertering, om det inte faller ut naturligt fran image-flodet.
 - XNA project import.
 - Hot reload.
 - AI-genererade assets.
@@ -229,8 +237,10 @@ Felmeddelanden bor innehalla filnamn och, nar rimligt, pixelposition.
 ## Acceptanskriterier
 
 - `ana-convert image` kan lasa PNG och skriva `.anaimg`.
+- `ana-convert font` kan lasa PNG/PPM och skriva `.anafnt`.
 - `ana-convert palette` kan skapa `.anapal` fran PNG.
-- `ana-convert build` kan bygga ett enkelt manifest med palett och flera bilder.
+- `ana-convert build` kan bygga ett enkelt manifest med palett, flera bilder och
+  en bitmapfont.
 - Invaders assets kan ligga som source-filer och byggas till `build/assets/`.
 - CI bygger och testar assetflodet.
 - Dokumentationen visar ett komplett exempel fran PNG till `ana_load_image`.
@@ -241,11 +251,14 @@ Felmeddelanden bor innehalla filnamn och, nar rimligt, pixelposition.
 - `ana-convert image` kan anvanda `--palette game.anapal`.
 - `ana-convert palette` skapar textbaserade `.anapal`-filer fran PNG/PPM.
 - `ana-convert build` bygger ett radbaserat `ANA_ASSETS 1`-manifest.
+- `ana-convert font` bygger fasta bitmapfonter ovanpa image-formatet.
+- `ana-convert sound` bygger `.anasnd` fran enkla `.anasfx`-recept.
 - PNG-dekodning ligger vendrad och host-only i `tools/ana-convert/vendor/`.
 - `make assets`, `make examples/invaders-assets` och `make clean-assets` finns.
 - Invaders bildassets ligger som PNG-source assets under
   `examples/invaders/assets/` och byggs till `.anaimg`.
-- Invaders generatorn skapar bara `hud.anafnt` och `.anasnd` tills font- och
-  ljudkonvertering finns som publika asset pipeline-steg.
+- Invaders HUD-font ligger som source asset och byggs till `.anafnt`.
+- Invaders SFX ligger som `.anasfx` source assets och byggs till `.anasnd`.
 - Den gamla kodbaserade `.anaimg`-genereringen for Invaders ar borttagen.
-- Testsviten bygger PPM, PNG, `.anapal` och manifestfloden.
+- Testsviten bygger PPM, PNG, `.anapal`, `.anafnt`, `.anasnd` och
+  manifestfloden.
