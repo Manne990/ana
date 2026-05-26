@@ -127,6 +127,7 @@ AMIGA_INVADERS_DEBUG_BIN := $(AMIGA_DEBUG_BUILD_DIR)/examples/invaders-debug/inv
 AMIGA_INVADERS_BUFFERED_DEBUG_BIN := $(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/examples/invaders-buffered-debug/invaders
 AMIGA_INVADERS_SYNC_BIN := $(AMIGA_SYNC_BUILD_DIR)/examples/invaders-sync/invaders
 AMIGA_INVADERS_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/invaders-a1200-debug/invaders
+AMIGA_AMAZE_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/amaze-a1200-debug/amaze
 
 ADF_FILES := \
 	$(ADF_DIR)/hello.adf \
@@ -139,8 +140,9 @@ INVADERS_SYNC_ADF := $(ADF_DIR)/invaders-sync.adf
 INVADERS_A1200_ADF := $(ADF_DIR)/invaders-a1200.adf
 INVADERS_A1200_DEBUG_ADF := $(ADF_DIR)/invaders-a1200-debug.adf
 AMAZE_A1200_ADF := $(ADF_DIR)/amaze-a1200.adf
+AMAZE_A1200_DEBUG_ADF := $(ADF_DIR)/amaze-a1200-debug.adf
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf release-package clean-assets clean
 
 all: lib examples tools
 
@@ -176,6 +178,8 @@ amiga-invaders-sync: $(AMIGA_INVADERS_SYNC_BIN)
 
 amiga-invaders-a1200-debug: $(AMIGA_INVADERS_A1200_DEBUG_BIN)
 
+amiga-amaze-a1200-debug: $(AMIGA_AMAZE_A1200_DEBUG_BIN)
+
 adfs: $(ADF_FILES)
 
 invaders-debug-adf: $(INVADERS_DEBUG_ADF)
@@ -189,6 +193,8 @@ invaders-a1200-adf: $(INVADERS_A1200_ADF)
 invaders-a1200-debug-adf: $(INVADERS_A1200_DEBUG_ADF)
 
 amaze-a1200-adf: $(AMAZE_A1200_ADF)
+
+amaze-a1200-debug-adf: $(AMAZE_A1200_DEBUG_ADF)
 
 release-package:
 	$(RM) $(RELEASE_ROOT)
@@ -367,6 +373,10 @@ $(AMIGA_INVADERS_A1200_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) $(INVADERS_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
+$(AMIGA_AMAZE_A1200_DEBUG_BIN): $(AMAZE_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) $(AMAZE_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
 $(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAHello
@@ -402,6 +412,10 @@ $(INVADERS_SYNC_ADF): $(AMIGA_INVADERS_SYNC_BIN) $(INVADERS_ASSET_STAMP)
 $(INVADERS_A1200_DEBUG_ADF): $(AMIGA_INVADERS_A1200_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInv12Dbg $(INVADERS_ASSET_DIR)
+
+$(AMAZE_A1200_DEBUG_ADF): $(AMIGA_AMAZE_A1200_DEBUG_BIN) $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l AMAZE12Dbg $(AMAZE_ASSET_DIR)
 
 $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)

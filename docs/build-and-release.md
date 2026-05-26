@@ -43,6 +43,7 @@ A1200 baseline builds use `-m68020`:
 ```sh
 make amiga-a1200-examples
 make amiga-invaders-a1200-debug
+make amiga-amaze-a1200-debug
 ```
 
 Outputs:
@@ -52,12 +53,13 @@ Outputs:
 - `build/amiga-a1200/examples/invaders/invaders`
 - `build/amiga-a1200/examples/amaze/amaze`
 - `build/amiga-a1200-debug/examples/invaders-a1200-debug/invaders`
+- `build/amiga-a1200-debug/examples/amaze-a1200-debug/amaze`
 
 Build ADFs:
 
 ```sh
 make adfs
-make invaders-a1200-adf amaze-a1200-adf invaders-a1200-debug-adf
+make invaders-a1200-adf amaze-a1200-adf invaders-a1200-debug-adf amaze-a1200-debug-adf
 ```
 
 Outputs:
@@ -68,6 +70,7 @@ Outputs:
 - `build/adf/invaders-a1200.adf`
 - `build/adf/amaze-a1200.adf`
 - `build/adf/invaders-a1200-debug.adf`
+- `build/adf/amaze-a1200-debug.adf`
 
 ## CI build
 
@@ -132,8 +135,10 @@ Current CI binary artifacts:
 - `hello.adf`
 - `invaders.adf`
 - `invaders-a1200.adf`
+- `invaders-a1200-debug.adf`
 - `amaze.adf`
 - `amaze-a1200.adf`
+- `amaze-a1200-debug.adf`
 
 If a future release includes prebuilt binaries, the release notes must state:
 

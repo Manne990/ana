@@ -83,6 +83,7 @@ code with `-m68020`:
 make amiga-a1200-examples
 make invaders-a1200-adf
 make amaze-a1200-adf
+make amaze-a1200-debug-adf
 ```
 
 ADF images are written to `build/adf/`:
@@ -92,16 +93,18 @@ ADF images are written to `build/adf/`:
 - `build/adf/amaze.adf`
 - `build/adf/invaders-a1200.adf`
 - `build/adf/amaze-a1200.adf`
+- `build/adf/amaze-a1200-debug.adf`
 
-Additional Invaders profiling ADFs can be built into the same directory with
+Additional profiling ADFs can be built into the same directory with
 `make invaders-debug-adf`, `make invaders-sync-adf`,
-`make invaders-buffered-debug-adf`, and `make invaders-a1200-debug-adf` after
-their matching Amiga binaries have been built.
+`make invaders-buffered-debug-adf`, `make invaders-a1200-debug-adf`, and
+`make amaze-a1200-debug-adf` after their matching Amiga binaries have been
+built.
 
-Use `invaders-a1200.adf` for normal A1200 performance checks. The debug ADFs
-compile in runtime/render instrumentation and are intended for diagnostics.
+Use the normal A1200 ADFs for gameplay checks. The debug ADFs compile in
+runtime/render instrumentation and are intended for diagnostics.
 
-The GitHub Actions workflow uploads the normal and A1200 ADFs as the
+The GitHub Actions workflow uploads the normal, A1200, and debug ADFs as the
 `ana-example-adfs` artifact.
 
 ## Documentation

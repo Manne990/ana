@@ -78,7 +78,7 @@ docker run --rm \
   -v "$PWD:/work" \
   -w /work \
   amigadev/crosstools:m68k-amigaos-gcc10_amd64 \
-  make clean amiga-a1200-examples amiga-invaders-a1200-debug
+  make clean amiga-a1200-examples amiga-invaders-a1200-debug amiga-amaze-a1200-debug
 ```
 
 The A1200 targets compile the C code with `-m68020`. They keep the same PAL
@@ -97,13 +97,14 @@ For A1200-specific disk images:
 ```sh
 make invaders-a1200-adf
 make amaze-a1200-adf
+make amaze-a1200-debug-adf
 ```
 
 If `gadf` is not on your path:
 
 ```sh
 make adfs ADFTOOL="$HOME/go/bin/gadf"
-make invaders-a1200-adf amaze-a1200-adf ADFTOOL="$HOME/go/bin/gadf"
+make invaders-a1200-adf amaze-a1200-adf amaze-a1200-debug-adf ADFTOOL="$HOME/go/bin/gadf"
 ```
 
 ADF images are written to `build/adf/`:
@@ -113,6 +114,7 @@ ADF images are written to `build/adf/`:
 - `build/adf/amaze.adf`
 - `build/adf/invaders-a1200.adf`
 - `build/adf/amaze-a1200.adf`
+- `build/adf/amaze-a1200-debug.adf`
 
 The CI artifact is called `ana-example-adfs`.
 
@@ -198,6 +200,15 @@ make invaders-a1200-debug-adf
 ```
 
 This writes `build/adf/invaders-a1200-debug.adf`.
+
+For AMAze stock-A1200 measurements:
+
+```sh
+make amiga-amaze-a1200-debug
+make amaze-a1200-debug-adf
+```
+
+This writes `build/adf/amaze-a1200-debug.adf`.
 
 For the direct-present path with synchronization:
 
