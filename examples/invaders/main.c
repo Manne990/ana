@@ -5,7 +5,7 @@
 
 int main(void)
 {
-    ANA_Game game;
+    ANA_Game game = {0};
     int result;
 
     game.init = invaders_init;
@@ -18,6 +18,7 @@ int main(void)
     game.fps = 50;
     game.colors = 16;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.debug_stats = 1;
 
     printf("ANA invaders started.\n");
     printf("Keyboard mapping: cursor/A-D movement, Space action, Esc quit.\n");
@@ -26,13 +27,6 @@ int main(void)
     result = ana_run(&game);
 
     printf("ANA invaders finished with %s.\n", ana_result_name((ANA_Result)result));
-    invaders_print_run_summary();
-#ifdef ANA_INVADERS_DEBUG_STATS
-    invaders_print_run_stats();
-#endif
-    printf("Player X: %d\n", invaders_player_x());
-    printf("Score: %d\n", invaders_score());
-    printf("Invaders remaining: %d\n", invaders_remaining_count());
     printf("Assets loaded: %s\n", invaders_assets_are_loaded() ? "yes" : "no");
     printf("Type invaders to run it again.\n");
 

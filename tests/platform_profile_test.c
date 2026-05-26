@@ -45,7 +45,7 @@ static void test_public_handle_names_are_available(void)
     ANA_Image image;
     ANA_Font font;
     ANA_Sound sound;
-    ANA_Game game;
+    ANA_Game game = {0};
     ANA_Time time;
 
     image = 0;
@@ -62,6 +62,7 @@ static void test_public_handle_names_are_available(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.debug_stats = 0;
 
     time.tick = 0;
     time.fps = ANA_DEFAULT_FPS;

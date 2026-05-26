@@ -51,7 +51,8 @@ This path was chosen because the previous screen-buffer path was too expensive
 for the current Invaders sample. It is fast enough for the showcase, but it
 requires careful dirty-rect handling.
 
-Debug builds can print timing counters:
+Debug builds can print timing counters when the game sets
+`ANA_Game.debug_stats = 1`:
 
 ```sh
 make amiga-invaders-debug

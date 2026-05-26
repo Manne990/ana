@@ -127,7 +127,7 @@ static void game_draw(void)
 
 int main(void)
 {
-    ANA_Game game;
+    ANA_Game game = {0};
 
     game.init = game_init;
     game.load = 0;
@@ -139,6 +139,7 @@ int main(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.debug_stats = 0;
 
     return ana_run(&game);
 }

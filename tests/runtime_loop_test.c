@@ -57,7 +57,7 @@ static void reset_counts(void)
 
 static ANA_Game make_game(void)
 {
-    ANA_Game game;
+    ANA_Game game = {0};
 
     game.init = runtime_init;
     game.load = runtime_load;
@@ -69,6 +69,7 @@ static ANA_Game make_game(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.debug_stats = 0;
 
     return game;
 }

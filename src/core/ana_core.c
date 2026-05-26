@@ -3,6 +3,7 @@
 #include "ana_internal.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 static int ana_runtime_quit_requested = 0;
 static int ana_runtime_running = 0;
@@ -97,6 +98,157 @@ static void ana_runtime_record_stats(long start_ticks, long end_ticks)
         ana_runtime_last_stats.average_fps_x100 = 0L;
     }
 }
+
+#ifdef ANA_DEBUG_STATS
+static long ana_runtime_average_us(
+    long total_perf_ticks,
+    long frames,
+    long perf_ticks_per_second)
+{
+    long avg_ticks;
+
+    if (total_perf_ticks <= 0L || frames <= 0L ||
+            perf_ticks_per_second <= 0L) {
+        return 0L;
+    }
+
+    avg_ticks = total_perf_ticks / frames;
+    if (perf_ticks_per_second >= 1000L) {
+        return (avg_ticks * 1000L) / (perf_ticks_per_second / 1000L);
+    }
+
+    return (avg_ticks * 1000000L) / perf_ticks_per_second;
+}
+
+static void ana_runtime_print_ms(long microseconds)
+{
+    printf("%ld.%03ld", microseconds / 1000L, microseconds % 1000L);
+}
+
+static void ana_runtime_print_debug_stats(void)
+{
+    ANA_RunStats stats;
+    ANA_RenderStats render_stats;
+    long elapsed_seconds_x100;
+    long dirty_rects_per_frame_x100;
+    long converted_pixels_per_frame;
+    long planar_clear_pixels_per_frame;
+    long chunky_clear_pixels_per_frame;
+    long input_us;
+    long update_us;
+    long draw_us;
+    long present_us;
+    long present_total_us;
+    long present_clear_us;
+    long present_convert_us;
+    long present_flip_us;
+
+    stats = ana_last_run_stats();
+    render_stats = ana_render_stats();
+    elapsed_seconds_x100 = 0L;
+    dirty_rects_per_frame_x100 = 0L;
+    converted_pixels_per_frame = 0L;
+    planar_clear_pixels_per_frame = 0L;
+    chunky_clear_pixels_per_frame = 0L;
+    input_us = ana_runtime_average_us(
+        stats.input_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    update_us = ana_runtime_average_us(
+        stats.update_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    draw_us = ana_runtime_average_us(
+        stats.draw_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    present_us = ana_runtime_average_us(
+        stats.present_perf_ticks,
+        stats.frames,
+        stats.perf_ticks_per_second);
+    present_total_us = ana_runtime_average_us(
+        render_stats.present_total_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+    present_clear_us = ana_runtime_average_us(
+        render_stats.present_clear_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+    present_convert_us = ana_runtime_average_us(
+        render_stats.present_convert_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+    present_flip_us = ana_runtime_average_us(
+        render_stats.present_flip_perf_ticks,
+        render_stats.frames,
+        render_stats.perf_ticks_per_second);
+
+    if (stats.ticks_per_second > 0L) {
+        elapsed_seconds_x100 =
+            (stats.elapsed_ticks * 100L) / stats.ticks_per_second;
+    }
+
+    if (render_stats.frames > 0L) {
+        dirty_rects_per_frame_x100 =
+            (render_stats.dirty_rects * 100L) / render_stats.frames;
+        converted_pixels_per_frame =
+            render_stats.converted_pixels / render_stats.frames;
+        planar_clear_pixels_per_frame =
+            render_stats.planar_clear_pixels / render_stats.frames;
+        chunky_clear_pixels_per_frame =
+            render_stats.chunky_clear_pixels / render_stats.frames;
+    }
+
+    printf("Frames presented: %ld\n", stats.frames);
+    printf(
+        "Elapsed time: %ld.%02ld sec\n",
+        elapsed_seconds_x100 / 100L,
+        elapsed_seconds_x100 % 100L);
+    printf(
+        "Average FPS: %ld.%02ld\n",
+        stats.average_fps_x100 / 100L,
+        stats.average_fps_x100 % 100L);
+    printf(
+        "Dirty rects/frame: %ld.%02ld (max %ld)\n",
+        dirty_rects_per_frame_x100 / 100L,
+        dirty_rects_per_frame_x100 % 100L,
+        render_stats.max_dirty_rects);
+    printf(
+        "Converted pixels/frame: %ld (max %ld)\n",
+        converted_pixels_per_frame,
+        render_stats.max_converted_pixels);
+    printf(
+        "Planar clear pixels/frame: %ld (max %ld)\n",
+        planar_clear_pixels_per_frame,
+        render_stats.max_planar_clear_pixels);
+    printf(
+        "Chunky clear pixels/frame: %ld (max %ld)\n",
+        chunky_clear_pixels_per_frame,
+        render_stats.max_chunky_clear_pixels);
+    printf("Avg input/update/draw/present ms: ");
+    ana_runtime_print_ms(input_us);
+    printf("/");
+    ana_runtime_print_ms(update_us);
+    printf("/");
+    ana_runtime_print_ms(draw_us);
+    printf("/");
+    ana_runtime_print_ms(present_us);
+    printf("\n");
+    printf("Avg present clear/c2p/flip/total ms: ");
+    ana_runtime_print_ms(present_clear_us);
+    printf("/");
+    ana_runtime_print_ms(present_convert_us);
+    printf("/");
+    ana_runtime_print_ms(present_flip_us);
+    printf("/");
+    ana_runtime_print_ms(present_total_us);
+    printf("\n");
+    printf(
+        "Flip paths screen/direct: %ld/%ld\n",
+        render_stats.screen_buffer_flips,
+        render_stats.direct_flips);
+}
+#endif
 
 static void ana_runtime_wait_for_next_frame(
     long start_ticks,
@@ -220,6 +372,12 @@ int ana_run(const ANA_Game* game)
 
     end_ticks = ana_platform_time_ticks();
     ana_runtime_record_stats(start_ticks, end_ticks);
+
+#ifdef ANA_DEBUG_STATS
+    if (game->debug_stats) {
+        ana_runtime_print_debug_stats();
+    }
+#endif
 
     if (game->shutdown != NULL) {
         game->shutdown();

@@ -20,7 +20,7 @@ static void hello_draw(void)
 
 int main(void)
 {
-    ANA_Game game;
+    ANA_Game game = {0};
     int result;
 
     game.init = 0;
@@ -33,6 +33,7 @@ int main(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.debug_stats = 0;
 
     printf("ANA hello started.\n");
     printf("Opening ANA PAL lores screen for about five seconds.\n");

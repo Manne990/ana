@@ -116,7 +116,7 @@ If a future 0.1 release includes prebuilt binaries, the release notes must state
 - target CPU assumptions
 - AmigaOS / Kickstart assumptions
 - whether the direct-present renderer is enabled
-- whether debug statistics are enabled
+- whether `ANA_DEBUG_STATS` is enabled
 
 ## Versioning
 

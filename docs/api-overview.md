@@ -19,7 +19,9 @@ Core types and functions:
 - `ana_quit`
 - `ana_last_run_stats`
 
-`ANA_Game` owns the high-level lifecycle:
+`ANA_Game` owns the high-level lifecycle. Prefer zero-initializing it with
+`ANA_Game game = {0};` before assigning fields, so future optional fields default
+to off:
 
 - `init`
 - `load`
@@ -29,6 +31,10 @@ Core types and functions:
 
 The runtime currently uses a fixed tick model. `ANA_Time.tick` increases once
 per simulated frame. `ANA_Time.fps` is the configured target rate.
+
+Set `ANA_Game.debug_stats` to `1` to ask the runtime to print full run/render
+statistics after `ana_run`. The flag only has an effect when ANA is built with
+`ANA_DEBUG_STATS`.
 
 ## Platform profile
 

@@ -37,6 +37,7 @@ typedef struct ANA_Game {
     int fps;
     int colors;
     ANA_ScreenMode screen_mode;
+    int debug_stats;
 } ANA_Game;
 
 int ana_run(const ANA_Game* game);
@@ -45,6 +46,9 @@ ANA_RunStats ana_last_run_stats(void);
 ```
 
 For 0.1 ar `ANA_Time` fortfarande baserad pa en strikt fixed timestep. Den finns for att gora koden tydlig och framtidssaker, inte for att introducera variabel timestep.
+
+Spelkod bor skapa `ANA_Game` med `ANA_Game game = {0};` innan falt satts.
+Da defaultar framtida frivilliga falt till avstangt beteende.
 
 ## Runtime-ansvar
 
@@ -55,12 +59,14 @@ For 0.1 ar `ANA_Time` fortfarande baserad pa en strikt fixed timestep. Den finns
 - driva update/draw-loop
 - satta upp skarm enligt `ANA_Game`-konfiguration
 - hantera quit-flagga
+- skriva runtime-/render-statistik om `debug_stats` ar satt och ANA ar byggt
+  med `ANA_DEBUG_STATS`
 - stanga ner subsystem i korrekt ordning
 - returnera felkod vid initieringsfel
 
 Efter `ana_run` kan spelet hamta `ANA_RunStats` med
-`ana_last_run_stats()`. I 0.1 anvands det framfor allt for enkel
-prestandalogging i emulator eller pa riktig Amiga:
+`ana_last_run_stats()`. I 0.1 anvands det framfor allt internt av ANA:s
+debug-utskrift, men ar fortfarande tillgangligt for avancerad matning:
 
 - `frames`: antal presenterade frames
 - `elapsed_ticks`: uppmatt tid i plattformens ticks
