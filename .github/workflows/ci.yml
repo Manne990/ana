@@ -65,7 +65,7 @@ jobs:
             make clean amiga-examples amiga-a1200-examples amiga-invaders-a1200-debug
 
       - name: Build ADF images
-        run: make adfs invaders-a1200-adf invaders-a1200-debug-adf ADFTOOL="$HOME/go/bin/gadf"
+        run: make adfs invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf ADFTOOL="$HOME/go/bin/gadf"
 
       - name: Upload ADF artifacts
         uses: actions/upload-artifact@v4

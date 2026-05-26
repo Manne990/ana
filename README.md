@@ -14,10 +14,12 @@ structure, but be designed around C and Amiga hardware.
 
 ## Current Status
 
-ANA 0.1 is the "Invaders Release": a small framework release demonstrated by a
-playable Space Invaders-style example.
+ANA 0.1.0 is tagged as the "Invaders Release": a small framework release
+demonstrated by a playable Space Invaders-style example. Current `main` is
+post-0.1 development toward 0.2 and adds `AMAze`, a compact maze-chase sample
+with simple SFX and rudimentary pathfinding.
 
-Implemented today:
+Implemented so far:
 
 - fixed-step game loop
 - PAL lores profile validation
@@ -34,7 +36,7 @@ Implemented today:
 - PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests
 - Amiga executable and ADF builds
-- `hello` and `invaders` examples
+- `hello`, `invaders`, and `amaze` examples
 
 The practical showcase baseline is currently a stock A1200 without Fast RAM.
 The performance goal for the complete Invaders demo is stable 50 fps on that
@@ -49,6 +51,10 @@ draw slots directly. Its asset manifest also packages a small ProTracker MOD as
 `assets/theme.mod`. The example plays music on title, clear, and game-over
 screens, then stops it during active gameplay so the normal ADF keeps the arcade
 loop close to the A1200 performance target.
+
+`examples/amaze` is intentionally smaller: it draws a tile maze with ANA
+primitives, loads three small SFX assets, and uses a fixed-size BFS distance map
+so chasers can take simple paths toward the player.
 
 ## Quick Build
 
@@ -76,13 +82,16 @@ code with `-m68020`:
 ```sh
 make amiga-a1200-examples
 make invaders-a1200-adf
+make amaze-a1200-adf
 ```
 
 ADF images are written to `build/adf/`:
 
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
+- `build/adf/amaze.adf`
 - `build/adf/invaders-a1200.adf`
+- `build/adf/amaze-a1200.adf`
 
 Additional Invaders profiling ADFs can be built into the same directory with
 `make invaders-debug-adf`, `make invaders-sync-adf`,
@@ -220,7 +229,7 @@ make release-package
 The archive is written to:
 
 ```text
-build/release/ana-0.1.0.tar.gz
+build/release/ana-0.2.0-dev.tar.gz
 ```
 
 See [Build and release package guide](docs/build-and-release.md) for package

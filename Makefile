@@ -67,7 +67,8 @@ TOOL_TEST_HELPERS := \
 
 EXAMPLE_BINS := \
 	$(BUILD_DIR)/examples/hello/hello \
-	$(BUILD_DIR)/examples/invaders/invaders
+	$(BUILD_DIR)/examples/invaders/invaders \
+	$(BUILD_DIR)/examples/amaze/amaze
 
 INVADERS_SRCS := \
 	examples/invaders/main.c \
@@ -83,6 +84,14 @@ INVADERS_ASSET_DIR := $(INVADERS_ASSET_BUILD_DIR)/assets
 INVADERS_ASSET_MANIFEST := examples/invaders/assets/assets.ana
 INVADERS_ASSET_SOURCES := $(wildcard examples/invaders/assets/*)
 INVADERS_ASSET_STAMP := $(INVADERS_ASSET_BUILD_DIR)/.stamp
+
+AMAZE_SRCS := \
+	examples/amaze/main.c
+AMAZE_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/amaze
+AMAZE_ASSET_DIR := $(AMAZE_ASSET_BUILD_DIR)/assets
+AMAZE_ASSET_MANIFEST := examples/amaze/assets/assets.ana
+AMAZE_ASSET_SOURCES := $(wildcard examples/amaze/assets/*)
+AMAZE_ASSET_STAMP := $(AMAZE_ASSET_BUILD_DIR)/.stamp
 
 TOOL_BINS := $(BUILD_DIR)/tools/ana-convert/ana-convert
 
@@ -107,10 +116,12 @@ AMIGA_A1200_DEBUG_LIBANA := $(AMIGA_A1200_DEBUG_BUILD_DIR)/libana.a
 
 AMIGA_EXAMPLE_BINS := \
 	$(AMIGA_BUILD_DIR)/examples/hello/hello \
-	$(AMIGA_BUILD_DIR)/examples/invaders/invaders
+	$(AMIGA_BUILD_DIR)/examples/invaders/invaders \
+	$(AMIGA_BUILD_DIR)/examples/amaze/amaze
 AMIGA_A1200_EXAMPLE_BINS := \
 	$(AMIGA_A1200_BUILD_DIR)/examples/hello/hello \
-	$(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders
+	$(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders \
+	$(AMIGA_A1200_BUILD_DIR)/examples/amaze/amaze
 
 AMIGA_INVADERS_DEBUG_BIN := $(AMIGA_DEBUG_BUILD_DIR)/examples/invaders-debug/invaders
 AMIGA_INVADERS_BUFFERED_DEBUG_BIN := $(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/examples/invaders-buffered-debug/invaders
@@ -119,15 +130,17 @@ AMIGA_INVADERS_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/invade
 
 ADF_FILES := \
 	$(ADF_DIR)/hello.adf \
-	$(ADF_DIR)/invaders.adf
+	$(ADF_DIR)/invaders.adf \
+	$(ADF_DIR)/amaze.adf
 
 INVADERS_DEBUG_ADF := $(ADF_DIR)/invaders-debug.adf
 INVADERS_BUFFERED_DEBUG_ADF := $(ADF_DIR)/invaders-buffered-debug.adf
 INVADERS_SYNC_ADF := $(ADF_DIR)/invaders-sync.adf
 INVADERS_A1200_ADF := $(ADF_DIR)/invaders-a1200.adf
 INVADERS_A1200_DEBUG_ADF := $(ADF_DIR)/invaders-a1200-debug.adf
+AMAZE_A1200_ADF := $(ADF_DIR)/amaze-a1200.adf
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf release-package clean-assets clean
 
 all: lib examples tools
 
@@ -135,11 +148,15 @@ lib: $(LIBANA)
 
 examples: $(EXAMPLE_BINS)
 
-assets: invaders-assets
+assets: invaders-assets amaze-assets
 
 examples/invaders-assets: $(INVADERS_ASSET_STAMP)
 
 invaders-assets: $(INVADERS_ASSET_STAMP)
+
+examples/amaze-assets: $(AMAZE_ASSET_STAMP)
+
+amaze-assets: $(AMAZE_ASSET_STAMP)
 
 tools: $(TOOL_BINS)
 
@@ -171,6 +188,8 @@ invaders-a1200-adf: $(INVADERS_A1200_ADF)
 
 invaders-a1200-debug-adf: $(INVADERS_A1200_DEBUG_ADF)
 
+amaze-a1200-adf: $(AMAZE_A1200_ADF)
+
 release-package:
 	$(RM) $(RELEASE_ROOT)
 	mkdir -p $(RELEASE_DIR)
@@ -198,6 +217,15 @@ $(INVADERS_ASSET_STAMP): $(TOOL_BINS) $(INVADERS_ASSET_SOURCES)
 $(BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADERS) $(LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INVADERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
+
+$(AMAZE_ASSET_STAMP): $(TOOL_BINS) $(AMAZE_ASSET_SOURCES)
+	mkdir -p $(AMAZE_ASSET_DIR)
+	$(BUILD_DIR)/tools/ana-convert/ana-convert build $(AMAZE_ASSET_MANIFEST) --out $(AMAZE_ASSET_DIR)
+	touch $@
+
+$(BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(LIBANA) $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(AMAZE_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c tools/ana-convert/vendor/stb_image.h
 	mkdir -p $(@D)
@@ -307,6 +335,10 @@ $(AMIGA_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADE
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
+$(AMIGA_BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMIGA_LIBANA) $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_CFLAGS) $(AMAZE_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
 $(AMIGA_A1200_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_A1200_LIBANA)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $< $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
@@ -314,6 +346,10 @@ $(AMIGA_A1200_BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(AMIGA_A12
 $(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_A1200_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $(INVADERS_SRCS) $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
+$(AMIGA_A1200_BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMIGA_A1200_LIBANA) $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $(AMAZE_SRCS) $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
 $(AMIGA_INVADERS_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_DEBUG_LIBANA) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
@@ -339,9 +375,17 @@ $(ADF_DIR)/invaders.adf: $(AMIGA_BUILD_DIR)/examples/invaders/invaders $(INVADER
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInvaders $(INVADERS_ASSET_DIR)
 
+$(ADF_DIR)/amaze.adf: $(AMIGA_BUILD_DIR)/examples/amaze/amaze $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l ANAAMAze $(AMAZE_ASSET_DIR)
+
 $(INVADERS_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInv1200 $(INVADERS_ASSET_DIR)
+
+$(AMAZE_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/amaze/amaze $(AMAZE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l AMAZE1200 $(AMAZE_ASSET_DIR)
 
 $(INVADERS_DEBUG_ADF): $(AMIGA_INVADERS_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)

@@ -1,7 +1,6 @@
 # Build and release package guide
 
-This document describes the current 0.1 build outputs and the source release
-package.
+This document describes the current `main` build outputs and the source package.
 
 ## Host build outputs
 
@@ -16,6 +15,7 @@ Outputs:
 - `build/tools/ana-convert/ana-convert`
 - `build/examples/hello/hello`
 - `build/examples/invaders/invaders`
+- `build/examples/amaze/amaze`
 - generated example assets under `build/assets/`
 
 Run tests:
@@ -36,6 +36,7 @@ Outputs:
 - `build/amiga/libana.a`
 - `build/amiga/examples/hello/hello`
 - `build/amiga/examples/invaders/invaders`
+- `build/amiga/examples/amaze/amaze`
 
 A1200 baseline builds use `-m68020`:
 
@@ -49,20 +50,23 @@ Outputs:
 - `build/amiga-a1200/libana.a`
 - `build/amiga-a1200/examples/hello/hello`
 - `build/amiga-a1200/examples/invaders/invaders`
+- `build/amiga-a1200/examples/amaze/amaze`
 - `build/amiga-a1200-debug/examples/invaders-a1200-debug/invaders`
 
 Build ADFs:
 
 ```sh
 make adfs
-make invaders-a1200-adf invaders-a1200-debug-adf
+make invaders-a1200-adf amaze-a1200-adf invaders-a1200-debug-adf
 ```
 
 Outputs:
 
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
+- `build/adf/amaze.adf`
 - `build/adf/invaders-a1200.adf`
+- `build/adf/amaze-a1200.adf`
 - `build/adf/invaders-a1200-debug.adf`
 
 ## CI build
@@ -98,7 +102,7 @@ make release-package
 Output:
 
 ```text
-build/release/ana-0.1.0.tar.gz
+build/release/ana-0.2.0-dev.tar.gz
 ```
 
 The package contains:
@@ -111,6 +115,7 @@ The package contains:
 - `tools/`
 - `examples/`
 - `examples/invaders/assets/` PNG source assets and manifest
+- `examples/amaze/assets/` SFX source assets and manifest
 - `tests/`
 - `docs/`
 - `.github/`
@@ -127,8 +132,10 @@ Current CI binary artifacts:
 - `hello.adf`
 - `invaders.adf`
 - `invaders-a1200.adf`
+- `amaze.adf`
+- `amaze-a1200.adf`
 
-If a future 0.1 release includes prebuilt binaries, the release notes must state:
+If a future release includes prebuilt binaries, the release notes must state:
 
 - compiler and version
 - target CPU assumptions
@@ -144,4 +151,5 @@ The current version string lives in:
 include/ana/ana_version.h
 ```
 
-For this release, `ANA_VERSION_STRING` is `0.1.0`.
+Current `main` uses `ANA_VERSION_STRING` `0.2.0-dev`. The frozen 0.1 release is
+tagged as `v0.1.0`.

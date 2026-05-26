@@ -1,9 +1,9 @@
-# Getting started with ANA 0.1
+# Getting started with ANA
 
-This guide shows the current 0.1 workflow: build the library, run the host
-examples, build Amiga executables, and package ADF images.
+This guide shows the current workflow: build the library, run the host examples,
+build Amiga executables, and package ADF images.
 
-ANA 0.1 is intentionally small. Later releases may still revise names and add
+ANA is intentionally small. Later releases may still revise names and add
 higher-level helpers as the framework matures.
 
 ## Prerequisites
@@ -41,7 +41,7 @@ This builds:
 - `build/libana.a`
 - `build/tools/ana-convert/ana-convert`
 - generated example assets under `build/assets/`
-- host smoke-test versions of `hello` and `invaders`
+- host smoke-test versions of `hello`, `invaders`, and `amaze`
 - the test binaries
 
 ## Build Amiga examples
@@ -57,6 +57,7 @@ The Amiga executables are written to:
 
 - `build/amiga/examples/hello/hello`
 - `build/amiga/examples/invaders/invaders`
+- `build/amiga/examples/amaze/amaze`
 
 To reproduce the CI Amiga build with Docker:
 
@@ -91,17 +92,27 @@ After the matching Amiga executable targets:
 make adfs
 ```
 
+For A1200-specific disk images:
+
+```sh
+make invaders-a1200-adf
+make amaze-a1200-adf
+```
+
 If `gadf` is not on your path:
 
 ```sh
 make adfs ADFTOOL="$HOME/go/bin/gadf"
+make invaders-a1200-adf amaze-a1200-adf ADFTOOL="$HOME/go/bin/gadf"
 ```
 
 ADF images are written to `build/adf/`:
 
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
+- `build/adf/amaze.adf`
 - `build/adf/invaders-a1200.adf`
+- `build/adf/amaze-a1200.adf`
 
 The CI artifact is called `ana-example-adfs`.
 

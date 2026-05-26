@@ -1,0 +1,10 @@
+ANA_SOUND 1
+wave square
+rate 8000
+samples 360
+volume 34
+priority 3
+attack 6
+release 80
+amplitude 42 6
+period 9 3
