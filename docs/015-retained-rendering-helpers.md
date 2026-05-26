@@ -272,6 +272,9 @@ Implementerat:
 - Host-tester for rect helpers, retained BOB, layer callback och label-cache.
 - Invaders anvander `ana_rect_make`, `ana_rect_align_x8`, `ANA_Bob` for
   player/bullet/explosion-state och `ANA_Label` for HUD.
+- Invaders renderer ager nu draw-slot state, retained object state och dirty
+  flags. Gameplay-modulen markerar bara formation, shields, full clear och
+  borttagna fienderektanglar via render helpers.
 
 Medvetet kvar i Invaders:
 

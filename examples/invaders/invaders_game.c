@@ -7,18 +7,6 @@ unsigned char invader_alive[INVADER_ROWS][INVADER_COLUMNS];
 InvadersExplosion explosions[EXPLOSION_SLOTS];
 InvadersBullet player_bullets[PLAYER_BULLET_SLOTS];
 InvadersBullet alien_bullets[ALIEN_BULLET_SLOTS];
-InvadersDrawSlot draw_slots[INVADERS_DRAW_SLOTS];
-ANA_Rect removed_enemy_rects
-    [INVADERS_DRAW_SLOTS][INVADERS_REMOVED_ENEMY_SLOTS];
-int removed_enemy_counts[INVADERS_DRAW_SLOTS];
-int formation_dirty_slots[INVADERS_DRAW_SLOTS];
-int formation_drawn_slots[INVADERS_DRAW_SLOTS];
-int formation_slot_x[INVADERS_DRAW_SLOTS];
-int formation_slot_y[INVADERS_DRAW_SLOTS];
-int formation_row_min_slots[INVADERS_DRAW_SLOTS][INVADER_ROWS];
-int formation_row_max_slots[INVADERS_DRAW_SLOTS][INVADER_ROWS];
-int shield_dirty_slots[INVADERS_DRAW_SLOTS];
-int full_clear_slots[INVADERS_DRAW_SLOTS];
 unsigned char shield_cells[SHIELD_COUNT][SHIELD_ROWS][SHIELD_COLUMNS];
 int player_x = 152;
 int player_y = 220;
@@ -87,53 +75,6 @@ static unsigned int invaders_random(void)
     return (unsigned int)((invaders_rng_state >> 16) & 0x7fffu);
 }
 
-static void invaders_request_full_clear(void)
-{
-    int i;
-
-    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
-        full_clear_slots[i] = 1;
-        formation_dirty_slots[i] = 1;
-        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
-        removed_enemy_counts[i] = 0;
-        draw_slots[i].hud_labels_ready = 0;
-    }
-}
-
-static void invaders_mark_formation_dirty(void)
-{
-    int i;
-
-    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
-        formation_dirty_slots[i] = 1;
-        removed_enemy_counts[i] = 0;
-    }
-}
-
-static void invaders_mark_shields_dirty(void)
-{
-    int i;
-
-    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
-        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
-    }
-}
-
-static void invaders_mark_shield_dirty(int shield)
-{
-    int i;
-    int bit;
-
-    if (shield < 0 || shield >= SHIELD_COUNT) {
-        return;
-    }
-
-    bit = 1 << shield;
-    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
-        shield_dirty_slots[i] |= bit;
-    }
-}
-
 int invaders_shield_x(int shield)
 {
     return SHIELD_START_X + (shield * SHIELD_SPACING_X);
@@ -177,29 +118,7 @@ static void invaders_reset_shields(void)
         }
     }
 
-    invaders_mark_shields_dirty();
-}
-
-static void invaders_reset_draw_slots(void)
-{
-    int i;
-    int row;
-
-    memset(draw_slots, 0, sizeof(draw_slots));
-    memset(removed_enemy_rects, 0, sizeof(removed_enemy_rects));
-    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
-        removed_enemy_counts[i] = 0;
-        formation_dirty_slots[i] = 1;
-        formation_drawn_slots[i] = 0;
-        formation_slot_x[i] = INVADER_START_X;
-        formation_slot_y[i] = INVADER_START_Y;
-        for (row = 0; row < INVADER_ROWS; row++) {
-            formation_row_min_slots[i][row] = INVADER_COLUMNS;
-            formation_row_max_slots[i][row] = -1;
-        }
-        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
-        full_clear_slots[i] = 1;
-    }
+    invaders_render_mark_shields_dirty();
 }
 
 static void invaders_reset_formation(void)
@@ -222,7 +141,7 @@ static void invaders_reset_formation(void)
         }
     }
 
-    invaders_mark_formation_dirty();
+    invaders_render_mark_formation_dirty();
 }
 
 static void invaders_start_new_game(void)
@@ -241,7 +160,7 @@ static void invaders_start_new_game(void)
     invaders_reset_explosions();
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
-    invaders_reset_draw_slots();
+    invaders_render_reset();
 }
 
 static void invaders_enter_title(void)
@@ -260,7 +179,7 @@ static void invaders_enter_title(void)
     invaders_reset_explosions();
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
-    invaders_reset_draw_slots();
+    invaders_render_reset();
 }
 
 static void invaders_enter_clear(void)
@@ -270,7 +189,7 @@ static void invaders_enter_clear(void)
     game_state = INVADERS_STATE_CLEAR;
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
-    invaders_request_full_clear();
+    invaders_render_request_full_clear();
 }
 
 static void invaders_enter_game_over(void)
@@ -281,7 +200,7 @@ static void invaders_enter_game_over(void)
     invaders_reset_player_bullets();
     invaders_reset_alien_bullets();
     ana_play_sound(game_over_sound);
-    invaders_request_full_clear();
+    invaders_render_request_full_clear();
 }
 
 static void invaders_lose_life(void)
@@ -300,7 +219,7 @@ static void invaders_lose_life(void)
     invaders_reset_alien_bullets();
     invaders_reset_explosions();
     ana_play_sound(explosion_sound);
-    invaders_request_full_clear();
+    invaders_render_request_full_clear();
 }
 
 int invaders_enemy_x(int col)
@@ -311,28 +230,6 @@ int invaders_enemy_x(int col)
 int invaders_enemy_y(int row)
 {
     return invader_formation_y + (row * INVADER_SPACING_Y);
-}
-
-static void invaders_queue_removed_enemy_rect(int x, int y)
-{
-    ANA_Rect rect;
-    int slot;
-    int count;
-
-    rect.x = x;
-    rect.y = y;
-    rect.w = INVADER_WIDTH;
-    rect.h = INVADER_HEIGHT;
-
-    for (slot = 0; slot < INVADERS_DRAW_SLOTS; slot++) {
-        count = removed_enemy_counts[slot];
-        if (count < INVADERS_REMOVED_ENEMY_SLOTS) {
-            removed_enemy_rects[slot][count] = rect;
-            removed_enemy_counts[slot] = count + 1;
-        } else {
-            formation_dirty_slots[slot] = 1;
-        }
-    }
 }
 
 static void invaders_spawn_explosion(int x, int y)
@@ -442,7 +339,7 @@ static int invaders_update_formation(void)
     ana_play_sound(step_sound);
     invader_frame = 1 - invader_frame;
     invaders_damage_shields_for_formation();
-    invaders_mark_formation_dirty();
+    invaders_render_mark_formation_dirty();
     enemy_y = invader_formation_y +
         ((INVADER_ROWS - 1) * INVADER_SPACING_Y) +
         INVADER_HEIGHT;
@@ -550,7 +447,7 @@ static int invaders_damage_shield_cells_at_rect(ANA_Rect rect, int stop_after_fi
                 if (ana_rect_intersects(rect, cell_rect)) {
                     shield_cells[shield][row][col] = 0u;
                     damaged = 1;
-                    invaders_mark_shield_dirty(shield);
+                    invaders_render_mark_shield_dirty(shield);
                     if (stop_after_first) {
                         return 1;
                     }
@@ -665,7 +562,7 @@ static void invaders_check_bullet_hits(int bullet_width, int bullet_height)
                     player_bullets[bullet].active = 0;
                     score += invaders_enemy_score(row);
                     invaders_spawn_explosion(enemy_x, enemy_y);
-                    invaders_queue_removed_enemy_rect(enemy_x, enemy_y);
+                    invaders_render_queue_removed_enemy_rect(enemy_x, enemy_y);
                     return;
                 }
             }

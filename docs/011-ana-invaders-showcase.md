@@ -80,7 +80,9 @@ Spelets kod ska vara ett exempel pa hur ANA ar tankt att anvandas:
 Exemplet ar uppdelat sa att `examples/invaders/main.c` visar den normala
 ANA-applikationsformen med `ANA_Game` och callbacks. Spelreglerna ligger i
 `invaders_game.c`, medan den optimerade dirty-rect-renderingen ligger i
-`invaders_render.c`.
+`invaders_render.c`. Renderern ager draw-slot state, retained BOB-state och
+dirty flags; spelreglerna anropar bara render helpers nar formation, shields
+eller hela skarmen maste markeras om.
 
 ## Inte i 0.1
 

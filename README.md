@@ -42,11 +42,13 @@ performance remains useful feedback, but it is not the current floor for the
 complete Invaders demo.
 
 The Invaders example is split so `examples/invaders/main.c` stays close to the
-normal ANA application shape, while game rules and the Amiga-oriented dirty
-rectangle renderer live in separate modules. Its asset manifest also packages a
-small ProTracker MOD as `assets/theme.mod`. The example plays music on title,
-clear, and game-over screens, then stops it during active gameplay so the normal
-ADF keeps the arcade loop close to the A1200 performance target.
+normal ANA application shape, `invaders_game.c` owns the game rules, and
+`invaders_render.c` owns the Amiga-oriented dirty rectangle state. Gameplay code
+signals render invalidation through small render helpers instead of managing
+draw slots directly. Its asset manifest also packages a small ProTracker MOD as
+`assets/theme.mod`. The example plays music on title, clear, and game-over
+screens, then stops it during active gameplay so the normal ADF keeps the arcade
+loop close to the A1200 performance target.
 
 ## Quick Build
 

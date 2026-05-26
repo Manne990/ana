@@ -3,6 +3,110 @@
 
 #include "invaders_internal.h"
 
+static InvadersDrawSlot draw_slots[INVADERS_DRAW_SLOTS];
+static ANA_Rect removed_enemy_rects
+    [INVADERS_DRAW_SLOTS][INVADERS_REMOVED_ENEMY_SLOTS];
+static int removed_enemy_counts[INVADERS_DRAW_SLOTS];
+static int formation_dirty_slots[INVADERS_DRAW_SLOTS];
+static int formation_drawn_slots[INVADERS_DRAW_SLOTS];
+static int formation_slot_x[INVADERS_DRAW_SLOTS];
+static int formation_slot_y[INVADERS_DRAW_SLOTS];
+static int formation_row_min_slots[INVADERS_DRAW_SLOTS][INVADER_ROWS];
+static int formation_row_max_slots[INVADERS_DRAW_SLOTS][INVADER_ROWS];
+static int shield_dirty_slots[INVADERS_DRAW_SLOTS];
+static int full_clear_slots[INVADERS_DRAW_SLOTS];
+
+void invaders_render_reset(void)
+{
+    int i;
+    int row;
+
+    memset(draw_slots, 0, sizeof(draw_slots));
+    memset(removed_enemy_rects, 0, sizeof(removed_enemy_rects));
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        removed_enemy_counts[i] = 0;
+        formation_dirty_slots[i] = 1;
+        formation_drawn_slots[i] = 0;
+        formation_slot_x[i] = INVADER_START_X;
+        formation_slot_y[i] = INVADER_START_Y;
+        for (row = 0; row < INVADER_ROWS; row++) {
+            formation_row_min_slots[i][row] = INVADER_COLUMNS;
+            formation_row_max_slots[i][row] = -1;
+        }
+        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
+        full_clear_slots[i] = 1;
+    }
+}
+
+void invaders_render_request_full_clear(void)
+{
+    int i;
+
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        full_clear_slots[i] = 1;
+        formation_dirty_slots[i] = 1;
+        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
+        removed_enemy_counts[i] = 0;
+        draw_slots[i].hud_labels_ready = 0;
+    }
+}
+
+void invaders_render_mark_formation_dirty(void)
+{
+    int i;
+
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        formation_dirty_slots[i] = 1;
+        removed_enemy_counts[i] = 0;
+    }
+}
+
+void invaders_render_mark_shields_dirty(void)
+{
+    int i;
+
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        shield_dirty_slots[i] = SHIELD_DIRTY_ALL;
+    }
+}
+
+void invaders_render_mark_shield_dirty(int shield)
+{
+    int i;
+    int bit;
+
+    if (shield < 0 || shield >= SHIELD_COUNT) {
+        return;
+    }
+
+    bit = 1 << shield;
+    for (i = 0; i < INVADERS_DRAW_SLOTS; i++) {
+        shield_dirty_slots[i] |= bit;
+    }
+}
+
+void invaders_render_queue_removed_enemy_rect(int x, int y)
+{
+    ANA_Rect rect;
+    int slot;
+    int count;
+
+    rect.x = x;
+    rect.y = y;
+    rect.w = INVADER_WIDTH;
+    rect.h = INVADER_HEIGHT;
+
+    for (slot = 0; slot < INVADERS_DRAW_SLOTS; slot++) {
+        count = removed_enemy_counts[slot];
+        if (count < INVADERS_REMOVED_ENEMY_SLOTS) {
+            removed_enemy_rects[slot][count] = rect;
+            removed_enemy_counts[slot] = count + 1;
+        } else {
+            formation_dirty_slots[slot] = 1;
+        }
+    }
+}
+
 static int invaders_draw_slot_index(void)
 {
     return demo_ticks & (INVADERS_DRAW_SLOTS - 1);
