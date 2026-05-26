@@ -14,9 +14,8 @@ structure, but be designed around C and Amiga hardware.
 
 ## Current Status
 
-ANA is in 0.1 preview development. The current theme is the "Invaders Release":
-a small framework release demonstrated by a playable Space Invaders-style
-example.
+ANA 0.1 is the "Invaders Release": a small framework release demonstrated by a
+playable Space Invaders-style example.
 
 Implemented today:
 
@@ -107,7 +106,7 @@ Start here:
 - [Development routine](docs/development-routine.md)
 - [Performance guide](docs/performance-guide.md)
 - [Known limitations](docs/known-limitations.md)
-- [ANA 0.1 release notes draft](docs/release-notes-0.1.md)
+- [ANA 0.1 release notes](docs/release-notes-0.1.md)
 
 ## Example Shape
 
@@ -221,7 +220,7 @@ make release-package
 The archive is written to:
 
 ```text
-build/release/ana-0.1.0-dev.tar.gz
+build/release/ana-0.1.0.tar.gz
 ```
 
 See [Build and release package guide](docs/build-and-release.md) for package

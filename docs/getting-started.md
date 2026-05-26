@@ -3,8 +3,8 @@
 This guide shows the current 0.1 workflow: build the library, run the host
 examples, build Amiga executables, and package ADF images.
 
-ANA is still pre-release software. The API is small on purpose, but it is not
-yet frozen.
+ANA 0.1 is intentionally small. Later releases may still revise names and add
+higher-level helpers as the framework matures.
 
 ## Prerequisites
 

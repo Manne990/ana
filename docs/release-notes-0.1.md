@@ -1,6 +1,6 @@
-# ANA 0.1 release notes draft
+# ANA 0.1 release notes
 
-Status: draft, not yet released.
+Status: released as `0.1.0`.
 
 ## Theme
 
@@ -52,10 +52,10 @@ The source package is built with:
 make release-package
 ```
 
-The current draft package name is:
+The source package name is:
 
 ```text
-build/release/ana-0.1.0-dev.tar.gz
+build/release/ana-0.1.0.tar.gz
 ```
 
 ## Target baseline
@@ -67,12 +67,3 @@ Invaders showcase is not currently tuned for stock A500 as the floor.
 ## Known limitations
 
 See `docs/known-limitations.md`.
-
-## Before final 0.1
-
-- decide final API names for the current public surface
-- verify release package on a clean machine
-- verify ADF artifact download from GitHub Actions
-- run Invaders on the intended emulator/hardware baseline
-- update `ANA_VERSION_STRING`
-- replace this draft with final release notes

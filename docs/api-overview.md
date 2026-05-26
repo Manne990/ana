@@ -1,7 +1,7 @@
 # ANA 0.1 API overview
 
-This is the public API surface that is stable enough to document for the 0.1
-preview. Names may still change before a final 0.1 release.
+This is the public API surface for the 0.1 release. Later releases may still
+revise names and add higher-level helpers as the framework matures.
 
 Include ANA with:
 

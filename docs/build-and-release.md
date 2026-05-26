@@ -98,7 +98,7 @@ make release-package
 Output:
 
 ```text
-build/release/ana-0.1.0-dev.tar.gz
+build/release/ana-0.1.0.tar.gz
 ```
 
 The package contains:
@@ -126,6 +126,7 @@ Current CI binary artifacts:
 
 - `hello.adf`
 - `invaders.adf`
+- `invaders-a1200.adf`
 
 If a future 0.1 release includes prebuilt binaries, the release notes must state:
 
@@ -143,5 +144,4 @@ The current version string lives in:
 include/ana/ana_version.h
 ```
 
-For the final 0.1 release, update `ANA_VERSION_STRING` from `0.1.0-dev` to the
-released version and generate a fresh package.
+For this release, `ANA_VERSION_STRING` is `0.1.0`.
