@@ -16,10 +16,10 @@ int main(void)
     game.update = invaders_update;
     game.draw = invaders_draw;
     game.shutdown = invaders_shutdown;
-    game.width = 320;
-    game.height = 256;
-    game.fps = 50;
-    game.colors = 16;
+    game.width = ANA_DEFAULT_WIDTH;
+    game.height = ANA_DEFAULT_HEIGHT;
+    game.fps = ANA_DEFAULT_FPS;
+    game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
     game.debug_stats = 1;
 

@@ -33,7 +33,7 @@ int main(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
-    game.debug_stats = 0;
+    game.debug_stats = 1;
 
     printf("ANA hello started.\n");
     printf("Opening ANA PAL lores screen for about five seconds.\n");
