@@ -83,7 +83,8 @@ load.
 ## Inte i 0.1
 
 - Mixning av manga samtidiga ljud i mjukvara.
-- Runtime-WAV-dekodning.
+- Runtime-WAV-dekodning. WAV importeras i asset pipeline och laddas som
+  `.anasnd` i runtime.
 - Avancerade effekter.
 
 ## Acceptanskriterier
@@ -92,4 +93,5 @@ load.
 - Invaders kan spela explosionsljud.
 - Enemy step/game over-ljud kan spelas utan att spelkod hanterar kanaler direkt.
 - Ljud-API:t allokerar inte i normal playback.
-- Asset pipelinen kan bygga enkla `.anasnd`-filer fran `.anasfx`-recept.
+- Asset pipelinen kan bygga enkla `.anasnd`-filer fran `.anasfx`-recept och
+  PCM WAV.

@@ -3,10 +3,15 @@ AR ?= ar
 HOST_NATIVE_CC := $(shell command -v x86_64-linux-gnu-gcc 2>/dev/null || command -v cc 2>/dev/null || echo cc)
 HOST_NATIVE_LDFLAGS := $(shell if command -v x86_64-linux-gnu-gcc >/dev/null 2>&1 && command -v x86_64-linux-gnu-ld.bfd >/dev/null 2>&1; then echo -fuse-ld=bfd; fi)
 HOST_CC ?= $(HOST_NATIVE_CC)
-AMIGA_CC ?= m68k-amigaos-gcc
-AMIGA_AR ?= m68k-amigaos-ar
-AMIGA_AS ?= $(shell command -v vasmm68k_mot 2>/dev/null || command -v /opt/m68k-amigaos/bin/vasmm68k_mot 2>/dev/null || echo vasmm68k_mot)
-ADFTOOL ?= gadf
+AMIGA_DOCKER_IMAGE ?= amigadev/crosstools:m68k-amigaos-gcc10_amd64
+AMIGA_DOCKER_RUN ?= docker run --rm --platform linux/amd64 --user $(shell id -u):$(shell id -g) -v "$(CURDIR):/work" -w /work $(AMIGA_DOCKER_IMAGE)
+AMIGA_NATIVE_CC := $(shell command -v m68k-amigaos-gcc 2>/dev/null)
+AMIGA_NATIVE_AR := $(shell command -v m68k-amigaos-ar 2>/dev/null)
+AMIGA_NATIVE_AS := $(shell command -v vasmm68k_mot 2>/dev/null || command -v /opt/m68k-amigaos/bin/vasmm68k_mot 2>/dev/null)
+AMIGA_CC ?= $(if $(AMIGA_NATIVE_CC),$(AMIGA_NATIVE_CC),$(AMIGA_DOCKER_RUN) m68k-amigaos-gcc)
+AMIGA_AR ?= $(if $(AMIGA_NATIVE_AR),$(AMIGA_NATIVE_AR),$(AMIGA_DOCKER_RUN) m68k-amigaos-ar)
+AMIGA_AS ?= $(if $(AMIGA_NATIVE_AS),$(AMIGA_NATIVE_AS),$(AMIGA_DOCKER_RUN) vasmm68k_mot)
+ADFTOOL ?= $(shell command -v gadf 2>/dev/null || command -v $(HOME)/go/bin/gadf 2>/dev/null || echo gadf)
 RM = rm -rf
 
 CFLAGS ?= -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc
@@ -86,7 +91,14 @@ INVADERS_ASSET_SOURCES := $(wildcard examples/invaders/assets/*)
 INVADERS_ASSET_STAMP := $(INVADERS_ASSET_BUILD_DIR)/.stamp
 
 AMAZE_SRCS := \
-	examples/amaze/main.c
+	examples/amaze/main.c \
+	examples/amaze/amaze_game.c \
+	examples/amaze/amaze_render.c \
+	examples/amaze/amaze_assets.c
+AMAZE_HEADERS := \
+	examples/amaze/amaze_assets.h \
+	examples/amaze/amaze_game.h \
+	examples/amaze/amaze_internal.h
 AMAZE_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/amaze
 AMAZE_ASSET_DIR := $(AMAZE_ASSET_BUILD_DIR)/assets
 AMAZE_ASSET_MANIFEST := examples/amaze/assets/assets.ana
@@ -216,6 +228,7 @@ $(BUILD_DIR)/examples/hello/hello: examples/hello/main.c $(LIBANA)
 	$(CC) $(CFLAGS) $< $(LIBANA) $(LDFLAGS) -o $@
 
 $(INVADERS_ASSET_STAMP): $(TOOL_BINS) $(INVADERS_ASSET_SOURCES)
+	$(RM) $(INVADERS_ASSET_DIR)
 	mkdir -p $(INVADERS_ASSET_DIR)
 	$(BUILD_DIR)/tools/ana-convert/ana-convert build $(INVADERS_ASSET_MANIFEST) --out $(INVADERS_ASSET_DIR)
 	touch $@
@@ -225,11 +238,12 @@ $(BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADERS) $(
 	$(CC) $(CFLAGS) $(INVADERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
 $(AMAZE_ASSET_STAMP): $(TOOL_BINS) $(AMAZE_ASSET_SOURCES)
+	$(RM) $(AMAZE_ASSET_DIR)
 	mkdir -p $(AMAZE_ASSET_DIR)
 	$(BUILD_DIR)/tools/ana-convert/ana-convert build $(AMAZE_ASSET_MANIFEST) --out $(AMAZE_ASSET_DIR)
 	touch $@
 
-$(BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(LIBANA) $(AMAZE_ASSET_STAMP)
+$(BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMAZE_HEADERS) $(LIBANA) $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(AMAZE_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
@@ -341,7 +355,7 @@ $(AMIGA_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS_HEADE
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $(INVADERS_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMIGA_LIBANA) $(AMAZE_ASSET_STAMP)
+$(AMIGA_BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMAZE_HEADERS) $(AMIGA_LIBANA) $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) $(AMAZE_SRCS) $(AMIGA_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
@@ -353,7 +367,7 @@ $(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders: $(INVADERS_SRCS) $(INVADERS
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $(INVADERS_SRCS) $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_A1200_BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMIGA_A1200_LIBANA) $(AMAZE_ASSET_STAMP)
+$(AMIGA_A1200_BUILD_DIR)/examples/amaze/amaze: $(AMAZE_SRCS) $(AMAZE_HEADERS) $(AMIGA_A1200_LIBANA) $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_CFLAGS) $(AMAZE_SRCS) $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
@@ -373,7 +387,7 @@ $(AMIGA_INVADERS_A1200_DEBUG_BIN): $(INVADERS_SRCS) $(INVADERS_HEADERS) $(AMIGA_
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) $(INVADERS_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
-$(AMIGA_AMAZE_A1200_DEBUG_BIN): $(AMAZE_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMAZE_ASSET_STAMP)
+$(AMIGA_AMAZE_A1200_DEBUG_BIN): $(AMAZE_SRCS) $(AMAZE_HEADERS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) $(AMAZE_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 

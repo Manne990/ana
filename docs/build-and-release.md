@@ -84,7 +84,8 @@ GitHub Actions currently runs:
 - portable and A1200 ADF packaging
 - ADF artifact upload as `ana-example-adfs`
 
-The Amiga Docker build uses:
+When the local `m68k-amigaos-*` tools are not on `PATH`, the Makefile runs the
+Amiga compiler, assembler, and archiver through Docker using:
 
 ```text
 amigadev/crosstools:m68k-amigaos-gcc10_amd64

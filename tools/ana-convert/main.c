@@ -91,6 +91,15 @@ typedef struct ANA_SoundOptions {
     unsigned long seed;
 } ANA_SoundOptions;
 
+typedef struct ANA_WavSource {
+    int sample_rate;
+    int channels;
+    int bits_per_sample;
+    long frame_count;
+    long data_size;
+    unsigned char* data;
+} ANA_WavSource;
+
 typedef struct ANA_Palette {
     ANA_ConvertColor colors[ANA_CONVERT_MAX_COLORS];
     int present[ANA_CONVERT_MAX_COLORS];
@@ -116,7 +125,7 @@ static void print_usage(void)
     printf("  ana-convert --version\n");
     printf("  ana-convert image input.png --out output.anaimg [options]\n");
     printf("  ana-convert font input.png --out output.anafnt [options]\n");
-    printf("  ana-convert sound input.anasfx --out output.anasnd\n");
+    printf("  ana-convert sound input.anasfx|input.wav --out output.anasnd [options]\n");
     printf("  ana-convert palette palette.png --out game.anapal --colors 16\n");
     printf("  ana-convert build assets.ana --out build/assets/game\n");
     printf("\n");
@@ -135,7 +144,8 @@ static void print_usage(void)
     printf("  --chars N               Number of glyph frames\n");
     printf("  plus image palette and transparent options.\n");
     printf("\n");
-    printf("Sound input format: ANA_SOUND 1 text recipes.\n");
+    printf("Sound input formats: ANA_SOUND 1 text recipes and PCM WAV.\n");
+    printf("Sound options for WAV: --rate N --volume N --priority N.\n");
     printf("\n");
     printf("Image input formats: PNG and PPM P3/P6.\n");
     printf("Manifest asset types: palette, image, font, sound, music.\n");
@@ -1915,6 +1925,287 @@ static unsigned char sound_signed_sample(int sample)
     return (unsigned char)(sample & 0xff);
 }
 
+static int read_exact(FILE* file, unsigned char* bytes, size_t size)
+{
+    return fread(bytes, 1u, size, file) == size;
+}
+
+static int read_u16_le_bytes(const unsigned char* bytes)
+{
+    return (int)bytes[0] | ((int)bytes[1] << 8);
+}
+
+static unsigned long read_u32_le_bytes(const unsigned char* bytes)
+{
+    return (unsigned long)bytes[0] |
+        ((unsigned long)bytes[1] << 8) |
+        ((unsigned long)bytes[2] << 16) |
+        ((unsigned long)bytes[3] << 24);
+}
+
+static int skip_wav_chunk(FILE* file, unsigned long size)
+{
+    unsigned long padded_size;
+
+    padded_size = size + (size & 1UL);
+    if (padded_size == 0UL) {
+        return 1;
+    }
+
+    return fseek(file, (long)padded_size, SEEK_CUR) == 0;
+}
+
+static void wav_source_free(ANA_WavSource* wav)
+{
+    free(wav->data);
+    wav->data = NULL;
+    wav->data_size = 0;
+    wav->frame_count = 0;
+}
+
+static int read_wav_source(const char* path, ANA_WavSource* wav)
+{
+    FILE* file;
+    unsigned char header[12];
+    unsigned char chunk_header[8];
+    int saw_fmt;
+    int saw_data;
+    int ok;
+
+    wav->sample_rate = 0;
+    wav->channels = 0;
+    wav->bits_per_sample = 0;
+    wav->frame_count = 0;
+    wav->data_size = 0;
+    wav->data = NULL;
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        fprintf(stderr, "ana-convert: could not open WAV '%s'\n", path);
+        return 0;
+    }
+
+    ok = read_exact(file, header, sizeof(header)) &&
+        memcmp(header, "RIFF", 4u) == 0 &&
+        memcmp(header + 8, "WAVE", 4u) == 0;
+    if (!ok) {
+        fprintf(stderr, "ana-convert: invalid WAV header in '%s'\n", path);
+        fclose(file);
+        return 0;
+    }
+
+    saw_fmt = 0;
+    saw_data = 0;
+    while (read_exact(file, chunk_header, sizeof(chunk_header))) {
+        unsigned long chunk_size;
+
+        chunk_size = read_u32_le_bytes(chunk_header + 4);
+        if (memcmp(chunk_header, "fmt ", 4u) == 0) {
+            unsigned char* fmt_data;
+            int audio_format;
+
+            if (chunk_size < 16UL) {
+                ok = 0;
+                break;
+            }
+
+            fmt_data = (unsigned char*)malloc((size_t)chunk_size);
+            if (fmt_data == NULL) {
+                fprintf(stderr, "ana-convert: out of memory while reading '%s'\n", path);
+                ok = 0;
+                break;
+            }
+
+            ok = read_exact(file, fmt_data, (size_t)chunk_size);
+            if (!ok) {
+                free(fmt_data);
+                break;
+            }
+
+            audio_format = read_u16_le_bytes(fmt_data);
+            wav->channels = read_u16_le_bytes(fmt_data + 2);
+            wav->sample_rate = (int)read_u32_le_bytes(fmt_data + 4);
+            wav->bits_per_sample = read_u16_le_bytes(fmt_data + 14);
+            free(fmt_data);
+
+            if (audio_format != 1 ||
+                    (wav->channels != 1 && wav->channels != 2) ||
+                    (wav->bits_per_sample != 8 && wav->bits_per_sample != 16) ||
+                    wav->sample_rate <= 0) {
+                fprintf(
+                    stderr,
+                    "ana-convert: unsupported WAV format in '%s' "
+                    "(expected PCM mono/stereo 8/16-bit)\n",
+                    path);
+                ok = 0;
+                break;
+            }
+
+            saw_fmt = 1;
+            if ((chunk_size & 1UL) != 0UL && fgetc(file) == EOF) {
+                ok = 0;
+                break;
+            }
+        } else if (memcmp(chunk_header, "data", 4u) == 0) {
+            if (chunk_size > (unsigned long)ANA_CONVERT_SOUND_MAX_SAMPLES * 8UL) {
+                fprintf(stderr, "ana-convert: WAV data too large in '%s'\n", path);
+                ok = 0;
+                break;
+            }
+
+            wav->data = (unsigned char*)malloc((size_t)chunk_size);
+            if (wav->data == NULL) {
+                fprintf(stderr, "ana-convert: out of memory while reading '%s'\n", path);
+                ok = 0;
+                break;
+            }
+
+            wav->data_size = (long)chunk_size;
+            ok = read_exact(file, wav->data, (size_t)chunk_size);
+            if (!ok) {
+                break;
+            }
+
+            saw_data = 1;
+            if ((chunk_size & 1UL) != 0UL && fgetc(file) == EOF) {
+                ok = 0;
+                break;
+            }
+        } else if (!skip_wav_chunk(file, chunk_size)) {
+            ok = 0;
+            break;
+        }
+    }
+
+    if (ferror(file)) {
+        ok = 0;
+    }
+
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+
+    if (!ok || !saw_fmt || !saw_data) {
+        fprintf(stderr, "ana-convert: could not read WAV '%s'\n", path);
+        wav_source_free(wav);
+        return 0;
+    }
+
+    {
+        long bytes_per_frame;
+
+        bytes_per_frame = (long)wav->channels * (long)(wav->bits_per_sample / 8);
+        if (bytes_per_frame <= 0 || wav->data_size < bytes_per_frame) {
+            fprintf(stderr, "ana-convert: WAV contains no sample frames in '%s'\n", path);
+            wav_source_free(wav);
+            return 0;
+        }
+
+        wav->frame_count = wav->data_size / bytes_per_frame;
+    }
+
+    return 1;
+}
+
+static int wav_frame_sample_16(const ANA_WavSource* wav, long frame)
+{
+    long offset;
+    long sum;
+    int bytes_per_sample;
+    int channel;
+
+    bytes_per_sample = wav->bits_per_sample / 8;
+    offset = frame * (long)wav->channels * (long)bytes_per_sample;
+    sum = 0;
+
+    for (channel = 0; channel < wav->channels; ++channel) {
+        const unsigned char* sample;
+        int value;
+
+        sample = wav->data + offset + (long)channel * (long)bytes_per_sample;
+        if (wav->bits_per_sample == 8) {
+            value = ((int)sample[0] - 128) << 8;
+        } else {
+            value = (int)sample[0] | ((int)sample[1] << 8);
+            if (value >= 32768) {
+                value -= 65536;
+            }
+        }
+
+        sum += value;
+    }
+
+    return (int)(sum / wav->channels);
+}
+
+static int write_ana_sound_from_wav(
+    const char* path,
+    const ANA_SoundOptions* options,
+    const ANA_WavSource* wav)
+{
+    FILE* file;
+    long sample_count;
+    long i;
+    int ok;
+
+    if (options->sample_rate < ANA_CONVERT_SOUND_MIN_RATE ||
+            options->sample_rate > ANA_CONVERT_SOUND_MAX_RATE ||
+            options->volume < 0 ||
+            options->volume > 64 ||
+            options->priority < 0 ||
+            options->priority > 127) {
+        fprintf(stderr, "ana-convert: invalid WAV sound options in '%s'\n", options->input_path);
+        return 0;
+    }
+
+    sample_count = (wav->frame_count * (long)options->sample_rate) /
+        (long)wav->sample_rate;
+    if (sample_count <= 0 || sample_count > ANA_CONVERT_SOUND_MAX_SAMPLES) {
+        fprintf(stderr, "ana-convert: converted WAV sample count is invalid in '%s'\n", options->input_path);
+        return 0;
+    }
+
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "ana-convert: could not open output '%s'\n", path);
+        return 0;
+    }
+
+    ok = fwrite("ANASND01", 1u, 8u, file) == 8u &&
+        write_u16_le(file, options->sample_rate) &&
+        write_u32_le(file, sample_count) &&
+        write_byte(file, options->volume) &&
+        write_byte(file, options->priority) &&
+        write_byte(file, ANA_CONVERT_SOUND_FLAG_SIGNED_8BIT) &&
+        write_byte(file, 0) &&
+        write_byte(file, 0) &&
+        write_byte(file, 0);
+
+    for (i = 0; ok && i < sample_count; ++i) {
+        long source_frame;
+        int sample;
+
+        source_frame = (i * (long)wav->sample_rate) / (long)options->sample_rate;
+        if (source_frame >= wav->frame_count) {
+            source_frame = wav->frame_count - 1;
+        }
+
+        sample = wav_frame_sample_16(wav, source_frame) / 256;
+        ok = write_byte(file, sound_signed_sample(sample));
+    }
+
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+
+    if (!ok) {
+        fprintf(stderr, "ana-convert: failed while writing '%s'\n", path);
+        return 0;
+    }
+
+    return 1;
+}
+
 static int sound_recipe_is_valid(const ANA_SoundOptions* options)
 {
     return options->wave != ANA_SOUND_WAVE_NONE &&
@@ -2022,6 +2313,24 @@ static int write_ana_sound(const char* path, const ANA_SoundOptions* options)
 
 static int run_sound_options(ANA_SoundOptions* options)
 {
+    if (has_extension(options->input_path, ".wav")) {
+        ANA_WavSource wav;
+        int result;
+
+        if (!read_wav_source(options->input_path, &wav)) {
+            return 1;
+        }
+
+        result = write_ana_sound_from_wav(options->output_path, options, &wav) ? 0 : 1;
+        wav_source_free(&wav);
+        if (result != 0) {
+            return 1;
+        }
+
+        printf("Wrote %s from %s\n", options->output_path, options->input_path);
+        return 0;
+    }
+
     if (!read_sound_recipe(options->input_path, options)) {
         return 1;
     }
@@ -2034,24 +2343,53 @@ static int run_sound_options(ANA_SoundOptions* options)
     return 0;
 }
 
-static int parse_sound_args(int argc, char** argv, ANA_SoundOptions* options)
+static int parse_sound_flags(
+    int argc,
+    char** argv,
+    int start,
+    ANA_SoundOptions* options,
+    int allow_out)
 {
     int i;
 
+    i = start;
+    while (i < argc) {
+        if (allow_out && strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+            options->output_path = argv[i + 1];
+            i += 2;
+        } else if (strcmp(argv[i], "--rate") == 0 && i + 1 < argc) {
+            if (!parse_required_positive_int(argv[i + 1], &options->sample_rate)) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--volume") == 0 && i + 1 < argc) {
+            if (!parse_int(argv[i + 1], &options->volume)) {
+                return 0;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--priority") == 0 && i + 1 < argc) {
+            if (!parse_int(argv[i + 1], &options->priority)) {
+                return 0;
+            }
+            i += 2;
+        } else {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int parse_sound_args(int argc, char** argv, ANA_SoundOptions* options)
+{
     if (argc < 5) {
         return 0;
     }
 
     sound_options_init(options, argv[2], NULL);
 
-    i = 3;
-    while (i < argc) {
-        if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
-            options->output_path = argv[i + 1];
-            i += 2;
-        } else {
-            return 0;
-        }
+    if (!parse_sound_flags(argc, argv, 3, options, 1)) {
+        return 0;
     }
 
     return options->output_path != NULL;
@@ -2366,7 +2704,7 @@ static int run_manifest_sound(
     char* output_path;
     int result;
 
-    if (token_count != 3) {
+    if (token_count < 3) {
         fprintf(stderr, "ana-convert: invalid sound entry at line %d\n", line_number);
         return 0;
     }
@@ -2381,6 +2719,13 @@ static int run_manifest_sound(
     }
 
     sound_options_init(&options, input_path, output_path);
+    if (!parse_sound_flags(token_count, tokens, 3, &options, 0)) {
+        fprintf(stderr, "ana-convert: invalid sound options at line %d\n", line_number);
+        free(input_path);
+        free(output_path);
+        return 0;
+    }
+
     result = run_sound_options(&options);
 
     free(input_path);

@@ -9,6 +9,8 @@ FONT_SOURCE="$WORK_DIR/ana_convert_font.ppm"
 FONT_OUTPUT="$WORK_DIR/ana_convert_font.anafnt"
 SOUND_SOURCE="$WORK_DIR/ana_convert_sound.anasfx"
 SOUND_OUTPUT="$WORK_DIR/ana_convert_sound.anasnd"
+WAV_SOUND_SOURCE="$WORK_DIR/ana_convert_sound.wav"
+WAV_SOUND_OUTPUT="$WORK_DIR/ana_convert_sound_wav.anasnd"
 PNG_SOURCE="$WORK_DIR/ana_convert_sheet.png"
 PNG_PALETTE="$WORK_DIR/ana_convert_palette.png"
 PALETTE="$WORK_DIR/game.anapal"
@@ -101,6 +103,42 @@ assert data[17:20] == b"\x00\x00\x00"
 assert len(data) == 28
 PY
 
+python3 - "$WAV_SOUND_SOURCE" <<'PY'
+import struct
+import sys
+import wave
+
+with wave.open(sys.argv[1], "wb") as wav:
+    wav.setnchannels(2)
+    wav.setsampwidth(2)
+    wav.setframerate(8000)
+    frames = []
+    for sample in (-12000, -6000, 0, 6000, 12000, 6000, 0, -6000):
+        frames.append(struct.pack("<hh", sample, sample))
+    wav.writeframes(b"".join(frames))
+PY
+
+"$CONVERT" sound "$WAV_SOUND_SOURCE" \
+    --out "$WAV_SOUND_OUTPUT" \
+    --rate 4000 \
+    --volume 44 \
+    --priority 4
+
+python3 - "$WAV_SOUND_OUTPUT" <<'PY'
+import struct
+import sys
+
+data = open(sys.argv[1], "rb").read()
+assert data[:8] == b"ANASND01"
+assert struct.unpack("<H", data[8:10])[0] == 4000
+assert struct.unpack("<I", data[10:14])[0] == 4
+assert data[14] == 44
+assert data[15] == 4
+assert data[16] == 1
+assert data[17:20] == b"\x00\x00\x00"
+assert len(data) == 24
+PY
+
 python3 - "$PNG_SOURCE" "$PNG_PALETTE" <<'PY'
 import struct
 import sys
@@ -179,6 +217,7 @@ palette game ana_convert_palette.png --colors 7
 image sheet ana_convert_sheet.png --palette game --frame-width 3 --frame-height 2 --transparent #ff00ff
 font hud ana_convert_font.ppm --colors 2 --char-width 3 --char-height 2 --first-char 65 --chars 2 --transparent #ff00ff
 sound click ana_convert_sound.anasfx
+sound coin ana_convert_sound.wav --rate 4000 --volume 44 --priority 4
 music theme theme.mod
 EOF
 
@@ -187,8 +226,10 @@ EOF
 test -f "$MANIFEST_OUT/game.anapal"
 test -f "$MANIFEST_OUT/hud.anafnt"
 cmp "$SOUND_OUTPUT" "$MANIFEST_OUT/click.anasnd"
+cmp "$WAV_SOUND_OUTPUT" "$MANIFEST_OUT/coin.anasnd"
 cmp "$MOD_SOURCE" "$MANIFEST_OUT/theme.mod"
 
 rm -rf "$SOURCE" "$OUTPUT" "$PNG_SOURCE" "$PNG_PALETTE" "$PALETTE" \
     "$PNG_OUTPUT" "$FONT_SOURCE" "$FONT_OUTPUT" "$SOUND_SOURCE" \
-    "$SOUND_OUTPUT" "$MANIFEST" "$MANIFEST_OUT" "$MOD_SOURCE"
+    "$SOUND_OUTPUT" "$WAV_SOUND_SOURCE" "$WAV_SOUND_OUTPUT" "$MANIFEST" \
+    "$MANIFEST_OUT" "$MOD_SOURCE"

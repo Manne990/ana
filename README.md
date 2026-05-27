@@ -52,9 +52,18 @@ draw slots directly. Its asset manifest also packages a small ProTracker MOD as
 screens, then stops it during active gameplay so the normal ADF keeps the arcade
 loop close to the A1200 performance target.
 
-`examples/amaze` is intentionally smaller: it draws a tile maze with ANA
-primitives, loads three small SFX assets, and uses a fixed-size BFS distance map
-so chasers can take simple paths toward the player.
+`examples/amaze` follows the same readable structure as Invaders: `main.c`
+registers the ANA callbacks, `amaze_game.c` owns the rules and pathfinding,
+`amaze_render.c` owns retained tile redraws, and `amaze_assets.c` owns image
+sprites, SFX, music, and channel policy. It draws a tile maze with converted PNG
+sprites for the player, collectors, coins, and gold bags, uses a fixed-size BFS
+distance map so chasers can take simple paths toward the player or flee while
+corner power pellets are active, and loads four WAV-derived SFX assets plus a
+small ProTracker MOD. The sample uses a fictional
+business-and-tax-collector theme: dots are coins, power pellets are gold bags,
+and the chasers are collectors. Its retained HUD shows score and lives, scoring
+1 point per coin, 10 per gold bag, and 20 per captured collector. Captured
+collectors immediately return to their normal color and behavior.
 
 ## Quick Build
 
@@ -77,7 +86,9 @@ make adfs
 ```
 
 A1200 baseline examples use the same assets and renderer but compile the C
-code with `-m68020`:
+code with `-m68020`. If the local `m68k-amigaos-*` tools are not on `PATH`,
+the Makefile runs those compiler, assembler, and archiver commands through the
+`amigadev/crosstools:m68k-amigaos-gcc10_amd64` Docker image automatically:
 
 ```sh
 make amiga-a1200-examples
@@ -209,8 +220,8 @@ build/tools/ana-convert/ana-convert build assets.ana --out build/assets/game
 ```
 
 The current public converter supports PNG and PPM P3/P6 image input for images
-and fixed-width bitmap fonts, plus small text-based SFX recipes that become
-`.anasnd` files. Manifest builds can also copy `.mod` music assets for
+and fixed-width bitmap fonts, plus small text-based SFX recipes and PCM WAV
+files that become `.anasnd` files. Manifest builds can also copy `.mod` music assets for
 `ana_load_music`; examples should keep MOD files small enough for floppy load
 time, Chip RAM, and frame-rate budgets. XNA/MonoGame import experiments are
 planned for later work.

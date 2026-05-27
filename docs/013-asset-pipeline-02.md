@@ -79,6 +79,7 @@ ana-convert image player.png --out player.anaimg --palette game.anapal --transpa
 ana-convert image explosion.png --out explosion.anaimg --palette game.anapal --frame-width 16 --frame-height 16
 ana-convert font hud_font.png --out hud.anafnt --colors 2 --char-width 6 --char-height 7 --first-char 48 --chars 43 --transparent '#ff00ff'
 ana-convert sound fire.anasfx --out fire.anasnd
+ana-convert sound coin.wav --out coin.anasnd --rate 8000 --volume 48 --priority 2
 ```
 
 Palett kan skapas fran en masterbild:
@@ -119,8 +120,9 @@ Regler:
 ## Manifestformat
 
 Manifestet ska vara radbaserat och avsiktligt mindre avancerat an XNA:s
-content project. 0.2 fokuserar pa bilder, fasta bitmapfonter och enkla SFX-
-recept, men kan aven kopiera `.mod`-musik utan runtime-konvertering.
+content project. 0.2 fokuserar pa bilder, fasta bitmapfonter och SFX-kallor
+som `.anasfx` och PCM WAV, men kan aven kopiera `.mod`-musik utan runtime-
+konvertering.
 
 ```text
 ANA_ASSETS 1
@@ -132,6 +134,7 @@ image invader invader.png --palette game
 image explosion explosion.png --palette game --frame-width 16 --frame-height 16 --transparent #ff00ff
 font hud hud_font.png --colors 2 --char-width 6 --char-height 7 --first-char 48 --chars 43 --transparent #ff00ff
 sound fire fire.anasfx
+sound coin coin.wav --rate 8000 --volume 48 --priority 2
 music theme theme.mod
 ```
 
@@ -252,13 +255,14 @@ Felmeddelanden bor innehalla filnamn och, nar rimligt, pixelposition.
 - `ana-convert palette` skapar textbaserade `.anapal`-filer fran PNG/PPM.
 - `ana-convert build` bygger ett radbaserat `ANA_ASSETS 1`-manifest.
 - `ana-convert font` bygger fasta bitmapfonter ovanpa image-formatet.
-- `ana-convert sound` bygger `.anasnd` fran enkla `.anasfx`-recept.
+- `ana-convert sound` bygger `.anasnd` fran enkla `.anasfx`-recept och PCM WAV.
 - PNG-dekodning ligger vendrad och host-only i `tools/ana-convert/vendor/`.
 - `make assets`, `make examples/invaders-assets` och `make clean-assets` finns.
 - Invaders bildassets ligger som PNG-source assets under
   `examples/invaders/assets/` och byggs till `.anaimg`.
 - Invaders HUD-font ligger som source asset och byggs till `.anafnt`.
-- Invaders SFX ligger som `.anasfx` source assets och byggs till `.anasnd`.
+- Invaders SFX ligger som `.anasfx` source assets och AMAze SFX ligger som WAV;
+  bada byggs till `.anasnd`.
 - Den gamla kodbaserade `.anaimg`-genereringen for Invaders ar borttagen.
 - Testsviten bygger PPM, PNG, `.anapal`, `.anafnt`, `.anasnd` och
   manifestfloden.

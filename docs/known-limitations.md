@@ -31,10 +31,11 @@ preview work.
 
 - Public image converter supports PNG and PPM P3/P6.
 - Public font converter supports fixed-width PNG and PPM P3/P6 font sheets.
-- Public sound converter supports simple generated `.anasfx` SFX recipes.
+- Public sound converter supports simple generated `.anasfx` SFX recipes and
+  PCM WAV import.
 - Palette files and manifests exist, but are intentionally simple.
 - Manifest builds can copy `.mod` music assets.
-- General WAV/IFF sound import is not implemented yet.
+- IFF sound import is not implemented yet.
 - No XNA/MonoGame project import yet.
 
 ## Sound

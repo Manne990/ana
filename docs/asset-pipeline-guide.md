@@ -14,7 +14,8 @@ Implemented for 0.1:
 - `.anapal` for text palette files used by the host converter
 
 The public converter supports PNG and PPM image conversion for images,
-fixed-width bitmap fonts, and simple text recipes for bundled sound effects.
+fixed-width bitmap fonts, and simple text recipes or PCM WAV files for bundled
+sound effects.
 The Invaders example is built from source assets only; it no longer needs a
 custom host-side asset generator.
 
@@ -74,6 +75,16 @@ build/tools/ana-convert/ana-convert sound fire.anasfx \
   --out fire.anasnd
 ```
 
+Convert a PCM WAV file:
+
+```sh
+build/tools/ana-convert/ana-convert sound coin.wav \
+  --out coin.anasnd \
+  --rate 8000 \
+  --volume 48 \
+  --priority 2
+```
+
 Minimal `.anasfx` recipe:
 
 ```text
@@ -111,13 +122,14 @@ image player player.png --palette game --transparent #ff00ff
 image explosion explosion.png --palette game --frame-width 16 --frame-height 16 --transparent #ff00ff
 font hud hud_font.png --colors 2 --char-width 6 --char-height 7 --first-char 48 --chars 43 --transparent #ff00ff
 sound fire fire.anasfx
+sound coin coin.wav --rate 8000 --volume 48 --priority 2
 music theme theme.mod
 ```
 
 Planned but not yet implemented:
 
 - richer palette workflows
-- external WAV/IFF sound import
+- IFF sound import
 - XNA/MonoGame content import experiments
 
 ## Loading assets at runtime
@@ -143,7 +155,9 @@ The Invaders example loads asset files from `assets/` on the Amiga ADF and from
 `build/assets/invaders/assets/` in host builds. Its image assets come from PNG
 source files in `examples/invaders/assets/`, and its HUD font is converted from
 a source bitmap font sheet. SFX files are converted from small `.anasfx` recipe
-files in the same asset directory.
+files in the same asset directory. AMAze demonstrates PNG source sprites, PCM
+WAV source SFX that are downsampled to `.anasnd` by the same manifest flow, plus
+a copied ProTracker MOD music asset.
 
 Normal games should be able to choose either model:
 

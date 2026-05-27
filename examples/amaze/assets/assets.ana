@@ -1,5 +1,17 @@
 ANA_ASSETS 1
 
-sound eat eat.anasfx
-sound death death.anasfx
-sound level level.anasfx
+palette game palette.png --colors 16
+
+image businessman businessman.png --palette game --transparent #ff00ff
+image taxman_red taxman_red.png --palette game --transparent #ff00ff
+image taxman_pink taxman_pink.png --palette game --transparent #ff00ff
+image taxman_cyan taxman_cyan.png --palette game --transparent #ff00ff
+image taxman_blue taxman_blue.png --palette game --transparent #ff00ff
+image coin coin.png --palette game --transparent #ff00ff
+image gold_bag gold_bag.png --palette game --transparent #ff00ff
+
+sound coin coin.wav --rate 8000 --volume 56 --priority 2
+sound bag bag.wav --rate 8000 --volume 60 --priority 4
+sound death death.wav --rate 8000 --volume 64 --priority 6
+sound yippie yippie.wav --rate 8000 --volume 64 --priority 5
+music theme game.mod

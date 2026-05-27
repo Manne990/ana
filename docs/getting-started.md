@@ -17,15 +17,15 @@ For host builds and tests:
 
 For Amiga executable builds:
 
-- `m68k-amigaos-gcc`
-- `m68k-amigaos-ar`
+- `m68k-amigaos-gcc` and `m68k-amigaos-ar`, or Docker for the automatic
+  `amigadev/crosstools:m68k-amigaos-gcc10_amd64` fallback
 
 For ADF images:
 
 - `gadf`
 
-The GitHub Actions workflow uses the Docker image
-`amigadev/crosstools:m68k-amigaos-gcc10_amd64` for the Amiga compiler and
+The Makefile also looks for `gadf` in `$HOME/go/bin/gadf` if it is not already
+on `PATH`. GitHub Actions uses the same Docker image for the Amiga compiler and
 `gadf` for disk images.
 
 ## Build the host version
@@ -46,7 +46,8 @@ This builds:
 
 ## Build Amiga examples
 
-With `m68k-amigaos-gcc` on your path:
+With `m68k-amigaos-gcc` on your path, or Docker available for the automatic
+fallback:
 
 ```sh
 make clean
@@ -59,7 +60,7 @@ The Amiga executables are written to:
 - `build/amiga/examples/invaders/invaders`
 - `build/amiga/examples/amaze/amaze`
 
-To reproduce the CI Amiga build with Docker:
+To force the CI Amiga build image explicitly:
 
 ```sh
 docker run --rm \
@@ -86,7 +87,7 @@ lores 320x256, 16-color display profile as the portable Amiga targets.
 
 ## Build ADF images
 
-After the matching Amiga executable targets:
+The ADF targets build the matching Amiga executables first when needed:
 
 ```sh
 make adfs
@@ -100,7 +101,7 @@ make amaze-a1200-adf
 make amaze-a1200-debug-adf
 ```
 
-If `gadf` is not on your path:
+If `gadf` is installed somewhere else:
 
 ```sh
 make adfs ADFTOOL="$HOME/go/bin/gadf"
