@@ -41,7 +41,8 @@ This builds:
 - `build/libana.a`
 - `build/tools/ana-convert/ana-convert`
 - generated example assets under `build/assets/`
-- host smoke-test versions of `hello`, `invaders`, and `amaze`
+- host smoke-test versions of `hello`, `invaders`, `amaze`, and
+  `byte_brothers`
 - the test binaries
 
 ## Build Amiga examples
@@ -59,6 +60,7 @@ The Amiga executables are written to:
 - `build/amiga/examples/hello/hello`
 - `build/amiga/examples/invaders/invaders`
 - `build/amiga/examples/amaze/amaze`
+- `build/amiga/examples/byte_brothers/byte_brothers`
 
 To force the CI Amiga build image explicitly:
 
@@ -79,7 +81,7 @@ docker run --rm \
   -v "$PWD:/work" \
   -w /work \
   amigadev/crosstools:m68k-amigaos-gcc10_amd64 \
-  make clean amiga-a1200-examples amiga-invaders-a1200-debug amiga-amaze-a1200-debug
+  make clean amiga-a1200-examples amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug
 ```
 
 The A1200 targets compile the C code with `-m68020`. They keep the same PAL
@@ -99,13 +101,15 @@ For A1200-specific disk images:
 make invaders-a1200-adf
 make amaze-a1200-adf
 make amaze-a1200-debug-adf
+make byte-brothers-a1200-adf
+make byte-brothers-a1200-debug-adf
 ```
 
 If `gadf` is installed somewhere else:
 
 ```sh
 make adfs ADFTOOL="$HOME/go/bin/gadf"
-make invaders-a1200-adf amaze-a1200-adf amaze-a1200-debug-adf ADFTOOL="$HOME/go/bin/gadf"
+make invaders-a1200-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf ADFTOOL="$HOME/go/bin/gadf"
 ```
 
 ADF images are written to `build/adf/`:
@@ -113,9 +117,12 @@ ADF images are written to `build/adf/`:
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
 - `build/adf/amaze.adf`
+- `build/adf/byte-brothers.adf`
 - `build/adf/invaders-a1200.adf`
 - `build/adf/amaze-a1200.adf`
 - `build/adf/amaze-a1200-debug.adf`
+- `build/adf/byte-brothers-a1200.adf`
+- `build/adf/byte-brothers-a1200-debug.adf`
 
 The CI artifact is called `ana-example-adfs`.
 
@@ -210,6 +217,15 @@ make amaze-a1200-debug-adf
 ```
 
 This writes `build/adf/amaze-a1200-debug.adf`.
+
+For Byte Brothers stock-A1200 measurements:
+
+```sh
+make amiga-byte-brothers-a1200-debug
+make byte-brothers-a1200-debug-adf
+```
+
+This writes `build/adf/byte-brothers-a1200-debug.adf`.
 
 For the direct-present path with synchronization:
 

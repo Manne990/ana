@@ -1,0 +1,8 @@
+ANA_ASSETS 1
+
+sound jump jump.anasfx
+sound collect collect.anasfx
+sound power power.anasfx
+sound hit hit.anasfx
+sound goal goal.anasfx
+music theme theme.mod

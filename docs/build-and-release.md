@@ -16,6 +16,7 @@ Outputs:
 - `build/examples/hello/hello`
 - `build/examples/invaders/invaders`
 - `build/examples/amaze/amaze`
+- `build/examples/byte_brothers/byte_brothers`
 - generated example assets under `build/assets/`
 
 Run tests:
@@ -37,6 +38,7 @@ Outputs:
 - `build/amiga/examples/hello/hello`
 - `build/amiga/examples/invaders/invaders`
 - `build/amiga/examples/amaze/amaze`
+- `build/amiga/examples/byte_brothers/byte_brothers`
 
 A1200 baseline builds use `-m68020`:
 
@@ -44,6 +46,7 @@ A1200 baseline builds use `-m68020`:
 make amiga-a1200-examples
 make amiga-invaders-a1200-debug
 make amiga-amaze-a1200-debug
+make amiga-byte-brothers-a1200-debug
 ```
 
 Outputs:
@@ -52,14 +55,16 @@ Outputs:
 - `build/amiga-a1200/examples/hello/hello`
 - `build/amiga-a1200/examples/invaders/invaders`
 - `build/amiga-a1200/examples/amaze/amaze`
+- `build/amiga-a1200/examples/byte_brothers/byte_brothers`
 - `build/amiga-a1200-debug/examples/invaders-a1200-debug/invaders`
 - `build/amiga-a1200-debug/examples/amaze-a1200-debug/amaze`
+- `build/amiga-a1200-debug/examples/byte-brothers-a1200-debug/byte_brothers`
 
 Build ADFs:
 
 ```sh
 make adfs
-make invaders-a1200-adf amaze-a1200-adf invaders-a1200-debug-adf amaze-a1200-debug-adf
+make invaders-a1200-adf amaze-a1200-adf byte-brothers-a1200-adf invaders-a1200-debug-adf amaze-a1200-debug-adf byte-brothers-a1200-debug-adf
 ```
 
 Outputs:
@@ -67,10 +72,13 @@ Outputs:
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
 - `build/adf/amaze.adf`
+- `build/adf/byte-brothers.adf`
 - `build/adf/invaders-a1200.adf`
 - `build/adf/amaze-a1200.adf`
+- `build/adf/byte-brothers-a1200.adf`
 - `build/adf/invaders-a1200-debug.adf`
 - `build/adf/amaze-a1200-debug.adf`
+- `build/adf/byte-brothers-a1200-debug.adf`
 
 ## CI build
 
@@ -120,6 +128,7 @@ The package contains:
 - `examples/`
 - `examples/invaders/assets/` PNG source assets and manifest
 - `examples/amaze/assets/` SFX source assets and manifest
+- `examples/byte_brothers/assets/` SFX/music source assets and manifest
 - `tests/`
 - `docs/`
 - `.github/`
@@ -140,6 +149,9 @@ Current CI binary artifacts:
 - `amaze.adf`
 - `amaze-a1200.adf`
 - `amaze-a1200-debug.adf`
+- `byte-brothers.adf`
+- `byte-brothers-a1200.adf`
+- `byte-brothers-a1200-debug.adf`
 
 If a future release includes prebuilt binaries, the release notes must state:
 

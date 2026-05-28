@@ -185,6 +185,30 @@ Repair callbacks should also bound their own scans to the incoming dirty
 rectangle. For example, shield repair should only inspect the shield cells that
 can overlap the dirty rectangle instead of scanning the whole shield.
 
+## Scrolling games
+
+Dirty rectangles work well when the background is static. They are not enough
+as the main model for a platform game, vertical shooter, or any game where the
+camera moves most frames. Once the camera moves, most of the viewport can
+effectively become dirty even if only a few sprites changed.
+
+Byte Brothers currently uses a conservative fallback renderer for scrolling:
+the camera is snapped to Amiga-friendly boundaries and the play viewport can be
+redrawn when the camera changes. This keeps the image correct, but it is not
+the final performance model.
+
+The intended ANA direction is a framework-level scroll API:
+
+- `ANA_Camera` for world/screen conversion and follow/continuous movement.
+- `ANA_Tilemap` for drawing visible tiles without game code calculating tile
+  intervals.
+- `ANA_ScrollLayer` for tracking previous camera position, exposed strips, and
+  redraw policy.
+
+The long-term Amiga backend should move or hardware-scroll the existing
+background and draw only newly exposed strips, while keeping HUD and sprites as
+separate layers. See [Spec 017](017-scroll-camera-tilemap.md).
+
 ## Escape hatches
 
 ANA should not prevent lower-level optimization. Acceptable escape hatches:

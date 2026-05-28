@@ -21,8 +21,9 @@ preview work.
 
 - Retained BOB and label helpers exist, but there is no full sprite manager or
   scene graph.
-- No tilemap system.
-- No scrolling background support.
+- No stable high-performance tilemap or scrolling background API yet. Byte
+  Brothers currently uses a transitional fallback renderer; Spec 017 defines
+  the planned camera, tilemap, and scroll-layer direction.
 - No hardware sprite API yet.
 - No high-level animation system beyond image frames.
 - Direct-present rendering is fast but still young.

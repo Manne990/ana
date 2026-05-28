@@ -17,7 +17,8 @@ structure, but be designed around C and Amiga hardware.
 ANA 0.1.0 is tagged as the "Invaders Release": a small framework release
 demonstrated by a playable Space Invaders-style example. Current `main` is
 post-0.1 development toward 0.2 and adds `AMAze`, a compact maze-chase sample
-with simple SFX and rudimentary pathfinding.
+with simple SFX and rudimentary pathfinding, plus `Byte Brothers`, an early
+side-scrolling platform sample.
 
 Implemented so far:
 
@@ -36,7 +37,7 @@ Implemented so far:
 - PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests
 - Amiga executable and ADF builds
-- `hello`, `invaders`, and `amaze` examples
+- `hello`, `invaders`, `amaze`, and `byte_brothers` examples
 
 The practical showcase baseline is currently a stock A1200 without Fast RAM.
 The performance goal for the complete Invaders demo is stable 50 fps on that
@@ -64,6 +65,15 @@ business-and-tax-collector theme: dots are coins, power pellets are gold bags,
 and the chasers are collectors. Its retained HUD shows score and lives, scoring
 1 point per coin, 10 per gold bag, and 20 per captured collector. Captured
 collectors immediately return to their normal color and behavior.
+
+`examples/byte_brothers` is the first platformer stress sample. It uses
+symbol-authored level maps, a side-scrolling camera, one-way platforms, hidden
+and power-up blocks, collectible code fragments, simple patrolling enemies,
+hazards, a discreet fullscreen HUD, SFX, and a looped MOD. It is intentionally
+kept readable so it can show the normal ANA application split for a scrolling
+action game. Its current scrolling renderer is a transitional fallback; the
+planned generic camera, tilemap, and scroll-layer API is tracked in
+[Spec 017](docs/017-scroll-camera-tilemap.md).
 
 ## Quick Build
 
@@ -95,6 +105,8 @@ make amiga-a1200-examples
 make invaders-a1200-adf
 make amaze-a1200-adf
 make amaze-a1200-debug-adf
+make byte-brothers-a1200-adf
+make byte-brothers-a1200-debug-adf
 ```
 
 ADF images are written to `build/adf/`:
@@ -102,15 +114,18 @@ ADF images are written to `build/adf/`:
 - `build/adf/hello.adf`
 - `build/adf/invaders.adf`
 - `build/adf/amaze.adf`
+- `build/adf/byte-brothers.adf`
 - `build/adf/invaders-a1200.adf`
 - `build/adf/amaze-a1200.adf`
 - `build/adf/amaze-a1200-debug.adf`
+- `build/adf/byte-brothers-a1200.adf`
+- `build/adf/byte-brothers-a1200-debug.adf`
 
 Additional profiling ADFs can be built into the same directory with
 `make invaders-debug-adf`, `make invaders-sync-adf`,
 `make invaders-buffered-debug-adf`, `make invaders-a1200-debug-adf`, and
-`make amaze-a1200-debug-adf` after their matching Amiga binaries have been
-built.
+`make amaze-a1200-debug-adf`, and `make byte-brothers-a1200-debug-adf` after
+their matching Amiga binaries have been built.
 
 Use the normal A1200 ADFs for gameplay checks. The debug ADFs compile in
 runtime/render instrumentation and are intended for diagnostics.
@@ -129,6 +144,7 @@ Start here:
 - [Development routine](docs/development-routine.md)
 - [Performance guide](docs/performance-guide.md)
 - [Known limitations](docs/known-limitations.md)
+- [Scroll, camera, and tilemap spec](docs/017-scroll-camera-tilemap.md)
 - [ANA 0.1 release notes](docs/release-notes-0.1.md)
 
 ## Example Shape
@@ -249,9 +265,9 @@ build/release/ana-0.2.0-dev.tar.gz
 See [Build and release package guide](docs/build-and-release.md) for package
 contents and binary artifact policy.
 
-## 0.1 Specs
+## Specs
 
-The 0.1 work is tracked in focused specs:
+ANA work is tracked in focused specs:
 
 1. [Platform and design principles](docs/001-plattform-och-designprinciper.md)
 2. [Project structure and build system](docs/002-projektstruktur-och-build-system.md)
@@ -268,6 +284,8 @@ The 0.1 work is tracked in focused specs:
 13. [Asset pipeline 0.2](docs/013-asset-pipeline-02.md)
 14. [Music and channel policy](docs/014-musik-och-kanalpolicy.md)
 15. [Retained rendering helpers](docs/015-retained-rendering-helpers.md)
+16. [Byte Brothers platform sample](docs/016-byte-brothers-platform-sample.md)
+17. [Scroll, camera, and tilemap](docs/017-scroll-camera-tilemap.md)
 
 ## License
 
