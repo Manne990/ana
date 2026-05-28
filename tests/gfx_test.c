@@ -64,6 +64,41 @@ static void test_palette_accepts_supported_colors(void)
     ana_gfx_close();
 }
 
+static void test_scroll_rect(void)
+{
+    assert(ana_gfx_open(ana_default_profile()) == ANA_OK);
+
+    ana_clear(0);
+    ana_fill_rect(1, 2, 2, 1, 1);
+    ana_fill_rect(2, 3, 2, 1, 1);
+    ana_fill_rect(3, 4, 3, 1, 1);
+    ana_scroll_rect(0, 0, 8, 6, 2, 1, 9);
+
+    assert(ana_gfx_draw_pixel(4, 3) == 1);
+    assert(ana_gfx_draw_pixel(5, 3) == 2);
+    assert(ana_gfx_draw_pixel(6, 4) == 3);
+    assert(ana_gfx_draw_pixel(0, 5) == 9);
+    assert(ana_gfx_draw_pixel(7, 0) == 9);
+
+    ana_present();
+    assert(ana_gfx_front_pixel(4, 3) == 1);
+    assert(ana_gfx_front_pixel(0, 5) == 9);
+
+    ana_clear(0);
+    ana_fill_rect(4, 5, 4, 1, 1);
+    ana_scroll_rect(0, 0, 8, 6, -2, -1, 7);
+
+    assert(ana_gfx_draw_pixel(3, 3) == 4);
+    assert(ana_gfx_draw_pixel(7, 0) == 7);
+    assert(ana_gfx_draw_pixel(1, 5) == 7);
+
+    ana_scroll_rect(1, 1, 3, 2, 8, 0, 6);
+    assert(ana_gfx_draw_pixel(1, 1) == 6);
+    assert(ana_gfx_draw_pixel(3, 2) == 6);
+
+    ana_gfx_close();
+}
+
 static void write_u16_le(FILE* file, int value)
 {
     fputc(value & 0xff, file);
@@ -494,6 +529,7 @@ int main(void)
 {
     test_clear_and_present();
     test_palette_accepts_supported_colors();
+    test_scroll_rect();
     test_image_loading_and_drawing();
     test_font_loading_and_drawing();
     test_retained_render_helpers();

@@ -13,6 +13,8 @@
 #define BB_MAP_H 16
 #define BB_LEVEL_COUNT 4
 #define BB_MAX_ENEMIES 8
+#define BB_CAMERA_SNAP_X 1
+#define BB_CAMERA_SNAP_Y 1
 #define BB_PLAYER_W 10
 #define BB_PLAYER_H 14
 #define BB_PLAYER_SPEED 2
@@ -51,6 +53,7 @@ extern int bb_level_index;
 extern int bb_score;
 extern int bb_lives;
 extern int bb_fragments_left;
+extern ANA_Camera bb_camera;
 extern int bb_camera_x;
 extern int bb_camera_y;
 extern int bb_frame;

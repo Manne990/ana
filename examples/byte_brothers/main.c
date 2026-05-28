@@ -22,6 +22,7 @@ int main(void)
     game.fps = 50;
     game.colors = 16;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.render_mode = ANA_RENDER_TILE_SCROLL;
     game.debug_stats = 1;
 
     printf("ANA Byte Brothers started.\n");

@@ -15,6 +15,7 @@ static void test_default_profile(void)
     assert(profile->colors == ANA_DEFAULT_COLORS);
     assert(profile->bitplanes == ANA_DEFAULT_BITPLANES);
     assert(profile->screen_mode == ANA_SCREEN_PAL_LORES);
+    assert(profile->render_mode == ANA_RENDER_DIRTY);
     assert(profile->target_flags == ANA_TARGET_OCS_ECS);
     assert(ana_validate_profile(profile) == ANA_OK);
     assert(ana_profile_is_supported(profile));
@@ -35,6 +36,10 @@ static void test_rejects_unsupported_profiles(void)
 
     profile = *ana_default_profile();
     profile.target_flags = 0u;
+    assert(ana_validate_profile(&profile) == ANA_ERROR_UNSUPPORTED_PROFILE);
+
+    profile = *ana_default_profile();
+    profile.render_mode = (ANA_RenderMode)99;
     assert(ana_validate_profile(&profile) == ANA_ERROR_UNSUPPORTED_PROFILE);
 
     assert(ana_validate_profile(0) == ANA_ERROR_INVALID_ARGUMENT);
@@ -62,6 +67,7 @@ static void test_public_handle_names_are_available(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.render_mode = ANA_RENDER_DIRTY;
     game.debug_stats = 0;
 
     time.tick = 0;
@@ -71,6 +77,7 @@ static void test_public_handle_names_are_available(void)
     assert(font == 0);
     assert(sound == 0);
     assert(game.width == ANA_DEFAULT_WIDTH);
+    assert(game.render_mode == ANA_RENDER_DIRTY);
     assert(time.fps == ANA_DEFAULT_FPS);
 }
 

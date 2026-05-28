@@ -34,6 +34,9 @@ ANA_RenderStats ana_render_stats(void);
 ```
 
 Skarmoppning och stangning sker normalt via `ana_run` och `ANA_Game`. Lagre `ana_gfx_*`-funktioner kan finnas internt eller som advanced-API senare, men basexempel ska inte behova anropa dem.
+Nar `ana_run` anvands anropar runtime `ana_present` efter spelets `draw`
+callback. Spelkod ska darfor normalt inte anropa `ana_present` inne i `draw`;
+det ger tva presentationer for en uppdatering och kan orsaka ojamn frame pacing.
 
 ## Buffertstrategi
 

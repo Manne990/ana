@@ -69,6 +69,7 @@ static ANA_Game make_game(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.render_mode = ANA_RENDER_DIRTY;
     game.debug_stats = 0;
 
     return game;
@@ -117,6 +118,22 @@ static void test_runtime_rejects_bad_profile(void)
     assert(stats.frames == 0);
 }
 
+static void test_runtime_rejects_bad_render_mode(void)
+{
+    ANA_Game game;
+
+    reset_counts();
+    game = make_game();
+    game.render_mode = (ANA_RenderMode)99;
+
+    assert(ana_run(&game) == ANA_ERROR_UNSUPPORTED_PROFILE);
+    assert(init_count == 0);
+    assert(load_count == 0);
+    assert(update_count == 0);
+    assert(draw_count == 0);
+    assert(shutdown_count == 0);
+}
+
 static void test_runtime_uses_default_profile_values(void)
 {
     ANA_Game game;
@@ -128,6 +145,7 @@ static void test_runtime_uses_default_profile_values(void)
     game.fps = 0;
     game.colors = 0;
     game.screen_mode = 0;
+    game.render_mode = ANA_RENDER_DEFAULT;
 
     assert(ana_run(&game) == ANA_OK);
     assert(update_count == 3);
@@ -138,6 +156,7 @@ int main(void)
 {
     test_runtime_loop();
     test_runtime_rejects_bad_profile();
+    test_runtime_rejects_bad_render_mode();
     test_runtime_uses_default_profile_values();
     assert(ana_run(0) == ANA_ERROR_INVALID_ARGUMENT);
 

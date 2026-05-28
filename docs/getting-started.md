@@ -175,6 +175,7 @@ int main(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.render_mode = ANA_RENDER_DIRTY;
     game.debug_stats = 0;
 
     return ana_run(&game);
@@ -187,6 +188,9 @@ Important runtime rules:
 - At 50 fps, 50 ticks is about one second.
 - Keep allocation and file loading out of `update` and `draw`.
 - Use preconverted assets for images, fonts, and sounds.
+- Use `ANA_RENDER_DIRTY` for static-view games with moving objects. Use
+  `ANA_RENDER_TILE_SCROLL` for scrolling games so ANA can choose the right
+  backend as that support matures.
 
 ## Debug ADFs
 

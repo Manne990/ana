@@ -17,6 +17,8 @@ Forsta versionen ska darfor ha:
 
 - Fullscreen PAL lores via ANA:s screen setup, utan Workbench-fonster eller
   terminaltext under gameplay.
+- `ANA_RENDER_TILE_SCROLL` i `ANA_Game`, sa samplet deklarerar att det behover
+  scroll-/tilemap-orienterad rendering snarare an statisk dirty rendering.
 - Bakgrundsmusik som loopar under spelet.
 - Ljudeffekter for minst hopp, collectible, power-up, fiendekollision och
   levelmal.
@@ -194,8 +196,9 @@ Forsta spelbara slice finns i `examples/byte_brothers/`:
   collectibles, hazards, power-/hidden-/breakable-blocks, enkla patrullerande
   fiender och levelovergang.
 - `byte_brothers_render.c` ritar fullscreen-HUD, tiles, spelare och fiender med
-  dirty redraw. Kameran snappar for tillfallet pa 8-pixelsgranser och gor en
-  explicit viewport-redraw vid scroll, eftersom ANA annu saknar tilemap- eller
+  dirty redraw. Spelet anvander `ANA_Camera` for world/screen-konvertering och
+  1-pixelkamera for mjukare fallback-scroll. Den gor fortfarande explicit
+  viewport-redraw vid scroll, eftersom ANA annu saknar tilemap- eller
   hardware-scroll-hjalpare for kontinuerlig plattformsscroll.
 - `byte_brothers_assets.c` laddar SFX och loopad MOD enligt en enkel
   musik/SFX-kanalpolicy.

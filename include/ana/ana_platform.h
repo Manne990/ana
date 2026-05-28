@@ -21,6 +21,14 @@ typedef enum ANA_ScreenMode {
     ANA_SCREEN_PAL_LORES = 1
 } ANA_ScreenMode;
 
+typedef enum ANA_RenderMode {
+    ANA_RENDER_DEFAULT = 0,
+    ANA_RENDER_DIRTY = 1,
+    ANA_RENDER_FULL_FRAME = 2,
+    ANA_RENDER_TILE_SCROLL = 3,
+    ANA_RENDER_BLITTER_BOBS = 4
+} ANA_RenderMode;
+
 typedef struct ANA_Profile {
     int width;
     int height;
@@ -28,6 +36,7 @@ typedef struct ANA_Profile {
     int colors;
     int bitplanes;
     ANA_ScreenMode screen_mode;
+    ANA_RenderMode render_mode;
     unsigned int target_flags;
 } ANA_Profile;
 
@@ -40,4 +49,3 @@ int ana_profile_is_supported(const ANA_Profile* profile);
 #endif
 
 #endif
-

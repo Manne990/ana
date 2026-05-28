@@ -16,6 +16,7 @@ int bb_level_index = 0;
 int bb_score = 0;
 int bb_lives = 3;
 int bb_fragments_left = 0;
+ANA_Camera bb_camera;
 int bb_camera_x = 0;
 int bb_camera_y = 0;
 int bb_frame = 0;
@@ -99,6 +100,27 @@ static int bb_start_x = 0;
 static int bb_start_y = 0;
 
 static void bb_load_level(int level);
+
+static void bb_sync_camera_compat(void)
+{
+    bb_camera_x = bb_camera.x;
+    bb_camera_y = bb_camera.y;
+}
+
+static void bb_reset_camera(void)
+{
+    ana_camera_init(
+        &bb_camera,
+        0,
+        BB_HUD_H,
+        BB_SCREEN_W,
+        BB_SCREEN_H - BB_HUD_H,
+        BB_WORLD_W,
+        BB_WORLD_H);
+    ana_camera_set_snap(&bb_camera, BB_CAMERA_SNAP_X, BB_CAMERA_SNAP_Y);
+    ana_camera_set_position(&bb_camera, 0, 0);
+    bb_sync_camera_compat();
+}
 
 char bb_tile_at(int tx, int ty)
 {
@@ -508,9 +530,8 @@ static void bb_update_camera(void)
     int target;
 
     target = bb_player.x - 136;
-    target = ana_clamp_int(target, 0, BB_WORLD_W - BB_SCREEN_W);
-    bb_camera_x = target & ~7;
-    bb_camera_y = 0;
+    ana_camera_set_position(&bb_camera, target, 0);
+    bb_sync_camera_compat();
 }
 
 static void bb_update_enemies(void)
@@ -564,8 +585,7 @@ static void bb_load_level(int level)
 
     bb_enemy_count = 0;
     bb_fragments_left = 0;
-    bb_camera_x = 0;
-    bb_camera_y = 0;
+    bb_reset_camera();
 
     for (y = 0; y < BB_MAP_H; y++) {
         memcpy(bb_map[y], bb_levels[level][y], BB_MAP_W + 1);

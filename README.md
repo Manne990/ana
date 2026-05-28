@@ -31,8 +31,10 @@ Implemented so far:
 - explicit music/SFX channel policy for Paula channels
 - MOD music asset loading and Amiga playback through a vendored ProTracker
   replayer
-- small helpers for rectangles, clamp, timers, retained BOBs, masked retained
-  clear repair, and dirty labels
+- explicit render modes for dirty retained games, full-frame redraws, and
+  scrolling/tilemap-oriented games
+- small helpers for rectangles, camera/world conversion, clamp, timers,
+  retained BOBs, masked retained clear repair, and dirty labels
 - host-side image/font conversion to `.anaimg` and `.anafnt`
 - PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests
@@ -71,9 +73,15 @@ symbol-authored level maps, a side-scrolling camera, one-way platforms, hidden
 and power-up blocks, collectible code fragments, simple patrolling enemies,
 hazards, a discreet fullscreen HUD, SFX, and a looped MOD. It is intentionally
 kept readable so it can show the normal ANA application split for a scrolling
-action game. Its current scrolling renderer is a transitional fallback; the
-planned generic camera, tilemap, and scroll-layer API is tracked in
-[Spec 017](docs/017-scroll-camera-tilemap.md).
+action game. The host renderer can use ANA's low-level `ana_scroll_rect`
+primitive to move the viewport image and redraw exposed strips. The Amiga
+build currently uses a conservative full viewport redraw on camera movement
+because visible bitplane scroll is disabled until ANA has a proper hardware
+scroll/tilemap backend. The sample declares `ANA_RENDER_TILE_SCROLL` so the
+framework knows it is a scrolling game, even though the optimized backend is
+still planned work. The planned tilemap and scroll-layer API is tracked in
+[Spec 017](docs/017-scroll-camera-tilemap.md), and the render-mode contract is
+tracked in [Spec 018](docs/018-render-modes-and-backends.md).
 
 ## Quick Build
 
@@ -145,6 +153,7 @@ Start here:
 - [Performance guide](docs/performance-guide.md)
 - [Known limitations](docs/known-limitations.md)
 - [Scroll, camera, and tilemap spec](docs/017-scroll-camera-tilemap.md)
+- [Render modes and backends spec](docs/018-render-modes-and-backends.md)
 - [ANA 0.1 release notes](docs/release-notes-0.1.md)
 
 ## Example Shape
@@ -190,6 +199,7 @@ int main(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.render_mode = ANA_RENDER_DIRTY;
     game.debug_stats = 0;
 
     return ana_run(&game);
@@ -286,6 +296,7 @@ ANA work is tracked in focused specs:
 15. [Retained rendering helpers](docs/015-retained-rendering-helpers.md)
 16. [Byte Brothers platform sample](docs/016-byte-brothers-platform-sample.md)
 17. [Scroll, camera, and tilemap](docs/017-scroll-camera-tilemap.md)
+18. [Render modes and backends](docs/018-render-modes-and-backends.md)
 
 ## License
 

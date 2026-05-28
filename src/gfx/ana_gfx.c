@@ -3309,6 +3309,199 @@ void ana_clear(unsigned char color_index)
 #endif
 }
 
+static int ana_clip_screen_rect(int* x, int* y, int* width, int* height)
+{
+    int end_x;
+    int end_y;
+
+    if (*width <= 0 || *height <= 0) {
+        return 0;
+    }
+
+    if (*x >= ANA_DEFAULT_WIDTH || *y >= ANA_DEFAULT_HEIGHT ||
+            *x + *width <= 0 || *y + *height <= 0) {
+        return 0;
+    }
+
+    end_x = *x + *width;
+    end_y = *y + *height;
+
+    if (*x < 0) {
+        *x = 0;
+    }
+    if (*y < 0) {
+        *y = 0;
+    }
+    if (end_x > ANA_DEFAULT_WIDTH) {
+        end_x = ANA_DEFAULT_WIDTH;
+    }
+    if (end_y > ANA_DEFAULT_HEIGHT) {
+        end_y = ANA_DEFAULT_HEIGHT;
+    }
+
+    *width = end_x - *x;
+    *height = end_y - *y;
+    return *width > 0 && *height > 0;
+}
+
+static void ana_scroll_chunky_rect(
+    int x,
+    int y,
+    int width,
+    int height,
+    int dx,
+    int dy)
+{
+    int copy_w;
+    int copy_h;
+    int src_x;
+    int src_y;
+    int dst_x;
+    int dst_y;
+    int row;
+    int row_start;
+    int row_end;
+    int row_step;
+    unsigned char* pixels;
+
+    copy_w = width - abs(dx);
+    copy_h = height - abs(dy);
+
+    if (copy_w <= 0 || copy_h <= 0) {
+        return;
+    }
+
+    src_x = dx > 0 ? x : x - dx;
+    dst_x = dx > 0 ? x + dx : x;
+    src_y = dy > 0 ? y : y - dy;
+    dst_y = dy > 0 ? y + dy : y;
+
+    pixels = ana_framebuffers[ana_draw_buffer];
+
+    if (dy > 0) {
+        row_start = copy_h - 1;
+        row_end = -1;
+        row_step = -1;
+    } else {
+        row_start = 0;
+        row_end = copy_h;
+        row_step = 1;
+    }
+
+    for (row = row_start; row != row_end; row += row_step) {
+        memmove(
+            pixels + ((long)(dst_y + row) * ANA_DEFAULT_WIDTH) + dst_x,
+            pixels + ((long)(src_y + row) * ANA_DEFAULT_WIDTH) + src_x,
+            (size_t)copy_w);
+    }
+}
+
+#if defined(ANA_TARGET_AMIGA) && \
+    defined(ANA_AMIGA_DIRECT_PRESENT) && \
+    defined(ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL)
+static void ana_amiga_scroll_visible_bitmap_rect(
+    int x,
+    int y,
+    int width,
+    int height,
+    int dx,
+    int dy)
+{
+    struct ANA_AmigaBitmapState* state;
+    struct BitMap* bitmap;
+    int copy_w;
+    int copy_h;
+    int src_x;
+    int src_y;
+    int dst_x;
+    int dst_y;
+
+    bitmap = ana_amiga_visible_bitmap;
+    if (bitmap == NULL) {
+        return;
+    }
+
+    copy_w = width - abs(dx);
+    copy_h = height - abs(dy);
+    if (copy_w <= 0 || copy_h <= 0) {
+        return;
+    }
+
+    src_x = dx > 0 ? x : x - dx;
+    dst_x = dx > 0 ? x + dx : x;
+    src_y = dy > 0 ? y : y - dy;
+    dst_y = dy > 0 ? y + dy : y;
+
+    WaitBlit();
+    BltBitMap(
+        bitmap,
+        src_x,
+        src_y,
+        bitmap,
+        dst_x,
+        dst_y,
+        copy_w,
+        copy_h,
+        0xc0,
+        0xff,
+        NULL);
+    WaitBlit();
+
+    state = ana_amiga_bitmap_state_for(bitmap);
+    if (state != NULL) {
+        state->clear_color_valid = 0;
+        state->dirty_count = 0;
+    }
+}
+#endif
+
+void ana_scroll_rect(
+    int x,
+    int y,
+    int width,
+    int height,
+    int dx,
+    int dy,
+    unsigned char clear_color)
+{
+    if (!ana_gfx_opened || (dx == 0 && dy == 0)) {
+        return;
+    }
+
+    if (!ana_clip_screen_rect(&x, &y, &width, &height)) {
+        return;
+    }
+
+    clear_color = (unsigned char)(clear_color & 0x0f);
+
+    if (abs(dx) >= width || abs(dy) >= height) {
+        ana_fill_rect(clear_color, x, y, width, height);
+        return;
+    }
+
+    ana_scroll_chunky_rect(x, y, width, height, dx, dy);
+
+#ifdef ANA_TARGET_AMIGA
+#if defined(ANA_AMIGA_DIRECT_PRESENT) && defined(ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL)
+    ana_amiga_scroll_visible_bitmap_rect(x, y, width, height, dx, dy);
+#else
+    ana_amiga_mark_dirty_rect(x, y, x + width, y + height);
+#endif
+#endif
+
+    if (dy > 0) {
+        ana_fill_rect(clear_color, x, y, width, dy);
+    } else if (dy < 0) {
+        ana_fill_rect(clear_color, x, y + height + dy, width, -dy);
+    }
+
+    if (dx > 0) {
+        ana_fill_rect(clear_color, x, y, dx, height);
+    } else if (dx < 0) {
+        ana_fill_rect(clear_color, x + width + dx, y, -dx, height);
+    }
+}
+
 void ana_fill_rect(unsigned char color_index, int x, int y, int width, int height)
 {
     int start_x;

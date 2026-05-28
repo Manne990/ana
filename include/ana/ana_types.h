@@ -29,6 +29,7 @@ typedef struct ANA_Game {
     int fps;
     int colors;
     ANA_ScreenMode screen_mode;
+    ANA_RenderMode render_mode;
     int debug_stats;
 } ANA_Game;
 

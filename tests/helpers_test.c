@@ -101,6 +101,70 @@ static void test_clamp_int(void)
     assert(ana_clamp_int(12, 10, 0) == 10);
 }
 
+static void test_camera(void)
+{
+    ANA_Camera camera;
+    ANA_Rect rect;
+
+    ana_camera_init(&camera, 0, 16, 320, 240, 1024, 256);
+    assert(camera.x == 0);
+    assert(camera.y == 0);
+    assert(camera.view_x == 0);
+    assert(camera.view_y == 16);
+    assert(camera.view_w == 320);
+    assert(camera.view_h == 240);
+    assert(camera.world_w == 1024);
+    assert(camera.world_h == 256);
+    assert(camera.snap_x == 1);
+    assert(camera.snap_y == 1);
+
+    ana_camera_set_position(&camera, 200, 5);
+    assert(camera.x == 200);
+    assert(camera.y == 5);
+
+    ana_camera_set_position(&camera, 900, 99);
+    assert(camera.x == 704);
+    assert(camera.y == 16);
+
+    ana_camera_set_snap(&camera, 8, 4);
+    ana_camera_set_position(&camera, 123, 9);
+    assert(camera.x == 120);
+    assert(camera.y == 8);
+
+    ana_camera_scroll_by(&camera, 5, 4);
+    assert(camera.x == 120);
+    assert(camera.y == 12);
+
+    rect = ana_camera_world_view(&camera);
+    assert(rect.x == 120);
+    assert(rect.y == 12);
+    assert(rect.w == 320);
+    assert(rect.h == 240);
+
+    rect = ana_camera_world_to_screen_rect(
+        &camera,
+        ana_rect_make(130, 20, 10, 8));
+    assert(rect.x == 10);
+    assert(rect.y == 24);
+    assert(rect.w == 10);
+    assert(rect.h == 8);
+
+    ana_camera_set_position(&camera, 703, 15);
+    assert(camera.x == 696);
+    assert(camera.y == 12);
+    ana_camera_set_position(&camera, 704, 16);
+    assert(camera.x == 704);
+    assert(camera.y == 16);
+
+    ana_camera_init(&camera, 4, 8, 100, 50, 300, 100);
+    ana_camera_follow_rect(&camera, ana_rect_make(130, 30, 10, 8), 30, 10);
+    assert(camera.x == 70);
+    assert(camera.y == 0);
+    ana_camera_follow_rect(&camera, ana_rect_make(20, 70, 10, 8), 30, 10);
+    assert(camera.x == 0);
+    assert(camera.y == 38);
+}
+
 static void test_timer(void)
 {
     ANA_Timer timer;
@@ -130,6 +194,7 @@ int main(void)
     test_rect_intersections();
     test_rect_helpers();
     test_clamp_int();
+    test_camera();
     test_timer();
 
     return 0;

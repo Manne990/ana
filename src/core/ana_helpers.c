@@ -5,6 +5,28 @@ static int ana_positive_interval(int interval)
     return interval > 0 ? interval : 1;
 }
 
+static int ana_positive_snap(int snap)
+{
+    return snap > 1 ? snap : 1;
+}
+
+static int ana_floor_to_snap(int value, int snap)
+{
+    int remainder;
+
+    snap = ana_positive_snap(snap);
+    if (snap <= 1) {
+        return value;
+    }
+
+    remainder = value % snap;
+    if (remainder < 0) {
+        remainder += snap;
+    }
+
+    return value - remainder;
+}
+
 static int ana_floor_x8(int value)
 {
     int remainder;
@@ -184,6 +206,162 @@ int ana_clamp_int(int value, int min_value, int max_value)
     }
 
     return value;
+}
+
+static int ana_camera_max_x(const ANA_Camera* camera)
+{
+    int max_x;
+
+    if (camera == 0) {
+        return 0;
+    }
+
+    max_x = camera->world_w - camera->view_w;
+    return max_x > 0 ? max_x : 0;
+}
+
+static int ana_camera_max_y(const ANA_Camera* camera)
+{
+    int max_y;
+
+    if (camera == 0) {
+        return 0;
+    }
+
+    max_y = camera->world_h - camera->view_h;
+    return max_y > 0 ? max_y : 0;
+}
+
+void ana_camera_init(
+    ANA_Camera* camera,
+    int view_x,
+    int view_y,
+    int view_w,
+    int view_h,
+    int world_w,
+    int world_h)
+{
+    if (camera == 0) {
+        return;
+    }
+
+    camera->x = 0;
+    camera->y = 0;
+    camera->view_x = view_x;
+    camera->view_y = view_y;
+    camera->view_w = view_w > 0 ? view_w : 0;
+    camera->view_h = view_h > 0 ? view_h : 0;
+    camera->world_w = world_w > 0 ? world_w : camera->view_w;
+    camera->world_h = world_h > 0 ? world_h : camera->view_h;
+    camera->snap_x = 1;
+    camera->snap_y = 1;
+}
+
+void ana_camera_set_snap(ANA_Camera* camera, int snap_x, int snap_y)
+{
+    if (camera == 0) {
+        return;
+    }
+
+    camera->snap_x = ana_positive_snap(snap_x);
+    camera->snap_y = ana_positive_snap(snap_y);
+    ana_camera_set_position(camera, camera->x, camera->y);
+}
+
+void ana_camera_set_position(ANA_Camera* camera, int x, int y)
+{
+    int max_x;
+    int max_y;
+
+    if (camera == 0) {
+        return;
+    }
+
+    max_x = ana_camera_max_x(camera);
+    max_y = ana_camera_max_y(camera);
+    x = ana_clamp_int(x, 0, max_x);
+    y = ana_clamp_int(y, 0, max_y);
+
+    if (camera->snap_x > 1 && x != max_x) {
+        x = ana_floor_to_snap(x, camera->snap_x);
+    }
+    if (camera->snap_y > 1 && y != max_y) {
+        y = ana_floor_to_snap(y, camera->snap_y);
+    }
+
+    camera->x = x;
+    camera->y = y;
+}
+
+void ana_camera_scroll_by(ANA_Camera* camera, int dx, int dy)
+{
+    if (camera == 0) {
+        return;
+    }
+
+    ana_camera_set_position(camera, camera->x + dx, camera->y + dy);
+}
+
+void ana_camera_follow_rect(
+    ANA_Camera* camera,
+    ANA_Rect target,
+    int margin_x,
+    int margin_y)
+{
+    int x;
+    int y;
+
+    if (camera == 0) {
+        return;
+    }
+
+    if (margin_x < 0) {
+        margin_x = 0;
+    }
+    if (margin_y < 0) {
+        margin_y = 0;
+    }
+
+    x = camera->x;
+    y = camera->y;
+
+    if (target.x < x + margin_x) {
+        x = target.x - margin_x;
+    } else if (target.x + target.w > x + camera->view_w - margin_x) {
+        x = target.x + target.w - camera->view_w + margin_x;
+    }
+
+    if (target.y < y + margin_y) {
+        y = target.y - margin_y;
+    } else if (target.y + target.h > y + camera->view_h - margin_y) {
+        y = target.y + target.h - camera->view_h + margin_y;
+    }
+
+    ana_camera_set_position(camera, x, y);
+}
+
+ANA_Rect ana_camera_world_view(const ANA_Camera* camera)
+{
+    if (camera == 0) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    return ana_rect_make(camera->x, camera->y, camera->view_w, camera->view_h);
+}
+
+ANA_Rect ana_camera_world_to_screen_rect(
+    const ANA_Camera* camera,
+    ANA_Rect world_rect)
+{
+    if (camera == 0) {
+        return ana_rect_make(world_rect.x, world_rect.y, world_rect.w, world_rect.h);
+    }
+
+    return ana_rect_make(
+        world_rect.x - camera->x + camera->view_x,
+        world_rect.y - camera->y + camera->view_y,
+        world_rect.w,
+        world_rect.h);
 }
 
 void ana_timer_reset(ANA_Timer* timer, int interval)

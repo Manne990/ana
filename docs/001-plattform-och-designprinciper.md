@@ -27,6 +27,7 @@ Den primara malgruppen ar utvecklare som vill skriva spel pa en hogre niva an Am
 - API:t ska vara litet, tydligt och C-idiomatiskt.
 - Bas-API:t ska anvanda hog-niva namn som `ANA_Image`, `ANA_Font` och `ANA_Sound`.
 - Amiga-specifika begrepp som BOBs, bitplanes, blitter och hardware sprites far finnas i implementationen eller i advanced-API, men ska inte kravs i forsta tutorialen.
+- ANA ska valja den snabbaste korrekta Amiga-tekniken bakom ett hog-niva-API. Spelkoden beskriver avsikten, till exempel statisk dirty rendering eller scrollande tilemap, medan backend kan anvanda dirty rects, blitter, bitplane-layout, hardware scroll eller andra Amiga-specifika tekniker utan att spelet byter API.
 - ANA ska erbjuda escape hatches for egen C, AmigaOS-anrop eller assembler dar det ar praktiskt.
 - Debug-builds far ha extra kontroller; release-builds ska kunna stanga av dem.
 - Funktioner som mappar direkt mot Amiga-hardvara ska inte gomma viktiga begransningar.

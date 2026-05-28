@@ -9,9 +9,23 @@ nar kameran ror sig. Om spelet losser det genom att rensa och rita om hela
 spelvyn fran C varje frame blir C2P- och minneskostnaden for hog pa en stock
 A1200 utan Fast RAM.
 
-Nuvarande Byte Brothers-scroll ar darfor en tillfallig fallback: den prioriterar
-korrekt bild framfor slutlig prestanda. Den ska inte betraktas som ANA:s
+Nuvarande Byte Brothers-scroll anvander `ANA_Camera` for
+world/screen-konvertering. Host-renderern kan anvanda `ana_scroll_rect` for att
+flytta viewportens befintliga bild och bara rita om exponerade remsor.
+Amiga-builden faller tills vidare tillbaka till full viewport redraw nar
+kameran flyttas, eftersom experimentell direkt-scroll av synliga bitplanes gav
+flimmer. Detta ar ett forsta ramverkssteg, men ska inte betraktas som ANA:s
 langsiktiga scrollmodell.
+
+Byte Brothers satter `ANA_Game.render_mode = ANA_RENDER_TILE_SCROLL`. Det ar
+inte en fardig hardware-scroll-backend, men det gor scrollbehovet explicit och
+ger ANA en plats att valja ratt backend senare.
+
+Detta ska inte tolkas som att hela spelet alltid bara har ett render mode. Ett
+scrollspel behover normalt ett `ANA_LAYER_SIDE_SCROLL`-playfield,
+ett `ANA_LAYER_SPRITES`-lager for aktorer och ett `ANA_LAYER_HUD`-lager.
+`ANA_RENDER_TILE_SCROLL` beskriver huvudvyn/playfieldet; HUD, menyer och
+aktorer ska pa sikt kunna ha egna renderstrategier.
 
 ## Mal
 
@@ -37,16 +51,17 @@ langsiktiga scrollmodell.
 
 ANA ska skilja pa tre renderfall:
 
-1. Statisk viewport med dirty objekt.
+1. Statisk viewport med dirty objekt (`ANA_RENDER_DIRTY`).
    Detta ar dagens starka fall: rorliga objekt rensar sin gamla rektangel,
    reparerar statiska lager och ritas pa nytt.
 
-2. Snappad tile-/byte-scroll.
+2. Snappad tile-/byte-scroll (`ANA_RENDER_TILE_SCROLL`).
    Kameran ror sig i steg som passar Amigans minneslayout, normalt 8 pixlar
    horisontellt och tilehojd eller mindre vertikalt. ANA ritar bara nya strips
    som kommer in i viewporten och ritar om rorliga objekt.
 
-3. Hardware-scroll-backend.
+3. Hardware-scroll-backend (`ANA_RENDER_TILE_SCROLL` med Amiga-specifik
+   backend).
    Senare Amiga-backend kan anvanda bitplane-offset/fine scroll och overdraw-
    marginaler, sa skarmen flyttas av hardvaran och ANA bara ritar nya kolumner
    eller rader. Detta ar den langsiktigt ratta modellen for jamn scroll.
@@ -56,7 +71,8 @@ kontinuerlig fullskarmscroll.
 
 ## API-skiss
 
-Namnen ar preliminara men visar avsikten.
+`ANA_Camera` finns i ramverket. Tilemap- och scroll-layer-delarna ar
+preliminara men visar avsikten.
 
 ```c
 typedef struct ANA_Camera {
@@ -94,6 +110,15 @@ ANA_Rect ana_camera_world_view(const ANA_Camera* camera);
 ANA_Rect ana_camera_world_to_screen_rect(
     const ANA_Camera* camera,
     ANA_Rect world_rect);
+
+void ana_scroll_rect(
+    int x,
+    int y,
+    int width,
+    int height,
+    int dx,
+    int dy,
+    unsigned char clear_color);
 ```
 
 Tilemap:
@@ -147,10 +172,11 @@ void ana_scroll_layer_mark_dirty(ANA_ScrollLayer* layer);
 void ana_scroll_layer_draw(ANA_ScrollLayer* layer);
 ```
 
-Forsta implementationen kan vara konservativ och rita om viewporten nar kameran
-andras. Det viktiga ar att spelkod redan anvander ratt API. Sedan kan
-implementationen bytas till strip- eller hardware-scroll utan att Byte Brothers
-eller framtida spel behover rakna om sin rendering.
+Forsta implementationen har ett lag-niva-API som kan flytta en befintlig
+viewport-rektangel och rensa exponerade strips. Det viktiga ar att spelkod
+redan borjar uttrycka scroll som kamera + exponerade strips. Sedan kan
+implementationen bytas till `ANA_ScrollLayer` eller hardware-scroll utan att
+Byte Brothers eller framtida spel behover rakna om sin rendering.
 
 ## Prestandamodell
 
@@ -208,16 +234,24 @@ utan att offra for mycket CPU till C2P.
 
 Byte Brothers ska stegvis sluta aga egen scrolllogik:
 
-1. Ersatt egen `bb_camera_x`-hantering med `ANA_Camera`.
-2. Ersatt egen tile-intervalberakning med `ana_tilemap_draw_view`.
-3. Flytta viewport redraw/camera change state till `ANA_ScrollLayer`.
-4. Lat spelet endast beskriva tilemap-data, collision och entities.
-5. Nar strip/hardware-backend finns ska Byte Brothers fa den utan att
+1. Ersatt egen `bb_camera_x`-hantering med `ANA_Camera`. Klart for
+   world/screen-konvertering och positionering; gamla kompatibilitetsfalt finns
+   kvar internt tills scroll-layer-delen tar over.
+2. Flytta viewport-scroll till `ana_scroll_rect` och rita bara exponerade
+   strips. Klart som lag-niva-steg for host; Amiga anvander stabil fallback
+   tills riktig hardware/tilemap-scroll finns.
+3. Ersatt egen tile-intervalberakning med `ana_tilemap_draw_view`.
+4. Flytta viewport redraw/camera change state till `ANA_ScrollLayer`.
+5. Dela upp scrollande playfield, aktorer och HUD i separata render-lager:
+   `ANA_LAYER_SIDE_SCROLL`, `ANA_LAYER_SPRITES` och `ANA_LAYER_HUD`.
+6. Lat spelet endast beskriva tilemap-data, collision och entities.
+7. Nar strip/hardware-backend finns ska Byte Brothers fa den utan att
    spelreglerna andras.
 
 ## Acceptanskriterier
 
-- Byte Brothers anvander `ANA_Camera` for world/screen-konvertering.
+- Byte Brothers anvander `ANA_Camera` for world/screen-konvertering. Klart.
+- Byte Brothers deklarerar `ANA_RENDER_TILE_SCROLL` i `ANA_Game`. Klart.
 - Byte Brothers anvander `ANA_Tilemap` eller `ANA_ScrollLayer` for tile redraw.
 - Spelkod raknar inte langre synliga tile-intervall sjalv.
 - Debug stats visar tydligt nar scroll faller tillbaka till full viewport redraw.
@@ -233,4 +267,3 @@ Byte Brothers ska stegvis sluta aga egen scrolllogik:
 - Ska parallax vara flera `ANA_ScrollLayer`, eller ett separat hogre API?
 - Vilken scrollgranularitet ar rimlig for stock A1200: 1, 2, 4, 8 eller
   tilebaserade steg?
-

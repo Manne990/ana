@@ -21,6 +21,7 @@ int main(void)
     game.fps = ANA_DEFAULT_FPS;
     game.colors = ANA_DEFAULT_COLORS;
     game.screen_mode = ANA_SCREEN_PAL_LORES;
+    game.render_mode = ANA_RENDER_DIRTY;
     game.debug_stats = 1;
 
     printf("ANA AMAze started.\n");

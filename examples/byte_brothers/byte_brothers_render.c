@@ -2,6 +2,8 @@
 
 #include "byte_brothers_internal.h"
 
+#include <stdlib.h>
+
 /* Dirty redraw renderer for the Byte Brothers scrolling platform sample. */
 
 static int bb_full_redraw = 1;
@@ -23,14 +25,18 @@ static ANA_Rect bb_world_rect(int x, int y, int w, int h)
 
 static ANA_Rect bb_view_bounds(void)
 {
-    return ana_rect_make(0, BB_HUD_H, BB_SCREEN_W, BB_SCREEN_H - BB_HUD_H);
+    return ana_rect_make(
+        bb_camera.view_x,
+        bb_camera.view_y,
+        bb_camera.view_w,
+        bb_camera.view_h);
 }
 
 static int bb_rect_visible_world(ANA_Rect rect)
 {
     ANA_Rect view;
 
-    view = ana_rect_make(bb_camera_x, bb_camera_y, BB_SCREEN_W, BB_SCREEN_H - BB_HUD_H);
+    view = ana_camera_world_view(&bb_camera);
     return ana_rect_intersects(rect, view);
 }
 
@@ -115,12 +121,12 @@ static void bb_draw_hud(void)
 
 static int bb_tile_screen_x(int tx)
 {
-    return tx * BB_TILE - bb_camera_x;
+    return tx * BB_TILE - bb_camera_x + bb_camera.view_x;
 }
 
 static int bb_tile_screen_y(int ty)
 {
-    return ty * BB_TILE - bb_camera_y + BB_HUD_H;
+    return ty * BB_TILE - bb_camera_y + bb_camera.view_y;
 }
 
 static void bb_draw_tile_at(char tile, int sx, int sy)
@@ -174,6 +180,10 @@ static void bb_draw_tiles_in_world_rect(ANA_Rect rect)
     int ty;
     char tile;
 
+    if (ana_rect_is_empty(rect)) {
+        return;
+    }
+
     tx0 = rect.x / BB_TILE;
     ty0 = rect.y / BB_TILE;
     tx1 = (rect.x + rect.w - 1) / BB_TILE;
@@ -207,10 +217,7 @@ static void bb_clear_world_rect(ANA_Rect rect)
     ANA_Rect screen_rect;
     ANA_Rect clipped;
 
-    screen_rect.x = rect.x - bb_camera_x;
-    screen_rect.y = rect.y - bb_camera_y + BB_HUD_H;
-    screen_rect.w = rect.w;
-    screen_rect.h = rect.h;
+    screen_rect = ana_camera_world_to_screen_rect(&bb_camera, rect);
     clipped = ana_rect_clip(screen_rect, bb_view_bounds());
 
     if (!ana_rect_is_empty(clipped)) {
@@ -224,7 +231,7 @@ static void bb_redraw_world_rect(ANA_Rect rect)
     ANA_Rect world_view;
 
     padded = ana_rect_make(rect.x - 2, rect.y - 2, rect.w + 4, rect.h + 4);
-    world_view = ana_rect_make(bb_camera_x, bb_camera_y, BB_SCREEN_W, BB_SCREEN_H - BB_HUD_H);
+    world_view = ana_camera_world_view(&bb_camera);
     padded = ana_rect_clip(padded, world_view);
 
     if (ana_rect_is_empty(padded)) {
@@ -239,12 +246,76 @@ static void bb_draw_all_tiles(void)
 {
     ANA_Rect view;
 
-    view = ana_rect_make(bb_camera_x, bb_camera_y, BB_SCREEN_W, BB_SCREEN_H - BB_HUD_H);
+    view = ana_camera_world_view(&bb_camera);
     bb_draw_tiles_in_world_rect(view);
+}
+
+#ifndef ANA_TARGET_AMIGA
+static void bb_redraw_world_strip(ANA_Rect rect)
+{
+    bb_clear_world_rect(rect);
+    bb_draw_tiles_in_world_rect(rect);
+}
+
+static void bb_redraw_exposed_scroll_strips(int screen_dx, int screen_dy)
+{
+    ANA_Rect strip;
+
+    if (screen_dx < 0) {
+        strip = bb_world_rect(
+            bb_camera_x + bb_camera.view_w + screen_dx,
+            bb_camera_y,
+            -screen_dx,
+            bb_camera.view_h);
+        bb_redraw_world_strip(strip);
+    } else if (screen_dx > 0) {
+        strip = bb_world_rect(
+            bb_camera_x,
+            bb_camera_y,
+            screen_dx,
+            bb_camera.view_h);
+        bb_redraw_world_strip(strip);
+    }
+
+    if (screen_dy < 0) {
+        strip = bb_world_rect(
+            bb_camera_x,
+            bb_camera_y + bb_camera.view_h + screen_dy,
+            bb_camera.view_w,
+            -screen_dy);
+        bb_redraw_world_strip(strip);
+    } else if (screen_dy > 0) {
+        strip = bb_world_rect(
+            bb_camera_x,
+            bb_camera_y,
+            bb_camera.view_w,
+            screen_dy);
+        bb_redraw_world_strip(strip);
+    }
+}
+#endif
+
+static void bb_redraw_previous_and_current_actors(void)
+{
+    int i;
+    ANA_Rect rect;
+
+    rect = bb_world_rect(bb_prev_player_x, bb_prev_player_y, BB_PLAYER_W, BB_PLAYER_H);
+    bb_redraw_world_rect(rect);
+    rect = bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H);
+    bb_redraw_world_rect(rect);
+
+    for (i = 0; i < bb_enemy_count; i++) {
+        rect = bb_world_rect(bb_prev_enemy_x[i], bb_prev_enemy_y[i], 12, 12);
+        bb_redraw_world_rect(rect);
+        rect = bb_world_rect(bb_enemies[i].x, bb_enemies[i].y, 12, 12);
+        bb_redraw_world_rect(rect);
+    }
 }
 
 static void bb_draw_player(void)
 {
+    ANA_Rect rect;
     int sx;
     int sy;
 
@@ -252,8 +323,11 @@ static void bb_draw_player(void)
         return;
     }
 
-    sx = bb_player.x - bb_camera_x;
-    sy = bb_player.y - bb_camera_y + BB_HUD_H;
+    rect = ana_camera_world_to_screen_rect(
+        &bb_camera,
+        bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H));
+    sx = rect.x;
+    sy = rect.y;
 
     ana_fill_rect(4, sx + 2, sy + 4, 6, 8);
     ana_fill_rect(5, sx + 3, sy, 5, 5);
@@ -272,6 +346,7 @@ static void bb_draw_player(void)
 
 static void bb_draw_enemy(const BB_Enemy* enemy)
 {
+    ANA_Rect rect;
     int sx;
     int sy;
 
@@ -279,8 +354,11 @@ static void bb_draw_enemy(const BB_Enemy* enemy)
         return;
     }
 
-    sx = enemy->x - bb_camera_x;
-    sy = enemy->y - bb_camera_y + BB_HUD_H;
+    rect = ana_camera_world_to_screen_rect(
+        &bb_camera,
+        bb_world_rect(enemy->x, enemy->y, 12, 12));
+    sx = rect.x;
+    sy = rect.y;
     ana_fill_rect(7, sx + 1, sy + 3, 10, 8);
     ana_fill_rect(15, sx + 3, sy + 1, 6, 3);
     ana_fill_rect(1, sx + 3, sy + 5, 2, 2);
@@ -344,38 +422,61 @@ void bb_render_invalidate(void)
 
 void bb_render_draw(void)
 {
-    int i;
     int hud_dirty;
-    ANA_Rect rect;
+    int screen_dx;
+    int screen_dy;
 
     hud_dirty = bb_score != bb_prev_score ||
         bb_lives != bb_prev_lives ||
         bb_level_index != bb_prev_level ||
         bb_fragments_left != bb_prev_fragments;
 
-    if (bb_full_redraw ||
-            bb_camera_x != bb_prev_camera_x ||
-            bb_camera_y != bb_prev_camera_y) {
+    if (bb_full_redraw || bb_prev_camera_x < 0 || bb_prev_camera_y < 0) {
         ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
         bb_draw_hud();
         bb_draw_all_tiles();
         bb_draw_actors();
-        ana_present();
         bb_full_redraw = 0;
         bb_commit_state();
         return;
     }
 
-    rect = bb_world_rect(bb_prev_player_x, bb_prev_player_y, BB_PLAYER_W, BB_PLAYER_H);
-    bb_redraw_world_rect(rect);
-    rect = bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H);
-    bb_redraw_world_rect(rect);
+    if (bb_camera_x != bb_prev_camera_x || bb_camera_y != bb_prev_camera_y) {
+        screen_dx = bb_prev_camera_x - bb_camera_x;
+        screen_dy = bb_prev_camera_y - bb_camera_y;
 
-    for (i = 0; i < bb_enemy_count; i++) {
-        rect = bb_world_rect(bb_prev_enemy_x[i], bb_prev_enemy_y[i], 12, 12);
-        bb_redraw_world_rect(rect);
-        rect = bb_world_rect(bb_enemies[i].x, bb_enemies[i].y, 12, 12);
-        bb_redraw_world_rect(rect);
+        if (abs(screen_dx) >= bb_camera.view_w ||
+                abs(screen_dy) >= bb_camera.view_h) {
+            ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
+            bb_draw_hud();
+            bb_draw_all_tiles();
+            bb_draw_actors();
+            bb_commit_state();
+            return;
+        }
+
+#ifdef ANA_TARGET_AMIGA
+        ana_fill_rect(
+            0,
+            bb_camera.view_x,
+            bb_camera.view_y,
+            bb_camera.view_w,
+            bb_camera.view_h);
+        bb_draw_all_tiles();
+#else
+        ana_scroll_rect(
+            bb_camera.view_x,
+            bb_camera.view_y,
+            bb_camera.view_w,
+            bb_camera.view_h,
+            screen_dx,
+            screen_dy,
+            0);
+        bb_redraw_exposed_scroll_strips(screen_dx, screen_dy);
+        bb_redraw_previous_and_current_actors();
+#endif
+    } else {
+        bb_redraw_previous_and_current_actors();
     }
 
     if (hud_dirty) {
@@ -383,6 +484,5 @@ void bb_render_draw(void)
     }
 
     bb_draw_actors();
-    ana_present();
     bb_commit_state();
 }

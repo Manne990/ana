@@ -9,7 +9,8 @@ Ge ANA den centrala XNA/MonoGame-kanslan: spelkod beskriver initiering, laddning
 - Enkel game loop i C.
 - Fast 50 Hz update-loop.
 - Separata callbacks for init, load, update, draw och shutdown.
-- Enkel konfiguration av skarmstorlek, fps, fargantal och screen mode i `ANA_Game`.
+- Enkel konfiguration av skarmstorlek, fps, fargantal, screen mode och render
+  mode i `ANA_Game`.
 - Kontrollerad avslutning fran spelkod.
 - Grundlaggande felkoder.
 
@@ -25,6 +26,14 @@ typedef enum ANA_ScreenMode {
     ANA_SCREEN_PAL_LORES
 } ANA_ScreenMode;
 
+typedef enum ANA_RenderMode {
+    ANA_RENDER_DEFAULT,
+    ANA_RENDER_DIRTY,
+    ANA_RENDER_FULL_FRAME,
+    ANA_RENDER_TILE_SCROLL,
+    ANA_RENDER_BLITTER_BOBS
+} ANA_RenderMode;
+
 typedef struct ANA_Game {
     void (*init)(void);
     void (*load)(void);
@@ -37,6 +46,7 @@ typedef struct ANA_Game {
     int fps;
     int colors;
     ANA_ScreenMode screen_mode;
+    ANA_RenderMode render_mode;
     int debug_stats;
 } ANA_Game;
 
@@ -49,6 +59,8 @@ For 0.1 ar `ANA_Time` fortfarande baserad pa en strikt fixed timestep. Den finns
 
 Spelkod bor skapa `ANA_Game` med `ANA_Game game = {0};` innan falt satts.
 Da defaultar framtida frivilliga falt till avstangt beteende.
+`render_mode = 0` betyder `ANA_RENDER_DIRTY`, vilket ar ratt default for
+statisk viewport med rorliga objekt.
 
 ## Runtime-ansvar
 

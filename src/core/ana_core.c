@@ -28,6 +28,15 @@ static ANA_ScreenMode ana_game_screen_mode_or_default(ANA_ScreenMode mode)
     return mode;
 }
 
+static ANA_RenderMode ana_game_render_mode_or_default(ANA_RenderMode mode)
+{
+    if (mode == ANA_RENDER_DEFAULT) {
+        return ANA_RENDER_DIRTY;
+    }
+
+    return mode;
+}
+
 static ANA_Profile ana_profile_from_game(const ANA_Game* game)
 {
     ANA_Profile profile;
@@ -38,6 +47,7 @@ static ANA_Profile ana_profile_from_game(const ANA_Game* game)
     profile.colors = ana_game_value_or_default(game->colors, ANA_DEFAULT_COLORS);
     profile.bitplanes = ANA_DEFAULT_BITPLANES;
     profile.screen_mode = ana_game_screen_mode_or_default(game->screen_mode);
+    profile.render_mode = ana_game_render_mode_or_default(game->render_mode);
     profile.target_flags = ANA_TARGET_OCS_ECS;
 
     return profile;

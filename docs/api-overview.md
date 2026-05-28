@@ -36,6 +36,20 @@ Set `ANA_Game.debug_stats` to `1` to ask the runtime to print full run/render
 statistics after `ana_run`. The flag only has an effect when ANA is built with
 `ANA_DEBUG_STATS`.
 
+Set `ANA_Game.render_mode` to describe the renderer strategy the game expects:
+
+- `ANA_RENDER_DIRTY`: static viewport with retained/dirty moving objects.
+- `ANA_RENDER_FULL_FRAME`: simple full redraw every frame.
+- `ANA_RENDER_TILE_SCROLL`: camera or continuous scrolling based on tile/strip
+  redraw.
+- `ANA_RENDER_BLITTER_BOBS`: future mode for BOB-heavy renderers that want a
+  blitter-oriented backend.
+
+`ANA_RENDER_DEFAULT` is accepted on `ANA_Game` and resolves to
+`ANA_RENDER_DIRTY`. `ANA_RENDER_TILE_SCROLL` is currently a contract and
+profiling signal; the high-performance Amiga hardware-scroll backend is still
+planned work.
+
 ## Platform profile
 
 The 0.1 profile is PAL lores:
@@ -46,6 +60,7 @@ The 0.1 profile is PAL lores:
 - colors: `16`
 - bitplanes: `4`
 - screen mode: `ANA_SCREEN_PAL_LORES`
+- default render mode: `ANA_RENDER_DIRTY`
 
 Useful constants:
 
@@ -54,6 +69,8 @@ Useful constants:
 - `ANA_DEFAULT_FPS`
 - `ANA_DEFAULT_COLORS`
 - `ANA_SCREEN_PAL_LORES`
+- `ANA_RENDER_DIRTY`
+- `ANA_RENDER_TILE_SCROLL`
 
 Validation helpers:
 
@@ -70,6 +87,11 @@ Core drawing functions:
 - `ana_fill_rect`
 - `ana_present`
 - `ana_render_stats`
+
+When a game runs through `ana_run`, the runtime calls `ana_present` after each
+`draw` callback. Normal game code should not call `ana_present` from `draw`;
+doing so presents twice for one game update and breaks frame pacing. Direct
+`ana_present` calls are reserved for lower-level/manual loops and tests.
 
 Images:
 
@@ -205,9 +227,25 @@ replayer to play MOD data through Paula.
 
 ## Helpers
 
+Low-level graphics helpers:
+
+- `ana_scroll_rect`
+
+`ana_scroll_rect` moves an existing screen rectangle by a signed delta and
+fills newly exposed strips with a clear color. It is intended as the first
+portable primitive for scrolling samples; higher-level tilemap and scroll-layer
+APIs are still planned separately. On Amiga direct-present builds the default
+implementation marks the full scrolled rectangle dirty for correctness, so it
+is not the final performance path for platformers or shooters.
+
+Scrolling games should set `ANA_Game.render_mode = ANA_RENDER_TILE_SCROLL`.
+That does not yet enable hardware scroll by itself, but it makes the game's
+intent visible to the runtime, docs, tests, and future backend selection.
+
 Small game helpers:
 
 - `ANA_Rect`
+- `ANA_Camera`
 - `ANA_Timer`
 - `ana_rect_make`
 - `ana_rect_clip`
@@ -217,6 +255,13 @@ Small game helpers:
 - `ana_rect_contains`
 - `ana_rect_intersects`
 - `ana_clamp_int`
+- `ana_camera_init`
+- `ana_camera_set_snap`
+- `ana_camera_set_position`
+- `ana_camera_scroll_by`
+- `ana_camera_follow_rect`
+- `ana_camera_world_view`
+- `ana_camera_world_to_screen_rect`
 - `ana_timer_reset`
 - `ana_timer_tick`
 

@@ -20,6 +20,7 @@ static const ANA_Profile ana_ocs_ecs_pal_lores_profile = {
     ANA_DEFAULT_COLORS,
     ANA_DEFAULT_BITPLANES,
     ANA_SCREEN_PAL_LORES,
+    ANA_RENDER_DIRTY,
     ANA_TARGET_OCS_ECS
 };
 
@@ -56,6 +57,16 @@ ANA_Result ana_validate_profile(const ANA_Profile* profile)
 
     if (profile->screen_mode != ANA_SCREEN_PAL_LORES) {
         return ANA_ERROR_UNSUPPORTED_PROFILE;
+    }
+
+    switch (profile->render_mode) {
+        case ANA_RENDER_DIRTY:
+        case ANA_RENDER_FULL_FRAME:
+        case ANA_RENDER_TILE_SCROLL:
+        case ANA_RENDER_BLITTER_BOBS:
+            break;
+        default:
+            return ANA_ERROR_UNSUPPORTED_PROFILE;
     }
 
     if (profile->target_flags == 0u) {

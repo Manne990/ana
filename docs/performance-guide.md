@@ -102,6 +102,11 @@ This path was chosen because the previous screen-buffer path was too expensive
 for the current Invaders sample. It is fast enough for the showcase, but it
 requires careful dirty-rect handling.
 
+If a game uses `ana_run`, do not call `ana_present` from the game's `draw`
+callback. The runtime already presents after `draw`. Calling it manually doubles
+presentation/wait work for one logical update, which can make debug FPS
+misleading and make gameplay appear to pause during expensive redraw frames.
+
 Use `ana_clear` for true full-frame resets. A fullscreen black `ana_fill_rect`
 is just another draw operation and can leave stale buffer contents in
 screen-buffer diagnostic builds.
@@ -145,6 +150,18 @@ The output includes:
 - converted pixels per frame
 - present timing
 - flip path counters
+
+Games should also declare their intended renderer strategy:
+
+- `ANA_RENDER_DIRTY` for static-view games such as Invaders and AMAze.
+- `ANA_RENDER_TILE_SCROLL` for platformers, shooters, or any game where the
+  camera moves often.
+- `ANA_RENDER_FULL_FRAME` for simple ports or prototypes where correctness and
+  simplicity are more important than retained redraw.
+
+The render mode is not a performance switch by itself yet. It is the contract
+ANA uses to validate intent and to select more specialized backends as they are
+implemented.
 
 ## Text
 
@@ -192,14 +209,21 @@ as the main model for a platform game, vertical shooter, or any game where the
 camera moves most frames. Once the camera moves, most of the viewport can
 effectively become dirty even if only a few sprites changed.
 
-Byte Brothers currently uses a conservative fallback renderer for scrolling:
-the camera is snapped to Amiga-friendly boundaries and the play viewport can be
-redrawn when the camera changes. This keeps the image correct, but it is not
-the final performance model.
+Byte Brothers currently uses `ANA_Camera`. The host renderer can pair it with
+`ana_scroll_rect` so the play viewport image is moved and only newly exposed
+strips are redrawn. On Amiga, Byte Brothers currently falls back to a
+conservative full viewport redraw on camera movement; the experimental direct
+visible-scroll path caused flicker and is disabled by default. This is still a
+low-level transitional model rather than the final high-level scroll model.
+It declares `ANA_RENDER_TILE_SCROLL`, which is the mode future hardware-scroll
+and tilemap backends should key from.
 
 The intended ANA direction is a framework-level scroll API:
 
 - `ANA_Camera` for world/screen conversion and follow/continuous movement.
+- `ana_scroll_rect` for moving an existing viewport and redrawing only exposed
+  strips in transitional host renderers. On Amiga direct-present builds it is
+  correct but expensive unless an explicit experimental backend is enabled.
 - `ANA_Tilemap` for drawing visible tiles without game code calculating tile
   intervals.
 - `ANA_ScrollLayer` for tracking previous camera position, exposed strips, and
