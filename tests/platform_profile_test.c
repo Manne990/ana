@@ -45,6 +45,33 @@ static void test_rejects_unsupported_profiles(void)
     assert(ana_validate_profile(0) == ANA_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_accepts_supported_render_modes(void)
+{
+    ANA_Profile profile;
+
+    profile = *ana_default_profile();
+    profile.render_mode = ANA_RENDER_FULL_FRAME;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+
+    profile.render_mode = ANA_RENDER_TILE_SCROLL;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+
+    profile.render_mode = ANA_RENDER_BLITTER_BOBS;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+
+    profile.render_mode = ANA_RENDER_SIDE_SCROLL;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+
+    profile.render_mode = ANA_RENDER_VERTICAL_SCROLL;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+
+    profile.render_mode = ANA_RENDER_TILE_4WAY;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+
+    profile.render_mode = ANA_RENDER_RAYCAST;
+    assert(ana_validate_profile(&profile) == ANA_OK);
+}
+
 static void test_public_handle_names_are_available(void)
 {
     ANA_Image image;
@@ -85,6 +112,7 @@ int main(void)
 {
     test_default_profile();
     test_rejects_unsupported_profiles();
+    test_accepts_supported_render_modes();
     test_public_handle_names_are_available();
 
     return 0;

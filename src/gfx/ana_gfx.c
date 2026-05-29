@@ -30,6 +30,7 @@
 #define ANA_IMAGE_MAX_FRAMES 256
 #define ANA_FONT_HEADER_SIZE 16
 #define ANA_AMIGA_MAX_DIRTY_RECTS 64
+#define ANA_LAYER_DISABLED_VALUE 0x414e4101
 #define ANA_COPY_8_PIXELS(dest, src) \
     do { \
         (dest)[0] = (src)[0]; \
@@ -80,6 +81,7 @@ static int ana_gfx_opened = 0;
 static int ana_draw_buffer = 0;
 static int ana_front_buffer = 1;
 static int ana_presented_frames = 0;
+static ANA_RenderMode ana_gfx_render_mode = ANA_RENDER_DIRTY;
 static ANA_RenderStats ana_gfx_stats;
 
 static const ANA_Color ana_default_palette[ANA_DEFAULT_COLORS] = {
@@ -147,6 +149,11 @@ struct ANA_FontData {
 };
 
 #ifdef ANA_TARGET_AMIGA
+#if defined(ANA_AMIGA_DIRECT_PRESENT) && \
+    defined(ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL)
+#define ANA_AMIGA_VISIBLE_SCROLL_ENABLED 1
+#endif
+
 struct ANA_AmigaDirtyRect {
     int min_x;
     int min_y;
@@ -160,6 +167,9 @@ static int ana_amiga_dirty_count = 0;
 static struct ANA_AmigaDirtyRect
     ana_amiga_planar_clear_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
 static int ana_amiga_planar_clear_count = 0;
+#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+static int ana_amiga_visible_scroll_pending = 0;
+#endif
 
 struct ANA_AmigaBitmapState {
     struct BitMap* bitmap;
@@ -803,6 +813,9 @@ static void ana_amiga_reset_frame_state(void)
     ana_amiga_planar_clear_count = 0;
     ana_amiga_clear_requested = 0;
     ana_amiga_clear_color = 0;
+#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+    ana_amiga_visible_scroll_pending = 0;
+#endif
 }
 
 static void ana_amiga_reset_bitmap_states(void)
@@ -997,17 +1010,13 @@ static void ana_amiga_clear_draw_framebuffer(unsigned char color)
     ana_amiga_dirty_count = 0;
 }
 
-static void ana_amiga_mark_rect(
-    struct ANA_AmigaDirtyRect* rects,
-    int* rect_count,
+static int ana_amiga_normalize_dirty_rect(
+    struct ANA_AmigaDirtyRect* rect,
     int min_x,
     int min_y,
     int max_x,
     int max_y)
 {
-    struct ANA_AmigaDirtyRect rect;
-    int i;
-
     if (min_x < 0) {
         min_x = 0;
     }
@@ -1036,13 +1045,35 @@ static void ana_amiga_mark_rect(
     }
 
     if (min_x >= max_x || min_y >= max_y) {
-        return;
+        return 0;
     }
 
-    rect.min_x = min_x;
-    rect.min_y = min_y;
-    rect.max_x = max_x;
-    rect.max_y = max_y;
+    rect->min_x = min_x;
+    rect->min_y = min_y;
+    rect->max_x = max_x;
+    rect->max_y = max_y;
+    return 1;
+}
+
+static void ana_amiga_mark_rect(
+    struct ANA_AmigaDirtyRect* rects,
+    int* rect_count,
+    int min_x,
+    int min_y,
+    int max_x,
+    int max_y)
+{
+    struct ANA_AmigaDirtyRect rect;
+    int i;
+
+    if (!ana_amiga_normalize_dirty_rect(
+            &rect,
+            min_x,
+            min_y,
+            max_x,
+            max_y)) {
+        return;
+    }
 
     for (i = 0; i < *rect_count; i++) {
         if (ana_amiga_rect_contains(&rects[i], &rect)) {
@@ -1072,15 +1103,66 @@ static void ana_amiga_mark_rect(
     ana_amiga_coalesce_rect(rects, rect_count, 0);
 }
 
-static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
+#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+static void ana_amiga_mark_dirty_rect_unmerged(
+    const struct ANA_AmigaDirtyRect* rect)
 {
+    int i;
+
+    for (i = 0; i < ana_amiga_dirty_count; i++) {
+        if (ana_amiga_rect_contains(&ana_amiga_dirty_rects[i], rect)) {
+            return;
+        }
+
+        if (ana_amiga_rect_contains(rect, &ana_amiga_dirty_rects[i])) {
+            ana_amiga_dirty_rects[i] = *rect;
+            return;
+        }
+    }
+
+    if (ana_amiga_dirty_count < ANA_AMIGA_MAX_DIRTY_RECTS) {
+        ana_amiga_dirty_rects[ana_amiga_dirty_count] = *rect;
+        ana_amiga_dirty_count++;
+        return;
+    }
+
     ana_amiga_mark_rect(
         ana_amiga_dirty_rects,
         &ana_amiga_dirty_count,
-        min_x,
-        min_y,
-        max_x,
-        max_y);
+        rect->min_x,
+        rect->min_y,
+        rect->max_x,
+        rect->max_y);
+}
+#endif
+
+static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y)
+{
+    struct ANA_AmigaDirtyRect rect;
+
+    if (!ana_amiga_normalize_dirty_rect(
+            &rect,
+            min_x,
+            min_y,
+            max_x,
+            max_y)) {
+        return;
+    }
+
+#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+    if (ana_amiga_visible_scroll_pending) {
+        ana_amiga_mark_dirty_rect_unmerged(&rect);
+        return;
+    }
+#endif
+
+    ana_amiga_mark_rect(
+        ana_amiga_dirty_rects,
+        &ana_amiga_dirty_count,
+        rect.min_x,
+        rect.min_y,
+        rect.max_x,
+        rect.max_y);
 }
 
 static void ana_amiga_mark_planar_clear_rect(
@@ -1938,6 +2020,7 @@ ANA_Result ana_gfx_open(const ANA_Profile* profile)
     ana_draw_buffer = 0;
     ana_front_buffer = 1;
     ana_presented_frames = 0;
+    ana_gfx_render_mode = profile->render_mode;
 
 #ifdef ANA_TARGET_AMIGA
     ana_amiga_reset_frame_state();
@@ -2459,7 +2542,115 @@ int ana_text_width(ANA_Font font, const char* text)
     return count * font->char_width;
 }
 
-void ana_layer_mark_dirty(ANA_DrawLayer* layer)
+ANA_RenderMode ana_layer_default_render_mode(ANA_LayerKind kind)
+{
+    switch (kind) {
+    case ANA_LAYER_SIDE_SCROLL:
+        return ANA_RENDER_SIDE_SCROLL;
+    case ANA_LAYER_VERTICAL_SCROLL:
+        return ANA_RENDER_VERTICAL_SCROLL;
+    case ANA_LAYER_TILE_4WAY:
+        return ANA_RENDER_TILE_4WAY;
+    case ANA_LAYER_RAYCAST_VIEW:
+        return ANA_RENDER_RAYCAST;
+    case ANA_LAYER_PARALLAX:
+        return ANA_RENDER_TILE_SCROLL;
+    case ANA_LAYER_SPRITES:
+        return ANA_RENDER_BLITTER_BOBS;
+    case ANA_LAYER_MENU:
+        return ANA_RENDER_FULL_FRAME;
+    case ANA_LAYER_STATIC:
+    case ANA_LAYER_HUD:
+    case ANA_LAYER_DEBUG:
+    default:
+        return ANA_RENDER_DIRTY;
+    }
+}
+
+void ana_layer_init(ANA_Layer* layer, ANA_LayerKind kind, int z_order)
+{
+    if (layer == NULL) {
+        return;
+    }
+
+    memset(layer, 0, sizeof(*layer));
+    layer->kind = kind;
+    layer->render_mode = ana_layer_default_render_mode(kind);
+    layer->z_order = z_order;
+}
+
+void ana_layer_set_viewport(ANA_Layer* layer, ANA_Rect viewport)
+{
+    if (layer == NULL) {
+        return;
+    }
+
+    layer->viewport = viewport;
+}
+
+ANA_Rect ana_layer_viewport(const ANA_Layer* layer)
+{
+    if (layer == NULL) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    return layer->viewport;
+}
+
+void ana_layer_set_camera(ANA_Layer* layer, const ANA_Camera* camera)
+{
+    if (layer == NULL || camera == NULL) {
+        return;
+    }
+
+    layer->camera = *camera;
+}
+
+ANA_Camera ana_layer_camera(const ANA_Layer* layer)
+{
+    ANA_Camera camera;
+
+    if (layer == NULL) {
+        ana_camera_init(&camera, 0, 0, 0, 0, 0, 0);
+        return camera;
+    }
+
+    return layer->camera;
+}
+
+void ana_layer_set_redraw(
+    ANA_Layer* layer,
+    ANA_RedrawCallback redraw,
+    void* user_data)
+{
+    if (layer == NULL) {
+        return;
+    }
+
+    layer->redraw = redraw;
+    layer->user_data = user_data;
+}
+
+void ana_layer_set_enabled(ANA_Layer* layer, int enabled)
+{
+    if (layer == NULL) {
+        return;
+    }
+
+    layer->disabled = enabled ? 0 : ANA_LAYER_DISABLED_VALUE;
+}
+
+int ana_layer_is_enabled(const ANA_Layer* layer)
+{
+    return layer != NULL && layer->disabled != ANA_LAYER_DISABLED_VALUE;
+}
+
+int ana_layer_is_dirty(const ANA_Layer* layer)
+{
+    return layer != NULL && layer->dirty;
+}
+
+void ana_layer_mark_dirty(ANA_Layer* layer)
 {
     if (layer == NULL) {
         return;
@@ -2468,11 +2659,13 @@ void ana_layer_mark_dirty(ANA_DrawLayer* layer)
     layer->dirty = 1;
 }
 
-void ana_layer_draw_if_dirty(ANA_DrawLayer* layer)
+void ana_layer_draw_if_dirty(ANA_Layer* layer)
 {
     ANA_Rect rect;
 
-    if (layer == NULL || !layer->dirty) {
+    if (layer == NULL ||
+            layer->disabled == ANA_LAYER_DISABLED_VALUE ||
+            !layer->dirty) {
         return;
     }
 
@@ -2482,6 +2675,340 @@ void ana_layer_draw_if_dirty(ANA_DrawLayer* layer)
     }
 
     layer->dirty = 0;
+}
+
+static ANA_Rect ana_tile_layer_viewport_bounds(const ANA_TileLayer* tile_layer)
+{
+    ANA_Rect viewport;
+
+    viewport = tile_layer->layer.viewport;
+    if (ana_rect_is_empty(viewport)) {
+        viewport = ana_rect_make(
+            tile_layer->layer.camera.view_x,
+            tile_layer->layer.camera.view_y,
+            tile_layer->layer.camera.view_w,
+            tile_layer->layer.camera.view_h);
+    }
+
+    return viewport;
+}
+
+static ANA_Rect ana_tile_layer_world_bounds(const ANA_TileLayer* tile_layer)
+{
+    return ana_rect_make(
+        0,
+        0,
+        tile_layer->map_width * tile_layer->tile_width,
+        tile_layer->map_height * tile_layer->tile_height);
+}
+
+static void ana_tile_layer_draw_tiles_in_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect)
+{
+    ANA_Rect clipped;
+    ANA_Rect world_bounds;
+    ANA_Rect viewport;
+    int tx0;
+    int ty0;
+    int tx1;
+    int ty1;
+    int tx;
+    int ty;
+    int sx;
+    int sy;
+    unsigned char tile;
+
+    if (tile_layer == NULL ||
+            tile_layer->read_tile == NULL ||
+            tile_layer->draw_tile == NULL ||
+            tile_layer->tile_width <= 0 ||
+            tile_layer->tile_height <= 0) {
+        return;
+    }
+
+    viewport = ana_tile_layer_viewport_bounds(tile_layer);
+    world_bounds = ana_tile_layer_world_bounds(tile_layer);
+    clipped = ana_rect_clip(world_rect, world_bounds);
+    if (ana_rect_is_empty(clipped)) {
+        return;
+    }
+
+    tx0 = clipped.x / tile_layer->tile_width;
+    ty0 = clipped.y / tile_layer->tile_height;
+    tx1 = (clipped.x + clipped.w - 1) / tile_layer->tile_width;
+    ty1 = (clipped.y + clipped.h - 1) / tile_layer->tile_height;
+
+    if (tx0 < 0) {
+        tx0 = 0;
+    }
+    if (ty0 < 0) {
+        ty0 = 0;
+    }
+    if (tx1 >= tile_layer->map_width) {
+        tx1 = tile_layer->map_width - 1;
+    }
+    if (ty1 >= tile_layer->map_height) {
+        ty1 = tile_layer->map_height - 1;
+    }
+
+    for (ty = ty0; ty <= ty1; ty++) {
+        for (tx = tx0; tx <= tx1; tx++) {
+            tile = tile_layer->read_tile(tx, ty, tile_layer->user_data);
+            if (tile != 0u) {
+                sx = tx * tile_layer->tile_width -
+                    tile_layer->layer.camera.x +
+                    viewport.x;
+                sy = ty * tile_layer->tile_height -
+                    tile_layer->layer.camera.y +
+                    viewport.y;
+                tile_layer->draw_tile(tile, sx, sy, tile_layer->user_data);
+            }
+        }
+    }
+}
+
+static void ana_tile_layer_clear_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect)
+{
+    ANA_Rect screen_rect;
+    ANA_Rect clipped;
+    ANA_Rect viewport;
+
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    screen_rect = ana_camera_world_to_screen_rect(
+        &tile_layer->layer.camera,
+        world_rect);
+    viewport = ana_tile_layer_viewport_bounds(tile_layer);
+    clipped = ana_rect_clip(screen_rect, viewport);
+
+    if (!ana_rect_is_empty(clipped)) {
+        ana_fill_rect(
+            tile_layer->clear_color,
+            clipped.x,
+            clipped.y,
+            clipped.w,
+            clipped.h);
+    }
+}
+
+static void ana_tile_layer_redraw_exposed_scroll_strips(
+    ANA_TileLayer* tile_layer,
+    int screen_dx,
+    int screen_dy)
+{
+    ANA_Camera* camera;
+    ANA_Rect strip;
+
+    camera = &tile_layer->layer.camera;
+
+    if (screen_dx < 0) {
+        strip = ana_rect_make(
+            camera->x + camera->view_w + screen_dx,
+            camera->y,
+            -screen_dx,
+            camera->view_h);
+        ana_tile_layer_redraw_world_rect(tile_layer, strip);
+    } else if (screen_dx > 0) {
+        strip = ana_rect_make(
+            camera->x,
+            camera->y,
+            screen_dx,
+            camera->view_h);
+        ana_tile_layer_redraw_world_rect(tile_layer, strip);
+    }
+
+    if (screen_dy < 0) {
+        strip = ana_rect_make(
+            camera->x,
+            camera->y + camera->view_h + screen_dy,
+            camera->view_w,
+            -screen_dy);
+        ana_tile_layer_redraw_world_rect(tile_layer, strip);
+    } else if (screen_dy > 0) {
+        strip = ana_rect_make(
+            camera->x,
+            camera->y,
+            camera->view_w,
+            screen_dy);
+        ana_tile_layer_redraw_world_rect(tile_layer, strip);
+    }
+}
+
+void ana_tile_layer_init(
+    ANA_TileLayer* tile_layer,
+    ANA_LayerKind kind,
+    int z_order,
+    int tile_width,
+    int tile_height,
+    int map_width,
+    int map_height)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    memset(tile_layer, 0, sizeof(*tile_layer));
+    ana_layer_init(&tile_layer->layer, kind, z_order);
+    tile_layer->tile_width = tile_width;
+    tile_layer->tile_height = tile_height;
+    tile_layer->map_width = map_width;
+    tile_layer->map_height = map_height;
+    tile_layer->previous_camera_x = -1;
+    tile_layer->previous_camera_y = -1;
+    tile_layer->clear_color = 0u;
+}
+
+void ana_tile_layer_set_callbacks(
+    ANA_TileLayer* tile_layer,
+    ANA_TileReadCallback read_tile,
+    ANA_TileDrawCallback draw_tile,
+    void* user_data)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    tile_layer->read_tile = read_tile;
+    tile_layer->draw_tile = draw_tile;
+    tile_layer->user_data = user_data;
+}
+
+void ana_tile_layer_set_viewport(ANA_TileLayer* tile_layer, ANA_Rect viewport)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    ana_layer_set_viewport(&tile_layer->layer, viewport);
+}
+
+void ana_tile_layer_set_camera(
+    ANA_TileLayer* tile_layer,
+    const ANA_Camera* camera)
+{
+    if (tile_layer == NULL || camera == NULL) {
+        return;
+    }
+
+    ana_layer_set_camera(&tile_layer->layer, camera);
+}
+
+void ana_tile_layer_set_clear_color(
+    ANA_TileLayer* tile_layer,
+    unsigned char clear_color)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    tile_layer->clear_color = (unsigned char)(clear_color % ANA_DEFAULT_COLORS);
+}
+
+void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    tile_layer->previous_camera_x = -1;
+    tile_layer->previous_camera_y = -1;
+    ana_layer_mark_dirty(&tile_layer->layer);
+}
+
+void ana_tile_layer_redraw_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect)
+{
+    ANA_Rect view;
+    ANA_Rect clipped;
+
+    if (tile_layer == NULL ||
+            tile_layer->layer.disabled == ANA_LAYER_DISABLED_VALUE) {
+        return;
+    }
+
+    view = ana_camera_world_view(&tile_layer->layer.camera);
+    clipped = ana_rect_clip(world_rect, view);
+    if (ana_rect_is_empty(clipped)) {
+        return;
+    }
+
+    ana_tile_layer_clear_world_rect(tile_layer, clipped);
+    ana_tile_layer_draw_tiles_in_world_rect(tile_layer, clipped);
+}
+
+void ana_tile_layer_draw(ANA_TileLayer* tile_layer)
+{
+    ANA_Rect viewport;
+    ANA_Rect view;
+    int screen_dx;
+    int screen_dy;
+
+    if (tile_layer == NULL ||
+            tile_layer->layer.disabled == ANA_LAYER_DISABLED_VALUE ||
+            tile_layer->read_tile == NULL ||
+            tile_layer->draw_tile == NULL) {
+        return;
+    }
+
+    viewport = ana_tile_layer_viewport_bounds(tile_layer);
+    view = ana_camera_world_view(&tile_layer->layer.camera);
+
+    if (tile_layer->previous_camera_x < 0 ||
+            tile_layer->previous_camera_y < 0 ||
+            tile_layer->layer.dirty) {
+        ana_fill_rect(
+            tile_layer->clear_color,
+            viewport.x,
+            viewport.y,
+            viewport.w,
+            viewport.h);
+        ana_tile_layer_draw_tiles_in_world_rect(tile_layer, view);
+        tile_layer->previous_camera_x = tile_layer->layer.camera.x;
+        tile_layer->previous_camera_y = tile_layer->layer.camera.y;
+        tile_layer->layer.dirty = 0;
+        return;
+    }
+
+    screen_dx = tile_layer->previous_camera_x - tile_layer->layer.camera.x;
+    screen_dy = tile_layer->previous_camera_y - tile_layer->layer.camera.y;
+
+    if (screen_dx == 0 && screen_dy == 0) {
+        tile_layer->layer.dirty = 0;
+        return;
+    }
+
+    if (abs(screen_dx) >= viewport.w || abs(screen_dy) >= viewport.h) {
+        ana_fill_rect(
+            tile_layer->clear_color,
+            viewport.x,
+            viewport.y,
+            viewport.w,
+            viewport.h);
+        ana_tile_layer_draw_tiles_in_world_rect(tile_layer, view);
+    } else {
+        ana_scroll_rect(
+            viewport.x,
+            viewport.y,
+            viewport.w,
+            viewport.h,
+            screen_dx,
+            screen_dy,
+            tile_layer->clear_color);
+        ana_tile_layer_redraw_exposed_scroll_strips(
+            tile_layer,
+            screen_dx,
+            screen_dy);
+    }
+
+    tile_layer->previous_camera_x = tile_layer->layer.camera.x;
+    tile_layer->previous_camera_y = tile_layer->layer.camera.y;
+    tile_layer->layer.dirty = 0;
 }
 
 void ana_label_init(
@@ -3301,6 +3828,9 @@ void ana_clear(unsigned char color_index)
     color_index = (unsigned char)(color_index & 0x0f);
 
 #ifdef ANA_TARGET_AMIGA
+#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+    ana_amiga_visible_scroll_pending = 0;
+#endif
     ana_amiga_clear_draw_framebuffer(color_index);
     ana_amiga_clear_requested = 1;
     ana_amiga_clear_color = color_index;
@@ -3396,10 +3926,8 @@ static void ana_scroll_chunky_rect(
     }
 }
 
-#if defined(ANA_TARGET_AMIGA) && \
-    defined(ANA_AMIGA_DIRECT_PRESENT) && \
-    defined(ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL)
-static void ana_amiga_scroll_visible_bitmap_rect(
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_VISIBLE_SCROLL_ENABLED)
+static int ana_amiga_scroll_visible_bitmap_rect(
     int x,
     int y,
     int width,
@@ -3418,13 +3946,13 @@ static void ana_amiga_scroll_visible_bitmap_rect(
 
     bitmap = ana_amiga_visible_bitmap;
     if (bitmap == NULL) {
-        return;
+        return 0;
     }
 
     copy_w = width - abs(dx);
     copy_h = height - abs(dy);
     if (copy_w <= 0 || copy_h <= 0) {
-        return;
+        return 0;
     }
 
     src_x = dx > 0 ? x : x - dx;
@@ -3452,6 +3980,8 @@ static void ana_amiga_scroll_visible_bitmap_rect(
         state->clear_color_valid = 0;
         state->dirty_count = 0;
     }
+
+    return 1;
 }
 #endif
 
@@ -3464,6 +3994,10 @@ void ana_scroll_rect(
     int dy,
     unsigned char clear_color)
 {
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_VISIBLE_SCROLL_ENABLED)
+    int visible_scroll_done;
+#endif
+
     if (!ana_gfx_opened || (dx == 0 && dy == 0)) {
         return;
     }
@@ -3479,15 +4013,39 @@ void ana_scroll_rect(
         return;
     }
 
-    ana_scroll_chunky_rect(x, y, width, height, dx, dy);
-
-#ifdef ANA_TARGET_AMIGA
-#if defined(ANA_AMIGA_DIRECT_PRESENT) && defined(ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL)
-    ana_amiga_scroll_visible_bitmap_rect(x, y, width, height, dx, dy);
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_VISIBLE_SCROLL_ENABLED)
+    visible_scroll_done = 0;
+    if (ana_gfx_render_mode == ANA_RENDER_TILE_SCROLL ||
+            ana_gfx_render_mode == ANA_RENDER_SIDE_SCROLL ||
+            ana_gfx_render_mode == ANA_RENDER_VERTICAL_SCROLL ||
+            ana_gfx_render_mode == ANA_RENDER_TILE_4WAY) {
+        visible_scroll_done =
+            ana_amiga_scroll_visible_bitmap_rect(x, y, width, height, dx, dy);
+        if (visible_scroll_done) {
+            ana_amiga_visible_scroll_pending = 1;
+        } else {
+            ana_amiga_visible_scroll_pending = 0;
+            ana_amiga_mark_dirty_rect(x, y, x + width, y + height);
+        }
+    } else {
+        ana_amiga_visible_scroll_pending = 0;
+        ana_amiga_mark_dirty_rect(x, y, x + width, y + height);
+    }
 #else
+#ifdef ANA_TARGET_AMIGA
     ana_amiga_mark_dirty_rect(x, y, x + width, y + height);
 #endif
 #endif
+
+    /*
+     * Keep the chunky source synchronized even when the visible Amiga bitmap
+     * has already been blitter-scrolled. Dirty C2P regions may cover restored
+     * sprites or exposed strips plus surrounding background; if chunky is left
+     * at the old camera position those regions can write stale pixels back into
+     * the visible bitmap. This is an experimental bridge until ANA has a native
+     * hardware-scroll tile backend that draws directly into bitplanes.
+     */
+    ana_scroll_chunky_rect(x, y, width, height, dx, dy);
 
     if (dy > 0) {
         ana_fill_rect(clear_color, x, y, width, dy);

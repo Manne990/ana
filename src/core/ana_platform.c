@@ -64,6 +64,10 @@ ANA_Result ana_validate_profile(const ANA_Profile* profile)
         case ANA_RENDER_FULL_FRAME:
         case ANA_RENDER_TILE_SCROLL:
         case ANA_RENDER_BLITTER_BOBS:
+        case ANA_RENDER_SIDE_SCROLL:
+        case ANA_RENDER_VERTICAL_SCROLL:
+        case ANA_RENDER_TILE_4WAY:
+        case ANA_RENDER_RAYCAST:
             break;
         default:
             return ANA_ERROR_UNSUPPORTED_PROFILE;

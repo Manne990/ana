@@ -2,8 +2,6 @@
 
 #include "byte_brothers_internal.h"
 
-#include <stdlib.h>
-
 /* Dirty redraw renderer for the Byte Brothers scrolling platform sample. */
 
 static int bb_full_redraw = 1;
@@ -17,6 +15,9 @@ static int bb_prev_score = -1;
 static int bb_prev_lives = -1;
 static int bb_prev_level = -1;
 static int bb_prev_fragments = -1;
+static ANA_TileLayer bb_playfield_layer;
+static ANA_Layer bb_sprite_layer;
+static ANA_Layer bb_hud_layer;
 
 static ANA_Rect bb_world_rect(int x, int y, int w, int h)
 {
@@ -119,14 +120,23 @@ static void bb_draw_hud(void)
     bb_draw_number(bb_fragments_left, 292, 3, 1);
 }
 
-static int bb_tile_screen_x(int tx)
+static void bb_draw_hud_layer(ANA_Rect rect, void* user_data)
 {
-    return tx * BB_TILE - bb_camera_x + bb_camera.view_x;
+    (void)rect;
+    (void)user_data;
+
+    bb_draw_hud();
 }
 
-static int bb_tile_screen_y(int ty)
+static void bb_sync_layers(void)
 {
-    return ty * BB_TILE - bb_camera_y + bb_camera.view_y;
+    ANA_Rect viewport;
+
+    viewport = bb_view_bounds();
+    ana_tile_layer_set_viewport(&bb_playfield_layer, viewport);
+    ana_layer_set_viewport(&bb_sprite_layer, viewport);
+    ana_tile_layer_set_camera(&bb_playfield_layer, &bb_camera);
+    ana_layer_set_camera(&bb_sprite_layer, &bb_camera);
 }
 
 static void bb_draw_tile_at(char tile, int sx, int sy)
@@ -170,59 +180,29 @@ static void bb_draw_tile_at(char tile, int sx, int sy)
     }
 }
 
-static void bb_draw_tiles_in_world_rect(ANA_Rect rect)
+static unsigned char bb_read_tile_for_layer(int tx, int ty, void* user_data)
 {
-    int tx0;
-    int ty0;
-    int tx1;
-    int ty1;
-    int tx;
-    int ty;
     char tile;
 
-    if (ana_rect_is_empty(rect)) {
-        return;
+    (void)user_data;
+
+    tile = bb_tile_at(tx, ty);
+    if (tile == '.' || tile == 'H') {
+        return 0u;
     }
 
-    tx0 = rect.x / BB_TILE;
-    ty0 = rect.y / BB_TILE;
-    tx1 = (rect.x + rect.w - 1) / BB_TILE;
-    ty1 = (rect.y + rect.h - 1) / BB_TILE;
-
-    if (tx0 < 0) {
-        tx0 = 0;
-    }
-    if (ty0 < 0) {
-        ty0 = 0;
-    }
-    if (tx1 >= BB_MAP_W) {
-        tx1 = BB_MAP_W - 1;
-    }
-    if (ty1 >= BB_MAP_H) {
-        ty1 = BB_MAP_H - 1;
-    }
-
-    for (ty = ty0; ty <= ty1; ty++) {
-        for (tx = tx0; tx <= tx1; tx++) {
-            tile = bb_tile_at(tx, ty);
-            if (tile != '.' && tile != 'H') {
-                bb_draw_tile_at(tile, bb_tile_screen_x(tx), bb_tile_screen_y(ty));
-            }
-        }
-    }
+    return (unsigned char)tile;
 }
 
-static void bb_clear_world_rect(ANA_Rect rect)
+static void bb_draw_tile_for_layer(
+    unsigned char tile,
+    int x,
+    int y,
+    void* user_data)
 {
-    ANA_Rect screen_rect;
-    ANA_Rect clipped;
+    (void)user_data;
 
-    screen_rect = ana_camera_world_to_screen_rect(&bb_camera, rect);
-    clipped = ana_rect_clip(screen_rect, bb_view_bounds());
-
-    if (!ana_rect_is_empty(clipped)) {
-        ana_fill_rect(0, clipped.x, clipped.y, clipped.w, clipped.h);
-    }
+    bb_draw_tile_at((char)tile, x, y);
 }
 
 static void bb_redraw_world_rect(ANA_Rect rect)
@@ -238,62 +218,8 @@ static void bb_redraw_world_rect(ANA_Rect rect)
         return;
     }
 
-    bb_clear_world_rect(padded);
-    bb_draw_tiles_in_world_rect(padded);
+    ana_tile_layer_redraw_world_rect(&bb_playfield_layer, padded);
 }
-
-static void bb_draw_all_tiles(void)
-{
-    ANA_Rect view;
-
-    view = ana_camera_world_view(&bb_camera);
-    bb_draw_tiles_in_world_rect(view);
-}
-
-#ifndef ANA_TARGET_AMIGA
-static void bb_redraw_world_strip(ANA_Rect rect)
-{
-    bb_clear_world_rect(rect);
-    bb_draw_tiles_in_world_rect(rect);
-}
-
-static void bb_redraw_exposed_scroll_strips(int screen_dx, int screen_dy)
-{
-    ANA_Rect strip;
-
-    if (screen_dx < 0) {
-        strip = bb_world_rect(
-            bb_camera_x + bb_camera.view_w + screen_dx,
-            bb_camera_y,
-            -screen_dx,
-            bb_camera.view_h);
-        bb_redraw_world_strip(strip);
-    } else if (screen_dx > 0) {
-        strip = bb_world_rect(
-            bb_camera_x,
-            bb_camera_y,
-            screen_dx,
-            bb_camera.view_h);
-        bb_redraw_world_strip(strip);
-    }
-
-    if (screen_dy < 0) {
-        strip = bb_world_rect(
-            bb_camera_x,
-            bb_camera_y + bb_camera.view_h + screen_dy,
-            bb_camera.view_w,
-            -screen_dy);
-        bb_redraw_world_strip(strip);
-    } else if (screen_dy > 0) {
-        strip = bb_world_rect(
-            bb_camera_x,
-            bb_camera_y,
-            bb_camera.view_w,
-            screen_dy);
-        bb_redraw_world_strip(strip);
-    }
-}
-#endif
 
 static void bb_redraw_previous_and_current_actors(void)
 {
@@ -406,6 +332,29 @@ static void bb_commit_state(void)
 
 void bb_render_reset(void)
 {
+    ANA_Rect hud_viewport;
+
+    ana_tile_layer_init(
+        &bb_playfield_layer,
+        ANA_LAYER_SIDE_SCROLL,
+        0,
+        BB_TILE,
+        BB_TILE,
+        BB_MAP_W,
+        BB_MAP_H);
+    ana_tile_layer_set_callbacks(
+        &bb_playfield_layer,
+        bb_read_tile_for_layer,
+        bb_draw_tile_for_layer,
+        0);
+    ana_tile_layer_set_clear_color(&bb_playfield_layer, 0u);
+    ana_layer_init(&bb_sprite_layer, ANA_LAYER_SPRITES, 10);
+    ana_layer_init(&bb_hud_layer, ANA_LAYER_HUD, 100);
+    hud_viewport = ana_rect_make(0, 0, BB_SCREEN_W, BB_HUD_H);
+    ana_layer_set_viewport(&bb_hud_layer, hud_viewport);
+    ana_layer_set_redraw(&bb_hud_layer, bb_draw_hud_layer, 0);
+    bb_sync_layers();
+
     bb_full_redraw = 1;
     bb_prev_camera_x = -1;
     bb_prev_camera_y = -1;
@@ -413,28 +362,31 @@ void bb_render_reset(void)
     bb_prev_lives = -1;
     bb_prev_level = -1;
     bb_prev_fragments = -1;
+    ana_tile_layer_invalidate(&bb_playfield_layer);
 }
 
 void bb_render_invalidate(void)
 {
     bb_full_redraw = 1;
+    ana_tile_layer_invalidate(&bb_playfield_layer);
 }
 
 void bb_render_draw(void)
 {
     int hud_dirty;
-    int screen_dx;
-    int screen_dy;
 
     hud_dirty = bb_score != bb_prev_score ||
         bb_lives != bb_prev_lives ||
         bb_level_index != bb_prev_level ||
         bb_fragments_left != bb_prev_fragments;
+    bb_sync_layers();
 
     if (bb_full_redraw || bb_prev_camera_x < 0 || bb_prev_camera_y < 0) {
         ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
-        bb_draw_hud();
-        bb_draw_all_tiles();
+        ana_layer_mark_dirty(&bb_hud_layer);
+        ana_layer_draw_if_dirty(&bb_hud_layer);
+        ana_tile_layer_invalidate(&bb_playfield_layer);
+        ana_tile_layer_draw(&bb_playfield_layer);
         bb_draw_actors();
         bb_full_redraw = 0;
         bb_commit_state();
@@ -442,46 +394,16 @@ void bb_render_draw(void)
     }
 
     if (bb_camera_x != bb_prev_camera_x || bb_camera_y != bb_prev_camera_y) {
-        screen_dx = bb_prev_camera_x - bb_camera_x;
-        screen_dy = bb_prev_camera_y - bb_camera_y;
-
-        if (abs(screen_dx) >= bb_camera.view_w ||
-                abs(screen_dy) >= bb_camera.view_h) {
-            ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
-            bb_draw_hud();
-            bb_draw_all_tiles();
-            bb_draw_actors();
-            bb_commit_state();
-            return;
-        }
-
-#ifdef ANA_TARGET_AMIGA
-        ana_fill_rect(
-            0,
-            bb_camera.view_x,
-            bb_camera.view_y,
-            bb_camera.view_w,
-            bb_camera.view_h);
-        bb_draw_all_tiles();
-#else
-        ana_scroll_rect(
-            bb_camera.view_x,
-            bb_camera.view_y,
-            bb_camera.view_w,
-            bb_camera.view_h,
-            screen_dx,
-            screen_dy,
-            0);
-        bb_redraw_exposed_scroll_strips(screen_dx, screen_dy);
+        ana_tile_layer_draw(&bb_playfield_layer);
         bb_redraw_previous_and_current_actors();
-#endif
     } else {
         bb_redraw_previous_and_current_actors();
     }
 
     if (hud_dirty) {
-        bb_draw_hud();
+        ana_layer_mark_dirty(&bb_hud_layer);
     }
+    ana_layer_draw_if_dirty(&bb_hud_layer);
 
     bb_draw_actors();
     bb_commit_state();

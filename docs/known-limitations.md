@@ -22,10 +22,14 @@ preview work.
 - Retained BOB and label helpers exist, but there is no full sprite manager or
   scene graph.
 - A camera/world conversion helper and low-level rectangle scroll primitive
-  exist, and games can declare `ANA_RENDER_TILE_SCROLL`, but there is no stable
-  high-performance tilemap or scrolling background backend yet. Byte Brothers
-  uses transitional renderer code directly; Spec 017 defines the planned
-  tilemap and scroll-layer direction.
+  exist, and games can declare specific scroll contracts such as
+  `ANA_RENDER_SIDE_SCROLL`, `ANA_RENDER_VERTICAL_SCROLL`, and
+  `ANA_RENDER_TILE_4WAY`. `ANA_TileLayer` also exists and Byte Brothers uses it
+  for framework-owned playfield strip redraw. An opt-in synced visible-scroll
+  bridge exists for A1200 direct-present builds, but it is disabled by default
+  because it can produce stale-pixel artifacts. There is no stable
+  high-performance native hardware-scroll backend yet. Spec 017 defines that
+  planned direction.
 - No hardware sprite API yet.
 - No high-level animation system beyond image frames.
 - Direct-present rendering is fast but still young.

@@ -73,13 +73,17 @@ symbol-authored level maps, a side-scrolling camera, one-way platforms, hidden
 and power-up blocks, collectible code fragments, simple patrolling enemies,
 hazards, a discreet fullscreen HUD, SFX, and a looped MOD. It is intentionally
 kept readable so it can show the normal ANA application split for a scrolling
-action game. The host renderer can use ANA's low-level `ana_scroll_rect`
-primitive to move the viewport image and redraw exposed strips. The Amiga
-build currently uses a conservative full viewport redraw on camera movement
-because visible bitplane scroll is disabled until ANA has a proper hardware
-scroll/tilemap backend. The sample declares `ANA_RENDER_TILE_SCROLL` so the
-framework knows it is a scrolling game, even though the optimized backend is
-still planned work. The planned tilemap and scroll-layer API is tracked in
+action game. The renderer now uses ANA's framework-level `ANA_TileLayer` for
+the scrolling playfield: the game supplies tile read/draw callbacks while the
+framework owns camera/view strip redraw. A1200 direct-present builds currently
+default to the safe chunky/C2P fallback. The experimental visible-scroll bridge
+remains opt-in behind `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL` because it can
+leave stale pixels while scrolling. Correct smooth platform scrolling still
+needs the planned bitplane-pointer/fine-scroll backend. The sample declares
+`ANA_RENDER_SIDE_SCROLL` and tags its
+playfield, sprite, and HUD work as `ANA_Layer` instances so the framework can
+distinguish scrolling, actor, and overlay intent. The planned
+bitplane-pointer/fine-scroll backend is tracked in
 [Spec 017](docs/017-scroll-camera-tilemap.md), and the render-mode contract is
 tracked in [Spec 018](docs/018-render-modes-and-backends.md).
 

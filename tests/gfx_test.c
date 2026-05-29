@@ -161,6 +161,29 @@ static void retained_test_redraw(ANA_Rect rect, void* user_data)
     }
 }
 
+static const unsigned char tile_test_map[2][4] = {
+    {1, 0, 2, 0},
+    {0, 3, 0, 4}
+};
+
+static unsigned char tile_test_read(int tx, int ty, void* user_data)
+{
+    (void)user_data;
+
+    if (tx < 0 || ty < 0 || tx >= 4 || ty >= 2) {
+        return 0u;
+    }
+
+    return tile_test_map[ty][tx];
+}
+
+static void tile_test_draw(unsigned char tile, int x, int y, void* user_data)
+{
+    (void)user_data;
+
+    ana_fill_rect(tile, x, y, 2, 2);
+}
+
 static void write_test_image_file(const char* path)
 {
     FILE* file;
@@ -369,8 +392,12 @@ static void test_retained_render_helpers(void)
     ANA_Bob bob;
     ANA_RetainedLayer retained_layer;
     ANA_DrawLayer draw_layer;
+    ANA_Layer layer;
+    ANA_TileLayer tile_layer;
     ANA_Label label;
+    ANA_Camera camera;
     ANA_Rect rect;
+    ANA_Rect viewport;
     int marker;
 
     image = ana_load_image_data(
@@ -475,6 +502,82 @@ static void test_retained_render_helpers(void)
     assert(!draw_layer.dirty);
     assert(retained_redraw_calls == 3);
     assert(ana_rect_is_empty(retained_redraw_rect));
+
+    assert(ana_layer_default_render_mode(ANA_LAYER_STATIC) == ANA_RENDER_DIRTY);
+    assert(ana_layer_default_render_mode(ANA_LAYER_SIDE_SCROLL) ==
+        ANA_RENDER_SIDE_SCROLL);
+    assert(ana_layer_default_render_mode(ANA_LAYER_VERTICAL_SCROLL) ==
+        ANA_RENDER_VERTICAL_SCROLL);
+    assert(ana_layer_default_render_mode(ANA_LAYER_TILE_4WAY) ==
+        ANA_RENDER_TILE_4WAY);
+    assert(ana_layer_default_render_mode(ANA_LAYER_RAYCAST_VIEW) ==
+        ANA_RENDER_RAYCAST);
+    assert(ana_layer_default_render_mode(ANA_LAYER_SPRITES) ==
+        ANA_RENDER_BLITTER_BOBS);
+    assert(ana_layer_default_render_mode(ANA_LAYER_HUD) == ANA_RENDER_DIRTY);
+
+    ana_layer_init(&layer, ANA_LAYER_SIDE_SCROLL, 7);
+    assert(layer.kind == ANA_LAYER_SIDE_SCROLL);
+    assert(layer.z_order == 7);
+    assert(layer.render_mode == ANA_RENDER_SIDE_SCROLL);
+    assert(ana_layer_is_enabled(&layer));
+    assert(!ana_layer_is_dirty(&layer));
+
+    viewport = ana_rect_make(4, 5, 100, 80);
+    ana_layer_set_viewport(&layer, viewport);
+    rect = ana_layer_viewport(&layer);
+    assert(rect.x == 4);
+    assert(rect.y == 5);
+    assert(rect.w == 100);
+    assert(rect.h == 80);
+
+    ana_camera_init(&camera, 4, 5, 100, 80, 400, 200);
+    ana_camera_set_position(&camera, 16, 8);
+    ana_layer_set_camera(&layer, &camera);
+    camera = ana_layer_camera(&layer);
+    assert(camera.x == 16);
+    assert(camera.y == 8);
+    assert(camera.view_w == 100);
+    assert(camera.world_w == 400);
+
+    ana_clear(0);
+    ana_camera_init(&camera, 10, 20, 6, 4, 8, 4);
+    ana_camera_set_position(&camera, 0, 0);
+    ana_tile_layer_init(&tile_layer, ANA_LAYER_SIDE_SCROLL, 0, 2, 2, 4, 2);
+    ana_tile_layer_set_callbacks(
+        &tile_layer,
+        tile_test_read,
+        tile_test_draw,
+        0);
+    ana_tile_layer_set_viewport(&tile_layer, ana_rect_make(10, 20, 6, 4));
+    ana_tile_layer_set_camera(&tile_layer, &camera);
+    ana_tile_layer_set_clear_color(&tile_layer, 9u);
+    ana_tile_layer_draw(&tile_layer);
+    assert(ana_gfx_draw_pixel(10, 20) == 1);
+    assert(ana_gfx_draw_pixel(14, 20) == 2);
+    assert(ana_gfx_draw_pixel(12, 22) == 3);
+    assert(ana_gfx_draw_pixel(10, 23) == 9);
+
+    ana_camera_set_position(&camera, 2, 0);
+    ana_tile_layer_set_camera(&tile_layer, &camera);
+    ana_tile_layer_draw(&tile_layer);
+    assert(ana_gfx_draw_pixel(10, 20) == 9);
+    assert(ana_gfx_draw_pixel(12, 20) == 2);
+    ana_tile_layer_redraw_world_rect(&tile_layer, ana_rect_make(2, 2, 2, 2));
+    assert(ana_gfx_draw_pixel(10, 22) == 3);
+
+    ana_layer_set_redraw(&layer, retained_test_redraw, &marker);
+    ana_layer_mark_dirty(&layer);
+    assert(ana_layer_is_dirty(&layer));
+    ana_layer_set_enabled(&layer, 0);
+    ana_layer_draw_if_dirty(&layer);
+    assert(ana_layer_is_dirty(&layer));
+    assert(retained_redraw_calls == 3);
+    ana_layer_set_enabled(&layer, 1);
+    ana_layer_draw_if_dirty(&layer);
+    assert(!ana_layer_is_dirty(&layer));
+    assert(retained_redraw_calls == 4);
+    assert(marker == 123);
 
     ana_label_init(&label, font, 5, 6, 24);
     label.color = 5u;

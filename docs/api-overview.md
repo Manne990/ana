@@ -40,15 +40,19 @@ Set `ANA_Game.render_mode` to describe the renderer strategy the game expects:
 
 - `ANA_RENDER_DIRTY`: static viewport with retained/dirty moving objects.
 - `ANA_RENDER_FULL_FRAME`: simple full redraw every frame.
-- `ANA_RENDER_TILE_SCROLL`: camera or continuous scrolling based on tile/strip
-  redraw.
 - `ANA_RENDER_BLITTER_BOBS`: future mode for BOB-heavy renderers that want a
   blitter-oriented backend.
+- `ANA_RENDER_TILE_SCROLL`: legacy/generic tile-scroll contract.
+- `ANA_RENDER_SIDE_SCROLL`: side-scrolling tilemap/playfield games.
+- `ANA_RENDER_VERTICAL_SCROLL`: vertical shooters, runners, and upward/downward
+  strip scrolling.
+- `ANA_RENDER_TILE_4WAY`: four-direction tilemap games such as maze crawlers or
+  Gauntlet-like examples.
+- `ANA_RENDER_RAYCAST`: future first-person/raycast view contract.
 
 `ANA_RENDER_DEFAULT` is accepted on `ANA_Game` and resolves to
-`ANA_RENDER_DIRTY`. `ANA_RENDER_TILE_SCROLL` is currently a contract and
-profiling signal; the high-performance Amiga hardware-scroll backend is still
-planned work.
+`ANA_RENDER_DIRTY`. The scrolling and raycast modes are currently contracts and
+profiling signals; specialized Amiga backends are still planned work.
 
 ## Platform profile
 
@@ -71,6 +75,9 @@ Useful constants:
 - `ANA_SCREEN_PAL_LORES`
 - `ANA_RENDER_DIRTY`
 - `ANA_RENDER_TILE_SCROLL`
+- `ANA_RENDER_SIDE_SCROLL`
+- `ANA_RENDER_VERTICAL_SCROLL`
+- `ANA_RENDER_TILE_4WAY`
 
 Validation helpers:
 
@@ -139,16 +146,46 @@ Retained rendering helpers:
 - `ANA_RetainedLayer`
 - `ana_retained_clear_rect`
 - `ana_retained_clear_rect_x8`
+- `ANA_LayerKind`
+- `ANA_Layer`
 - `ANA_DrawLayer`
+- `ana_layer_default_render_mode`
+- `ana_layer_init`
+- `ana_layer_set_viewport`
+- `ana_layer_viewport`
+- `ana_layer_set_camera`
+- `ana_layer_camera`
+- `ana_layer_set_redraw`
+- `ana_layer_set_enabled`
+- `ana_layer_is_enabled`
+- `ana_layer_is_dirty`
 - `ana_layer_mark_dirty`
 - `ana_layer_draw_if_dirty`
+- `ANA_TileReadCallback`
+- `ANA_TileDrawCallback`
+- `ANA_TileLayer`
+- `ana_tile_layer_init`
+- `ana_tile_layer_set_callbacks`
+- `ana_tile_layer_set_viewport`
+- `ana_tile_layer_set_camera`
+- `ana_tile_layer_set_clear_color`
+- `ana_tile_layer_invalidate`
+- `ana_tile_layer_draw`
+- `ana_tile_layer_redraw_world_rect`
 - `ANA_Label`
 - `ana_label_init`
 - `ana_label_set_text`
 - `ana_label_draw_if_dirty`
 
-These helpers keep dirty rendering explicit. They do not replace a game's draw
-order, collision rules, or custom performance work.
+`ANA_DrawLayer` is kept as a compatibility typedef for `ANA_Layer`.
+Layer kinds let a game describe whether a layer is static, scrolling, sprites,
+HUD, debug, or menu. `ANA_TileLayer` is the first tilemap-owned draw helper. It
+stores viewport, camera, tile size, clear color, and tile read/draw callbacks,
+and can redraw exposed strips when the camera moves. The current Amiga
+implementation still uses ANA's chunky/software path, so native hardware
+scroll remains backend work. These helpers keep rendering intent explicit. They
+do not replace a game's draw order, collision rules, or custom performance work
+yet.
 
 ## Input
 
@@ -234,13 +271,20 @@ Low-level graphics helpers:
 `ana_scroll_rect` moves an existing screen rectangle by a signed delta and
 fills newly exposed strips with a clear color. It is intended as the first
 portable primitive for scrolling samples; higher-level tilemap and scroll-layer
-APIs are still planned separately. On Amiga direct-present builds the default
-implementation marks the full scrolled rectangle dirty for correctness, so it
-is not the final performance path for platformers or shooters.
+APIs are still planned separately. On A1200 direct-present builds ANA currently
+defaults to the safe chunky/C2P path for correctness. An opt-in experimental
+bridge, `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`, can blitter-scroll the visible
+bitmap and sync the chunky source, but it can leave stale pixels and is not the
+final performance path for platformers or shooters. The planned Amiga
+performance path is a dedicated scroll-layer backend with hardware fine scroll,
+bitplane pointer coarse scroll, and blitter-updated incoming tile strips.
 
-Scrolling games should set `ANA_Game.render_mode = ANA_RENDER_TILE_SCROLL`.
-That does not yet enable hardware scroll by itself, but it makes the game's
-intent visible to the runtime, docs, tests, and future backend selection.
+Scrolling games should choose the most specific render mode available:
+`ANA_RENDER_SIDE_SCROLL`, `ANA_RENDER_VERTICAL_SCROLL`, or
+`ANA_RENDER_TILE_4WAY`. `ANA_RENDER_TILE_SCROLL` remains available as a generic
+compatibility contract. These modes do not yet enable hardware scroll by
+themselves, but they make game intent visible to the runtime, docs, tests, and
+future backend selection.
 
 Small game helpers:
 

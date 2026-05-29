@@ -2,6 +2,7 @@
 #define ANA_GFX_H
 
 #include "ana_helpers.h"
+#include "ana_platform.h"
 #include "ana_types.h"
 
 #ifdef __cplusplus
@@ -36,6 +37,28 @@ typedef struct ANA_RenderStats {
 } ANA_RenderStats;
 
 typedef void (*ANA_RedrawCallback)(ANA_Rect rect, void* user_data);
+typedef unsigned char (*ANA_TileReadCallback)(
+    int tx,
+    int ty,
+    void* user_data);
+typedef void (*ANA_TileDrawCallback)(
+    unsigned char tile,
+    int x,
+    int y,
+    void* user_data);
+
+typedef enum ANA_LayerKind {
+    ANA_LAYER_STATIC = 0,
+    ANA_LAYER_SIDE_SCROLL = 1,
+    ANA_LAYER_VERTICAL_SCROLL = 2,
+    ANA_LAYER_PARALLAX = 3,
+    ANA_LAYER_SPRITES = 4,
+    ANA_LAYER_HUD = 5,
+    ANA_LAYER_DEBUG = 6,
+    ANA_LAYER_MENU = 7,
+    ANA_LAYER_TILE_4WAY = 8,
+    ANA_LAYER_RAYCAST_VIEW = 9
+} ANA_LayerKind;
 
 typedef struct ANA_RetainedLayer {
     ANA_RedrawCallback redraw;
@@ -58,11 +81,33 @@ typedef struct ANA_Bob {
     unsigned char clear_color;
 } ANA_Bob;
 
-typedef struct ANA_DrawLayer {
+typedef struct ANA_Layer {
     ANA_RedrawCallback redraw;
     void* user_data;
     int dirty;
-} ANA_DrawLayer;
+    ANA_LayerKind kind;
+    ANA_RenderMode render_mode;
+    ANA_Rect viewport;
+    ANA_Camera camera;
+    int z_order;
+    int disabled;
+} ANA_Layer;
+
+typedef ANA_Layer ANA_DrawLayer;
+
+typedef struct ANA_TileLayer {
+    ANA_Layer layer;
+    ANA_TileReadCallback read_tile;
+    ANA_TileDrawCallback draw_tile;
+    void* user_data;
+    int tile_width;
+    int tile_height;
+    int map_width;
+    int map_height;
+    int previous_camera_x;
+    int previous_camera_y;
+    unsigned char clear_color;
+} ANA_TileLayer;
 
 typedef struct ANA_Label {
     ANA_Font font;
@@ -147,8 +192,47 @@ void ana_draw_text(ANA_Font font, int x, int y, const char* text);
 void ana_draw_int(ANA_Font font, int x, int y, int value);
 int ana_text_width(ANA_Font font, const char* text);
 
-void ana_layer_mark_dirty(ANA_DrawLayer* layer);
-void ana_layer_draw_if_dirty(ANA_DrawLayer* layer);
+ANA_RenderMode ana_layer_default_render_mode(ANA_LayerKind kind);
+void ana_layer_init(ANA_Layer* layer, ANA_LayerKind kind, int z_order);
+void ana_layer_set_viewport(ANA_Layer* layer, ANA_Rect viewport);
+ANA_Rect ana_layer_viewport(const ANA_Layer* layer);
+void ana_layer_set_camera(ANA_Layer* layer, const ANA_Camera* camera);
+ANA_Camera ana_layer_camera(const ANA_Layer* layer);
+void ana_layer_set_redraw(
+    ANA_Layer* layer,
+    ANA_RedrawCallback redraw,
+    void* user_data);
+void ana_layer_set_enabled(ANA_Layer* layer, int enabled);
+int ana_layer_is_enabled(const ANA_Layer* layer);
+int ana_layer_is_dirty(const ANA_Layer* layer);
+void ana_layer_mark_dirty(ANA_Layer* layer);
+void ana_layer_draw_if_dirty(ANA_Layer* layer);
+
+void ana_tile_layer_init(
+    ANA_TileLayer* tile_layer,
+    ANA_LayerKind kind,
+    int z_order,
+    int tile_width,
+    int tile_height,
+    int map_width,
+    int map_height);
+void ana_tile_layer_set_callbacks(
+    ANA_TileLayer* tile_layer,
+    ANA_TileReadCallback read_tile,
+    ANA_TileDrawCallback draw_tile,
+    void* user_data);
+void ana_tile_layer_set_viewport(ANA_TileLayer* tile_layer, ANA_Rect viewport);
+void ana_tile_layer_set_camera(
+    ANA_TileLayer* tile_layer,
+    const ANA_Camera* camera);
+void ana_tile_layer_set_clear_color(
+    ANA_TileLayer* tile_layer,
+    unsigned char clear_color);
+void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer);
+void ana_tile_layer_draw(ANA_TileLayer* tile_layer);
+void ana_tile_layer_redraw_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect);
 
 void ana_label_init(
     ANA_Label* label,

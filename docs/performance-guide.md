@@ -154,8 +154,11 @@ The output includes:
 Games should also declare their intended renderer strategy:
 
 - `ANA_RENDER_DIRTY` for static-view games such as Invaders and AMAze.
-- `ANA_RENDER_TILE_SCROLL` for platformers, shooters, or any game where the
-  camera moves often.
+- `ANA_RENDER_SIDE_SCROLL` for side-scrolling platformers.
+- `ANA_RENDER_VERTICAL_SCROLL` for vertical shooters or runners.
+- `ANA_RENDER_TILE_4WAY` for free-camera tilemap games.
+- `ANA_RENDER_TILE_SCROLL` only as a generic compatibility contract when the
+  game cannot yet describe its scroll pattern more specifically.
 - `ANA_RENDER_FULL_FRAME` for simple ports or prototypes where correctness and
   simplicity are more important than retained redraw.
 
@@ -209,25 +212,26 @@ as the main model for a platform game, vertical shooter, or any game where the
 camera moves most frames. Once the camera moves, most of the viewport can
 effectively become dirty even if only a few sprites changed.
 
-Byte Brothers currently uses `ANA_Camera`. The host renderer can pair it with
-`ana_scroll_rect` so the play viewport image is moved and only newly exposed
-strips are redrawn. On Amiga, Byte Brothers currently falls back to a
-conservative full viewport redraw on camera movement; the experimental direct
-visible-scroll path caused flicker and is disabled by default. This is still a
-low-level transitional model rather than the final high-level scroll model.
-It declares `ANA_RENDER_TILE_SCROLL`, which is the mode future hardware-scroll
-and tilemap backends should key from.
+Byte Brothers now uses `ANA_TileLayer` with tile read/draw callbacks, so the
+framework owns camera/view strip redraw for the scrolling playfield. This
+reduced example-side bookkeeping and made the scroll contract explicit. A1200
+direct-present builds currently default to the safe chunky/C2P fallback for
+correctness. ANA still has an opt-in `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`
+bridge that blitter-scrolls the visible bitmap and syncs chunky source data, but
+it can leave stale pixels during scrolling and is not a release baseline.
+Production scrolling needs a native hardware-scroll backend. Byte Brothers
+declares `ANA_RENDER_SIDE_SCROLL`, which is the mode the future platformer
+backend should key from. Vertical shooters should use
+`ANA_RENDER_VERTICAL_SCROLL`; free-camera tilemap games should use
+`ANA_RENDER_TILE_4WAY`.
 
 The intended ANA direction is a framework-level scroll API:
 
 - `ANA_Camera` for world/screen conversion and follow/continuous movement.
-- `ana_scroll_rect` for moving an existing viewport and redrawing only exposed
-  strips in transitional host renderers. On Amiga direct-present builds it is
-  correct but expensive unless an explicit experimental backend is enabled.
-- `ANA_Tilemap` for drawing visible tiles without game code calculating tile
-  intervals.
-- `ANA_ScrollLayer` for tracking previous camera position, exposed strips, and
-  redraw policy.
+- `ANA_TileLayer` for tile callbacks, viewport/camera tracking, and exposed
+  strip redraw in the current portable backend.
+- A future native Amiga backend for BPLCON1 fine scroll, bitplane-pointer
+  coarse scroll, overdraw margins, and blitter-drawn incoming tile strips.
 
 The long-term Amiga backend should move or hardware-scroll the existing
 background and draw only newly exposed strips, while keeping HUD and sprites as

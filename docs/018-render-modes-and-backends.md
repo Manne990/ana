@@ -24,6 +24,12 @@ blitter och overdraw-buffertar dar det ar ratt teknik.
 huvudvy, inte en slutgiltig begransning. Senare API ska kunna lagga render mode
 pa scen- eller layer-niva.
 
+A1200-bygget defaultar for narvarande till den sakra direct-present/chunky-C2P-
+vagen for side-/tile-scroll. Det finns en experimentell visible-scroll-
+overgangsbackend bakom `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`, men den ar inte
+default eftersom den kan ge stale-pixel-artefakter. Den ska inte forvaxlas med
+den slutliga BPLCON1/bitplane-pointer-hardware-scrollen.
+
 ## Mal
 
 - Gora rendererstrategi explicit i `ANA_Game`.
@@ -40,7 +46,11 @@ typedef enum ANA_RenderMode {
     ANA_RENDER_DIRTY = 1,
     ANA_RENDER_FULL_FRAME = 2,
     ANA_RENDER_TILE_SCROLL = 3,
-    ANA_RENDER_BLITTER_BOBS = 4
+    ANA_RENDER_BLITTER_BOBS = 4,
+    ANA_RENDER_SIDE_SCROLL = 5,
+    ANA_RENDER_VERTICAL_SCROLL = 6,
+    ANA_RENDER_TILE_4WAY = 7,
+    ANA_RENDER_RAYCAST = 8
 } ANA_RenderMode;
 
 typedef struct ANA_Game {
@@ -86,28 +96,64 @@ implicit fallback for allt.
 
 ### `ANA_RENDER_TILE_SCROLL`
 
-For spel dar kameran eller bakgrunden ror sig ofta.
+Legacy/generiskt tile-scroll-kontrakt. Ny kod bor valja ett mer specifikt
+render mode nar scrollriktningen ar kand.
 
-Passar:
-
-- plattformsspel
-- vertikala shooters
-- racing-/runner-spel
-- parallaxbakgrunder
-
-I forsta steget ar detta ett API-kontrakt. Den riktiga Amiga-backenden ska
-senare kunna anvanda tilemap-redraw, bitplane-offset/fine scroll, overdraw-
-marginaler och nyritade strips i stallet for full viewport redraw.
-
-Detta ar prestanda-vagen for stora scrollande bakgrunder. Spelet ska inte
-rita om hela viewporten for varje kamerapixel om Amiga-backenden kan flytta
-visningen med hardware scroll och bara rita in nya tile-kolumner eller rader.
+Det finns kvar for kompatibilitet och for enklare prototyper som annu inte
+vill lova side-, vertical- eller 4-way-scroll.
 
 ### `ANA_RENDER_BLITTER_BOBS`
 
 Reserverad for BOB-tunga spel dar Amiga-backenden senare kan anvanda mer
 blitter-orienterad intern strategi. Mode:t finns for att vi inte ska blanda
 ihop scrolling och sprite-intensiva single-screen-spel.
+
+### `ANA_RENDER_SIDE_SCROLL`
+
+For plattformsspel och andra spel dar huvudkameran normalt ror sig horisontellt.
+
+Passar:
+
+- Byte Brothers
+- Giana/Mario-liknande plattformsspel
+- sidscrollande actionspel
+
+Detta ar mode:t som ska kopplas till Amiga-hardware-scroll med bredare
+bitplane-buffer, BPLCON1-finscroll, bitplane-pekar-coarsescroll och blitter-
+ritade tile-strips.
+
+### `ANA_RENDER_VERTICAL_SCROLL`
+
+For spel dar banan scrollar uppat eller nedat.
+
+Passar:
+
+- vertikala shooters
+- runners
+- kartor som trycks kontinuerligt i en riktning
+
+Backenden kan optimera for rad-/strip-uppdateringar i stallet for att anta
+samma kostnader som en full 2D-kamera.
+
+### `ANA_RENDER_TILE_4WAY`
+
+For tilemap-spel med kamera i flera riktningar.
+
+Passar:
+
+- Gauntlet-liknande spel
+- Zelda-/maze-liknande spel
+- storre kartor med fri kamera
+
+Det ar sannolikt dyrare an side- eller vertical-scroll pa Amiga, men API:t
+gor att ANA kan valja en separat strategi i stallet for att behandla allt som
+plattformsscroll.
+
+### `ANA_RENDER_RAYCAST`
+
+Framtida kontrakt for raycast/first-person-rendering. Det ar inte en
+scroll-backend; det ar en egen huvudvy dar tilemap-data kan vara input men
+renderingen ar kolumn-/spanbaserad.
 
 ## Kombinerade renderstrategier
 
@@ -137,14 +183,16 @@ ANA-backenden valjer effektiv implementation.
 
 ```c
 typedef enum ANA_LayerKind {
-    ANA_LAYER_STATIC = 1,
-    ANA_LAYER_SIDE_SCROLL = 2,
-    ANA_LAYER_VERTICAL_SCROLL = 3,
-    ANA_LAYER_PARALLAX = 4,
-    ANA_LAYER_SPRITES = 5,
-    ANA_LAYER_HUD = 6,
-    ANA_LAYER_DEBUG = 7,
-    ANA_LAYER_MENU = 8
+    ANA_LAYER_STATIC = 0,
+    ANA_LAYER_SIDE_SCROLL = 1,
+    ANA_LAYER_VERTICAL_SCROLL = 2,
+    ANA_LAYER_PARALLAX = 3,
+    ANA_LAYER_SPRITES = 4,
+    ANA_LAYER_HUD = 5,
+    ANA_LAYER_DEBUG = 6,
+    ANA_LAYER_MENU = 7,
+    ANA_LAYER_TILE_4WAY = 8,
+    ANA_LAYER_RAYCAST_VIEW = 9
 } ANA_LayerKind;
 ```
 
@@ -152,10 +200,12 @@ typedef enum ANA_LayerKind {
 eller valjer implementationen. I manga fall kan ANA sjalv mappa layer-typ till
 ratt render mode:
 
-- `ANA_LAYER_SIDE_SCROLL` -> hardware/tile scroll dar Amiga-backenden kan.
-- `ANA_LAYER_VERTICAL_SCROLL` -> strip/tile scroll for shooters och runners.
+- `ANA_LAYER_SIDE_SCROLL` -> `ANA_RENDER_SIDE_SCROLL`.
+- `ANA_LAYER_VERTICAL_SCROLL` -> `ANA_RENDER_VERTICAL_SCROLL`.
+- `ANA_LAYER_TILE_4WAY` -> `ANA_RENDER_TILE_4WAY`.
+- `ANA_LAYER_RAYCAST_VIEW` -> `ANA_RENDER_RAYCAST`.
 - `ANA_LAYER_PARALLAX` -> billigare scroll-lager, ofta fa farger eller enklare
-  tiledata.
+  tiledata. Defaultar fortsatt till det generiska `ANA_RENDER_TILE_SCROLL`.
 - `ANA_LAYER_SPRITES` -> BOB/blitter/dirty sprite-hantering.
 - `ANA_LAYER_HUD` -> statiska/dirty labels och sma icons, inte del av
   playfield-scroll.
@@ -176,17 +226,29 @@ dirty/static i stallet for hardware-scrollat.
 ### API-skiss
 
 ```c
-ANA_Layer* ana_layer_create(ANA_LayerKind kind, int z_order);
+ANA_Layer playfield;
+
+ana_layer_init(&playfield, ANA_LAYER_SIDE_SCROLL, 0);
 void ana_layer_set_viewport(ANA_Layer* layer, ANA_Rect viewport);
 void ana_layer_set_camera(ANA_Layer* layer, const ANA_Camera* camera);
-void ana_layer_set_tilemap(ANA_Layer* layer, const ANA_Tilemap* tilemap);
-void ana_layer_draw_image(ANA_Layer* layer, ANA_Image image, int x, int y);
-void ana_layer_draw_text(ANA_Layer* layer, ANA_Font font, int x, int y, const char* text);
+void ana_layer_set_redraw(
+    ANA_Layer* layer,
+    ANA_RedrawCallback redraw,
+    void* user_data);
+void ana_layer_mark_dirty(ANA_Layer* layer);
+void ana_layer_draw_if_dirty(ANA_Layer* layer);
 ```
 
 Detta ar inte ett forslag om en tung scene graph. Det ar en tunn struktur som
 later ANA separera playfield, sprites, HUD och debug sa varje del kan renderas
 med ratt Amiga-teknik.
+
+Forsta implementationen ar stackallokerad och har inga dolda allokeringar.
+Den lagrar layer-kind, render-mode-mapping, viewport, kamera, z-order och en
+dirty redraw callback. `ANA_TileLayer` bygger vidare pa detta med tile
+read/draw callbacks, viewport, camera, tile size och software strip redraw.
+Den ar den forsta tilemap-agda draw-funktionen, men den ar fortfarande en
+portabel/chunky fallback och inte den slutliga Amiga hardware-scroll-backenden.
 
 ## Forsta implementation
 
@@ -194,20 +256,31 @@ med ratt Amiga-teknik.
 - Lagg `render_mode` i `ANA_Game` och `ANA_Profile`.
 - Defaulta `ANA_RENDER_DEFAULT` till `ANA_RENDER_DIRTY`.
 - Validera okanda render modes.
+- Lagg `ANA_LayerKind`, `ANA_Layer` och enkla layer helpers i public API.
+- Lat `ANA_LAYER_SIDE_SCROLL` defaulta till `ANA_RENDER_SIDE_SCROLL`.
+- Lat `ANA_LAYER_VERTICAL_SCROLL` defaulta till `ANA_RENDER_VERTICAL_SCROLL`.
+- Lat `ANA_LAYER_TILE_4WAY` defaulta till `ANA_RENDER_TILE_4WAY`.
+- Lat `ANA_LAYER_RAYCAST_VIEW` defaulta till `ANA_RENDER_RAYCAST`.
+- Lat `ANA_LAYER_PARALLAX` defaulta till `ANA_RENDER_TILE_SCROLL`.
+- Lat `ANA_LAYER_SPRITES` defaulta till `ANA_RENDER_BLITTER_BOBS`.
+- Lat `ANA_LAYER_HUD`, `ANA_LAYER_STATIC` och `ANA_LAYER_DEBUG` defaulta till
+  `ANA_RENDER_DIRTY`.
+- Lagg `ANA_TileLayer` som forsta framework-owned tilemap draw helper.
 - Satt examples:
   - Invaders: `ANA_RENDER_DIRTY`
   - AMAze: `ANA_RENDER_DIRTY`
-  - Byte Brothers: `ANA_RENDER_TILE_SCROLL`
+  - Byte Brothers: `ANA_RENDER_SIDE_SCROLL`
   - Hello: `ANA_RENDER_DIRTY`
 
-Ingen hardware-scroll implementeras i denna spec. Det hor till Spec 017 och
-kraver en separat Amiga-backend.
+Ingen native Amiga hardware-scroll implementeras i denna spec. Det hor till
+Spec 017 och kraver en separat Amiga-backend.
 
 ## Acceptanskriterier
 
 - Befintliga tester passerar.
 - En ny test verifierar default-render-mode och ogiltigt render mode.
 - Examples bygger med explicita render modes.
+- Byte Brothers anvander `ANA_TileLayer` for playfield redraw.
 - README, API-dokumentation och performance guide beskriver skillnaden mellan
   dirty-rendering och scroll-rendering.
 - Byte Brothers kan fortfarande vara korrekt men inte perfekt optimerad; det
@@ -217,7 +290,8 @@ kraver en separat Amiga-backend.
 ## Senare arbete
 
 - Exponera debugrad som visar aktivt render mode.
-- Koppla `ANA_RENDER_TILE_SCROLL` till `ANA_Tilemap`/`ANA_ScrollLayer`.
+- Ersatt den portabla `ANA_TileLayer`-scrollbackenden med native Amiga
+  hardware-scroll for `ANA_RENDER_SIDE_SCROLL` och senare vertical/4-way.
 - Flytta renderstrategi fran endast `ANA_Game` till komponerbara scenes/layers.
 - Lat HUD overlays och debug overlays vara egna lager sa de inte blandas ihop
   med scrollande playfields.

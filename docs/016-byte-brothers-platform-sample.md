@@ -17,8 +17,8 @@ Forsta versionen ska darfor ha:
 
 - Fullscreen PAL lores via ANA:s screen setup, utan Workbench-fonster eller
   terminaltext under gameplay.
-- `ANA_RENDER_TILE_SCROLL` i `ANA_Game`, sa samplet deklarerar att det behover
-  scroll-/tilemap-orienterad rendering snarare an statisk dirty rendering.
+- `ANA_RENDER_SIDE_SCROLL` i `ANA_Game`, sa samplet deklarerar att det behover
+  side-scroll-/tilemap-orienterad rendering snarare an statisk dirty rendering.
 - Bakgrundsmusik som loopar under spelet.
 - Ljudeffekter for minst hopp, collectible, power-up, fiendekollision och
   levelmal.
@@ -163,7 +163,7 @@ vanliga tiles.
 
 Det har samplet bor driva fram foljande ANA-omraden:
 
-- `ANA_Tilemap` eller motsvarande helper for tilebaserad bana.
+- `ANA_TileLayer` eller motsvarande helper for tilebaserad bana.
 - `ANA_Camera` for varldskoordinater till skarmkoordinater.
 - Tile-kollision: solid, one-way, hazard, breakable och bump-block.
 - Spriteanimation med enkla frame-index och timing.
@@ -197,9 +197,10 @@ Forsta spelbara slice finns i `examples/byte_brothers/`:
   fiender och levelovergang.
 - `byte_brothers_render.c` ritar fullscreen-HUD, tiles, spelare och fiender med
   dirty redraw. Spelet anvander `ANA_Camera` for world/screen-konvertering och
-  1-pixelkamera for mjukare fallback-scroll. Den gor fortfarande explicit
-  viewport-redraw vid scroll, eftersom ANA annu saknar tilemap- eller
-  hardware-scroll-hjalpare for kontinuerlig plattformsscroll.
+  `ANA_TileLayer` for framework-owned playfield redraw. Det tar bort den mest
+  spel-specifika tile interval- och strip-bokforingen, men den nuvarande Amiga-
+  backenden ar fortfarande software/chunky och inte den slutliga
+  hardware-scroll-losningen for stabil plattformsprestanda.
 - `byte_brothers_assets.c` laddar SFX och loopad MOD enligt en enkel
   musik/SFX-kanalpolicy.
 
