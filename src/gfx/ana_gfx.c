@@ -149,9 +149,8 @@ struct ANA_FontData {
 };
 
 #ifdef ANA_TARGET_AMIGA
-#if defined(ANA_AMIGA_DIRECT_PRESENT) && \
-    defined(ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL)
-#define ANA_AMIGA_VISIBLE_SCROLL_ENABLED 1
+#if defined(ANA_AMIGA_DIRECT_PRESENT) && !defined(ANA_AMIGA_DISABLE_NATIVE_SCROLL)
+#define ANA_AMIGA_NATIVE_SCROLL_ENABLED 1
 #endif
 
 struct ANA_AmigaDirtyRect {
@@ -167,8 +166,10 @@ static int ana_amiga_dirty_count = 0;
 static struct ANA_AmigaDirtyRect
     ana_amiga_planar_clear_rects[ANA_AMIGA_MAX_DIRTY_RECTS];
 static int ana_amiga_planar_clear_count = 0;
-#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+#ifdef ANA_AMIGA_NATIVE_SCROLL_ENABLED
 static int ana_amiga_visible_scroll_pending = 0;
+static int ana_amiga_native_scroll_requested = 0;
+static int ana_amiga_native_scroll_sync_chunky = 1;
 #endif
 
 struct ANA_AmigaBitmapState {
@@ -813,8 +814,10 @@ static void ana_amiga_reset_frame_state(void)
     ana_amiga_planar_clear_count = 0;
     ana_amiga_clear_requested = 0;
     ana_amiga_clear_color = 0;
-#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+#ifdef ANA_AMIGA_NATIVE_SCROLL_ENABLED
     ana_amiga_visible_scroll_pending = 0;
+    ana_amiga_native_scroll_requested = 0;
+    ana_amiga_native_scroll_sync_chunky = 1;
 #endif
 }
 
@@ -1103,7 +1106,7 @@ static void ana_amiga_mark_rect(
     ana_amiga_coalesce_rect(rects, rect_count, 0);
 }
 
-#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+#ifdef ANA_AMIGA_NATIVE_SCROLL_ENABLED
 static void ana_amiga_mark_dirty_rect_unmerged(
     const struct ANA_AmigaDirtyRect* rect)
 {
@@ -1149,7 +1152,7 @@ static void ana_amiga_mark_dirty_rect(int min_x, int min_y, int max_x, int max_y
         return;
     }
 
-#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+#ifdef ANA_AMIGA_NATIVE_SCROLL_ENABLED
     if (ana_amiga_visible_scroll_pending) {
         ana_amiga_mark_dirty_rect_unmerged(&rect);
         return;
@@ -2839,6 +2842,96 @@ static void ana_tile_layer_redraw_exposed_scroll_strips(
     }
 }
 
+static int ana_tile_layer_can_use_native_scroll(const ANA_TileLayer* tile_layer)
+{
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
+    if (tile_layer == NULL) {
+        return 0;
+    }
+
+    switch (tile_layer->layer.kind) {
+    case ANA_LAYER_SIDE_SCROLL:
+    case ANA_LAYER_VERTICAL_SCROLL:
+    case ANA_LAYER_PARALLAX:
+    case ANA_LAYER_TILE_4WAY:
+        break;
+    default:
+        return 0;
+    }
+
+    if (ana_amiga_visible_bitmap == NULL) {
+        return 0;
+    }
+
+    return 1;
+#else
+    (void)tile_layer;
+#endif
+
+    return 0;
+}
+
+static int ana_tile_layer_should_request_native_scroll(
+    const ANA_TileLayer* tile_layer)
+{
+    if (tile_layer == NULL ||
+            tile_layer->scroll_backend != ANA_SCROLL_BACKEND_NATIVE) {
+        return 0;
+    }
+
+    /*
+     * Keep the visible-bitmap bridge explicit. It is a useful diagnostic path,
+     * but it is not the dedicated planar hardware-scroll backend and it is too
+     * sensitive to redraw ordering to sit behind AUTO or HARDWARE.
+     */
+    return ana_tile_layer_can_use_native_scroll(tile_layer);
+}
+
+static int ana_tile_layer_native_scroll_sync_chunky(
+    const ANA_TileLayer* tile_layer)
+{
+    if (tile_layer == NULL) {
+        return 1;
+    }
+
+    switch (tile_layer->scroll_sync) {
+    case ANA_SCROLL_SYNC_DIRTY:
+        return 0;
+    case ANA_SCROLL_SYNC_CHUNKY:
+        return 1;
+    case ANA_SCROLL_SYNC_AUTO:
+    default:
+        return 1;
+    }
+}
+
+static int ana_tile_layer_can_use_hardware_scroll(
+    const ANA_TileLayer* tile_layer)
+{
+    /*
+     * Real Amiga hardware scrolling needs a dedicated planar playfield:
+     * BPLCON1 fine scroll, BPLxPTR coarse scroll, and blitter-filled edge
+     * columns/rows. The current ANA frame target is chunky-first/C2P, so this
+     * backend is intentionally inactive until that playfield exists. Games can
+     * still request ANA_SCROLL_BACKEND_HARDWARE; ANA will use the conservative
+     * tile-layer software path rather than the experimental native bridge.
+     */
+    (void)tile_layer;
+    return 0;
+}
+
+static int ana_tile_layer_should_request_hardware_scroll(
+    const ANA_TileLayer* tile_layer)
+{
+    if (tile_layer == NULL ||
+            (tile_layer->scroll_backend != ANA_SCROLL_BACKEND_AUTO &&
+                tile_layer->scroll_backend != ANA_SCROLL_BACKEND_HARDWARE)) {
+        return 0;
+    }
+
+    return ana_tile_layer_can_use_hardware_scroll(tile_layer);
+}
+
 void ana_tile_layer_init(
     ANA_TileLayer* tile_layer,
     ANA_LayerKind kind,
@@ -2860,6 +2953,10 @@ void ana_tile_layer_init(
     tile_layer->map_height = map_height;
     tile_layer->previous_camera_x = -1;
     tile_layer->previous_camera_y = -1;
+    tile_layer->scroll_backend = ANA_SCROLL_BACKEND_AUTO;
+    tile_layer->scroll_sync = ANA_SCROLL_SYNC_AUTO;
+    tile_layer->native_scroll_active = 0;
+    tile_layer->hardware_scroll_active = 0;
     tile_layer->clear_color = 0u;
 }
 
@@ -2920,6 +3017,87 @@ void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer)
     ana_layer_mark_dirty(&tile_layer->layer);
 }
 
+void ana_tile_layer_set_scroll_backend(
+    ANA_TileLayer* tile_layer,
+    ANA_ScrollBackend backend)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    if (backend < ANA_SCROLL_BACKEND_AUTO ||
+            backend > ANA_SCROLL_BACKEND_HARDWARE) {
+        backend = ANA_SCROLL_BACKEND_AUTO;
+    }
+
+    if (tile_layer->scroll_backend == backend) {
+        return;
+    }
+
+    tile_layer->scroll_backend = backend;
+    tile_layer->native_scroll_active = 0;
+    tile_layer->hardware_scroll_active = 0;
+    ana_tile_layer_invalidate(tile_layer);
+}
+
+ANA_ScrollBackend ana_tile_layer_scroll_backend(const ANA_TileLayer* tile_layer)
+{
+    if (tile_layer == NULL) {
+        return ANA_SCROLL_BACKEND_AUTO;
+    }
+
+    return tile_layer->scroll_backend;
+}
+
+void ana_tile_layer_set_scroll_sync(
+    ANA_TileLayer* tile_layer,
+    ANA_ScrollSync sync)
+{
+    if (tile_layer == NULL) {
+        return;
+    }
+
+    if (sync < ANA_SCROLL_SYNC_AUTO || sync > ANA_SCROLL_SYNC_DIRTY) {
+        sync = ANA_SCROLL_SYNC_AUTO;
+    }
+
+    if (tile_layer->scroll_sync == sync) {
+        return;
+    }
+
+    tile_layer->scroll_sync = sync;
+    ana_tile_layer_invalidate(tile_layer);
+}
+
+ANA_ScrollSync ana_tile_layer_scroll_sync(const ANA_TileLayer* tile_layer)
+{
+    if (tile_layer == NULL) {
+        return ANA_SCROLL_SYNC_AUTO;
+    }
+
+    return tile_layer->scroll_sync;
+}
+
+int ana_tile_layer_native_scroll_available(const ANA_TileLayer* tile_layer)
+{
+    return ana_tile_layer_can_use_native_scroll(tile_layer);
+}
+
+int ana_tile_layer_native_scroll_active(const ANA_TileLayer* tile_layer)
+{
+    return tile_layer != NULL && tile_layer->native_scroll_active;
+}
+
+int ana_tile_layer_hardware_scroll_available(const ANA_TileLayer* tile_layer)
+{
+    return ana_tile_layer_can_use_hardware_scroll(tile_layer);
+}
+
+int ana_tile_layer_hardware_scroll_active(const ANA_TileLayer* tile_layer)
+{
+    return tile_layer != NULL && tile_layer->hardware_scroll_active;
+}
+
 void ana_tile_layer_redraw_world_rect(
     ANA_TileLayer* tile_layer,
     ANA_Rect world_rect)
@@ -2948,6 +3126,8 @@ void ana_tile_layer_draw(ANA_TileLayer* tile_layer)
     ANA_Rect view;
     int screen_dx;
     int screen_dy;
+    int native_scroll_requested;
+    int hardware_scroll_requested;
 
     if (tile_layer == NULL ||
             tile_layer->layer.disabled == ANA_LAYER_DISABLED_VALUE ||
@@ -2958,6 +3138,8 @@ void ana_tile_layer_draw(ANA_TileLayer* tile_layer)
 
     viewport = ana_tile_layer_viewport_bounds(tile_layer);
     view = ana_camera_world_view(&tile_layer->layer.camera);
+    tile_layer->native_scroll_active = 0;
+    tile_layer->hardware_scroll_active = 0;
 
     if (tile_layer->previous_camera_x < 0 ||
             tile_layer->previous_camera_y < 0 ||
@@ -2992,6 +3174,22 @@ void ana_tile_layer_draw(ANA_TileLayer* tile_layer)
             viewport.h);
         ana_tile_layer_draw_tiles_in_world_rect(tile_layer, view);
     } else {
+        hardware_scroll_requested =
+            ana_tile_layer_should_request_hardware_scroll(tile_layer);
+        native_scroll_requested = 0;
+        if (!hardware_scroll_requested) {
+            native_scroll_requested =
+                ana_tile_layer_should_request_native_scroll(tile_layer);
+        }
+        tile_layer->hardware_scroll_active = hardware_scroll_requested;
+        tile_layer->native_scroll_active = native_scroll_requested;
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
+        ana_amiga_native_scroll_requested = native_scroll_requested;
+        ana_amiga_native_scroll_sync_chunky =
+            native_scroll_requested ?
+                ana_tile_layer_native_scroll_sync_chunky(tile_layer) :
+                1;
+#endif
         ana_scroll_rect(
             viewport.x,
             viewport.y,
@@ -3000,6 +3198,10 @@ void ana_tile_layer_draw(ANA_TileLayer* tile_layer)
             screen_dx,
             screen_dy,
             tile_layer->clear_color);
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
+        ana_amiga_native_scroll_requested = 0;
+        ana_amiga_native_scroll_sync_chunky = 1;
+#endif
         ana_tile_layer_redraw_exposed_scroll_strips(
             tile_layer,
             screen_dx,
@@ -3828,8 +4030,10 @@ void ana_clear(unsigned char color_index)
     color_index = (unsigned char)(color_index & 0x0f);
 
 #ifdef ANA_TARGET_AMIGA
-#ifdef ANA_AMIGA_VISIBLE_SCROLL_ENABLED
+#ifdef ANA_AMIGA_NATIVE_SCROLL_ENABLED
     ana_amiga_visible_scroll_pending = 0;
+    ana_amiga_native_scroll_requested = 0;
+    ana_amiga_native_scroll_sync_chunky = 1;
 #endif
     ana_amiga_clear_draw_framebuffer(color_index);
     ana_amiga_clear_requested = 1;
@@ -3926,7 +4130,7 @@ static void ana_scroll_chunky_rect(
     }
 }
 
-#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_VISIBLE_SCROLL_ENABLED)
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
 static int ana_amiga_scroll_visible_bitmap_rect(
     int x,
     int y,
@@ -3994,8 +4198,9 @@ void ana_scroll_rect(
     int dy,
     unsigned char clear_color)
 {
-#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_VISIBLE_SCROLL_ENABLED)
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
     int visible_scroll_done;
+    int scroll_chunky;
 #endif
 
     if (!ana_gfx_opened || (dx == 0 && dy == 0)) {
@@ -4013,16 +4218,21 @@ void ana_scroll_rect(
         return;
     }
 
-#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_VISIBLE_SCROLL_ENABLED)
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
     visible_scroll_done = 0;
-    if (ana_gfx_render_mode == ANA_RENDER_TILE_SCROLL ||
-            ana_gfx_render_mode == ANA_RENDER_SIDE_SCROLL ||
-            ana_gfx_render_mode == ANA_RENDER_VERTICAL_SCROLL ||
-            ana_gfx_render_mode == ANA_RENDER_TILE_4WAY) {
+    scroll_chunky = 1;
+    if (ana_amiga_native_scroll_requested &&
+            (ana_gfx_render_mode == ANA_RENDER_TILE_SCROLL ||
+                ana_gfx_render_mode == ANA_RENDER_SIDE_SCROLL ||
+                ana_gfx_render_mode == ANA_RENDER_VERTICAL_SCROLL ||
+                ana_gfx_render_mode == ANA_RENDER_TILE_4WAY)) {
         visible_scroll_done =
             ana_amiga_scroll_visible_bitmap_rect(x, y, width, height, dx, dy);
         if (visible_scroll_done) {
             ana_amiga_visible_scroll_pending = 1;
+            if (!ana_amiga_native_scroll_sync_chunky) {
+                scroll_chunky = 0;
+            }
         } else {
             ana_amiga_visible_scroll_pending = 0;
             ana_amiga_mark_dirty_rect(x, y, x + width, y + height);
@@ -4038,14 +4248,18 @@ void ana_scroll_rect(
 #endif
 
     /*
-     * Keep the chunky source synchronized even when the visible Amiga bitmap
-     * has already been blitter-scrolled. Dirty C2P regions may cover restored
-     * sprites or exposed strips plus surrounding background; if chunky is left
-     * at the old camera position those regions can write stale pixels back into
-     * the visible bitmap. This is an experimental bridge until ANA has a native
-     * hardware-scroll tile backend that draws directly into bitplanes.
+     * The conservative Amiga bridge keeps chunky synchronized after visible
+     * bitmap scrolls so later C2P writes cannot restore stale pixels. Tile
+     * layers that redraw every exposed/dirty region from callbacks can opt into
+     * ANA_SCROLL_SYNC_DIRTY and skip this copy.
      */
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
+    if (scroll_chunky) {
+        ana_scroll_chunky_rect(x, y, width, height, dx, dy);
+    }
+#else
     ana_scroll_chunky_rect(x, y, width, height, dx, dy);
+#endif
 
     if (dy > 0) {
         ana_fill_rect(clear_color, x, y, width, dy);

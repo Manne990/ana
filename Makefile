@@ -26,8 +26,10 @@ AMIGA_DEBUG_CFLAGS ?= $(AMIGA_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_BUFFERED_DEBUG_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_SYNC_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_AMIGA_DIRECT_PRESENT -DANA_AMIGA_DIRECT_PRESENT_SYNC -DANA_DEBUG_STATS
 AMIGA_A1200_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68020 -DANA_TARGET_AMIGA -DANA_AMIGA_A1200_BASELINE
-# The visible-scroll bridge is still experimental and can leave stale pixels.
-# Keep it opt-in until the native hardware-scroll backend exists.
+# Direct-present is the normal Amiga presentation path. Scrolling tile layers
+# can request ANA_SCROLL_BACKEND_HARDWARE; until the planar fine-scroll backend
+# exists this uses the conservative tile-layer path. The transitional
+# visible-bitmap bridge is opt-in via ANA_SCROLL_BACKEND_NATIVE only.
 AMIGA_A1200_PRESENT_CFLAGS ?= $(AMIGA_PRESENT_CFLAGS)
 AMIGA_A1200_CFLAGS ?= $(AMIGA_A1200_BASE_CFLAGS) $(AMIGA_A1200_PRESENT_CFLAGS)
 AMIGA_A1200_DEBUG_CFLAGS ?= $(AMIGA_A1200_CFLAGS) -DANA_DEBUG_STATS

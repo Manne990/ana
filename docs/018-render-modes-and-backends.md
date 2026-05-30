@@ -24,11 +24,15 @@ blitter och overdraw-buffertar dar det ar ratt teknik.
 huvudvy, inte en slutgiltig begransning. Senare API ska kunna lagga render mode
 pa scen- eller layer-niva.
 
-A1200-bygget defaultar for narvarande till den sakra direct-present/chunky-C2P-
-vagen for side-/tile-scroll. Det finns en experimentell visible-scroll-
-overgangsbackend bakom `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`, men den ar inte
-default eftersom den kan ge stale-pixel-artefakter. Den ska inte forvaxlas med
-den slutliga BPLCON1/bitplane-pointer-hardware-scrollen.
+A1200-bygget kan begara dedikerad native scroll per tile layer med
+`ANA_SCROLL_BACKEND_HARDWARE`. Den riktiga BPLCON1/bitplane-pointer-vagen ar
+annu inte klar, sa `HARDWARE` faller tillbaka till den konservativa
+tile-layer-vagen i stallet for den experimentella visible-bitmap-bron.
+`ANA_SCROLL_BACKEND_AUTO` far valja snabbaste stabila tillgangliga backend,
+`ANA_SCROLL_BACKEND_NATIVE` begar bridgen uttryckligen for backend-experiment
+och `ANA_SCROLL_BACKEND_SOFTWARE` tvingar portabel redraw. Denna API-yta gor
+att ramverket kan byta till den riktiga hardware-scroll-backenden utan att
+spelkoden ska behova skrivas om.
 
 ## Mal
 

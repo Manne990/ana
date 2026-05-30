@@ -75,11 +75,15 @@ hazards, a discreet fullscreen HUD, SFX, and a looped MOD. It is intentionally
 kept readable so it can show the normal ANA application split for a scrolling
 action game. The renderer now uses ANA's framework-level `ANA_TileLayer` for
 the scrolling playfield: the game supplies tile read/draw callbacks while the
-framework owns camera/view strip redraw. A1200 direct-present builds currently
-default to the safe chunky/C2P fallback. The experimental visible-scroll bridge
-remains opt-in behind `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL` because it can
-leave stale pixels while scrolling. Correct smooth platform scrolling still
-needs the planned bitplane-pointer/fine-scroll backend. The sample declares
+framework owns camera/view strip redraw. Byte Brothers requests
+`ANA_SCROLL_BACKEND_HARDWARE` for the playfield. `HARDWARE` is the high-level
+"dedicated native scroll" request. Current Amiga direct-present builds keep
+that path conservative until the BPLCON1/BPLxPTR fine-scroll backend exists:
+`HARDWARE` does not fall through to the experimental visible-bitmap bridge.
+`NATIVE` explicitly requests that bridge for backend experiments, and
+`SOFTWARE` forces the portable redraw path. This is the framework hook needed
+by scrolling games, but it is still not the final bitplane-pointer backend.
+The sample declares
 `ANA_RENDER_SIDE_SCROLL` and tags its
 playfield, sprite, and HUD work as `ANA_Layer` instances so the framework can
 distinguish scrolling, actor, and overlay intent. The planned

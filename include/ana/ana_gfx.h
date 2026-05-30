@@ -60,6 +60,34 @@ typedef enum ANA_LayerKind {
     ANA_LAYER_RAYCAST_VIEW = 9
 } ANA_LayerKind;
 
+typedef enum ANA_ScrollBackend {
+    /* Let ANA choose the fastest available backend for the layer. */
+    ANA_SCROLL_BACKEND_AUTO = 0,
+    /* Portable redraw path; useful for comparisons and conservative builds. */
+    ANA_SCROLL_BACKEND_SOFTWARE = 1,
+    /*
+     * Transitional Amiga direct-present blitter-visible-bitmap scroll bridge.
+     * This is useful for backend experiments, but it is not true hardware
+     * fine scroll.
+     */
+    ANA_SCROLL_BACKEND_NATIVE = 2,
+    /*
+     * Dedicated native hardware scroll path. If it is unavailable, ANA uses a
+     * conservative software tile-layer path instead of falling through to the
+     * experimental bridge.
+     */
+    ANA_SCROLL_BACKEND_HARDWARE = 3
+} ANA_ScrollBackend;
+
+typedef enum ANA_ScrollSync {
+    /* Let ANA choose a conservative source-buffer sync policy. */
+    ANA_SCROLL_SYNC_AUTO = 0,
+    /* Keep the chunky source buffer synchronized after scrolls. */
+    ANA_SCROLL_SYNC_CHUNKY = 1,
+    /* Redraw exposed and dirty regions from callbacks after native scrolls. */
+    ANA_SCROLL_SYNC_DIRTY = 2
+} ANA_ScrollSync;
+
 typedef struct ANA_RetainedLayer {
     ANA_RedrawCallback redraw;
     void* user_data;
@@ -106,6 +134,10 @@ typedef struct ANA_TileLayer {
     int map_height;
     int previous_camera_x;
     int previous_camera_y;
+    ANA_ScrollBackend scroll_backend;
+    ANA_ScrollSync scroll_sync;
+    int native_scroll_active;
+    int hardware_scroll_active;
     unsigned char clear_color;
 } ANA_TileLayer;
 
@@ -228,6 +260,18 @@ void ana_tile_layer_set_camera(
 void ana_tile_layer_set_clear_color(
     ANA_TileLayer* tile_layer,
     unsigned char clear_color);
+void ana_tile_layer_set_scroll_backend(
+    ANA_TileLayer* tile_layer,
+    ANA_ScrollBackend backend);
+ANA_ScrollBackend ana_tile_layer_scroll_backend(const ANA_TileLayer* tile_layer);
+void ana_tile_layer_set_scroll_sync(
+    ANA_TileLayer* tile_layer,
+    ANA_ScrollSync sync);
+ANA_ScrollSync ana_tile_layer_scroll_sync(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_native_scroll_available(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_native_scroll_active(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_hardware_scroll_available(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_hardware_scroll_active(const ANA_TileLayer* tile_layer);
 void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer);
 void ana_tile_layer_draw(ANA_TileLayer* tile_layer);
 void ana_tile_layer_redraw_world_rect(

@@ -270,21 +270,33 @@ Low-level graphics helpers:
 
 `ana_scroll_rect` moves an existing screen rectangle by a signed delta and
 fills newly exposed strips with a clear color. It is intended as the first
-portable primitive for scrolling samples; higher-level tilemap and scroll-layer
-APIs are still planned separately. On A1200 direct-present builds ANA currently
-defaults to the safe chunky/C2P path for correctness. An opt-in experimental
-bridge, `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`, can blitter-scroll the visible
-bitmap and sync the chunky source, but it can leave stale pixels and is not the
-final performance path for platformers or shooters. The planned Amiga
-performance path is a dedicated scroll-layer backend with hardware fine scroll,
-bitplane pointer coarse scroll, and blitter-updated incoming tile strips.
+portable primitive for scrolling samples.
+
+Tilemap scrolling is exposed through `ANA_TileLayer`. The game supplies tile
+read/draw callbacks and ANA owns camera movement, exposed strip redraw, and
+backend selection:
+
+- `ana_tile_layer_set_scroll_backend`
+- `ana_tile_layer_scroll_backend`
+- `ana_tile_layer_native_scroll_available`
+- `ana_tile_layer_native_scroll_active`
+- `ana_tile_layer_hardware_scroll_available`
+- `ana_tile_layer_hardware_scroll_active`
+
+Use `ANA_SCROLL_BACKEND_HARDWARE` when a scrolling tile layer should use a
+dedicated Amiga hardware-scroll path. `SOFTWARE` forces portable redraw, and
+`NATIVE` explicitly requests the current direct-present visible-bitmap bridge
+for backend experiments. Current A1200 direct-present builds do not route
+`HARDWARE` through that bridge; they use the conservative tile-layer path until
+the final Amiga scroll implementation exists. The planned high-performance
+path is hardware fine scroll, bitplane pointer coarse scroll, and
+blitter-updated incoming tile strips.
 
 Scrolling games should choose the most specific render mode available:
 `ANA_RENDER_SIDE_SCROLL`, `ANA_RENDER_VERTICAL_SCROLL`, or
 `ANA_RENDER_TILE_4WAY`. `ANA_RENDER_TILE_SCROLL` remains available as a generic
-compatibility contract. These modes do not yet enable hardware scroll by
-themselves, but they make game intent visible to the runtime, docs, tests, and
-future backend selection.
+compatibility contract. These modes make game intent visible to the runtime,
+docs, tests, and backend selection.
 
 Small game helpers:
 

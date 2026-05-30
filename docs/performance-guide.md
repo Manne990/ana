@@ -215,13 +215,16 @@ effectively become dirty even if only a few sprites changed.
 Byte Brothers now uses `ANA_TileLayer` with tile read/draw callbacks, so the
 framework owns camera/view strip redraw for the scrolling playfield. This
 reduced example-side bookkeeping and made the scroll contract explicit. A1200
-direct-present builds currently default to the safe chunky/C2P fallback for
-correctness. ANA still has an opt-in `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`
-bridge that blitter-scrolls the visible bitmap and syncs chunky source data, but
-it can leave stale pixels during scrolling and is not a release baseline.
-Production scrolling needs a native hardware-scroll backend. Byte Brothers
-declares `ANA_RENDER_SIDE_SCROLL`, which is the mode the future platformer
-backend should key from. Vertical shooters should use
+direct-present builds can request `ANA_SCROLL_BACKEND_HARDWARE` on an
+`ANA_TileLayer`. That is the high-level dedicated hardware-scroll request.
+Current builds keep this path conservative until the BPLCON1/BPLxPTR backend
+exists; `HARDWARE` does not fall through to the experimental visible-bitmap
+bridge. `ANA_SCROLL_BACKEND_SOFTWARE` forces the portable path, and
+`ANA_SCROLL_BACKEND_NATIVE` explicitly requests the bridge for backend
+experiments. Full bitplane-pointer scrolling is still needed for the best
+platformer performance. Byte Brothers declares `ANA_RENDER_SIDE_SCROLL`, which
+is the mode the platformer backend keys from.
+Vertical shooters should use
 `ANA_RENDER_VERTICAL_SCROLL`; free-camera tilemap games should use
 `ANA_RENDER_TILE_4WAY`.
 

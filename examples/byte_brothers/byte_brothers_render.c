@@ -348,6 +348,12 @@ void bb_render_reset(void)
         bb_draw_tile_for_layer,
         0);
     ana_tile_layer_set_clear_color(&bb_playfield_layer, 0u);
+    ana_tile_layer_set_scroll_backend(
+        &bb_playfield_layer,
+        ANA_SCROLL_BACKEND_HARDWARE);
+    ana_tile_layer_set_scroll_sync(
+        &bb_playfield_layer,
+        ANA_SCROLL_SYNC_DIRTY);
     ana_layer_init(&bb_sprite_layer, ANA_LAYER_SPRITES, 10);
     ana_layer_init(&bb_hud_layer, ANA_LAYER_HUD, 100);
     hud_viewport = ana_rect_make(0, 0, BB_SCREEN_W, BB_HUD_H);

@@ -13,13 +13,16 @@ Nuvarande Byte Brothers-scroll anvander `ANA_Camera` for
 world/screen-konvertering och `ANA_TileLayer` for det scrollande playfieldet.
 Spelet levererar tile read/draw callbacks, medan ramverket ager viewport,
 kamera, exponerade strips och redraw. Detta har flyttat tile-synlighet och
-strip-redraw ut ur exemplet och tagit bort tidigare synliga scrollartefakter.
-Pa Amiga direct-present gar 68000-bygget fortfarande via den sakra
-chunky-buffer-vagen. A1200-bygget defaultar tills vidare till den sakra
-chunky/C2P-vagen. Den experimentella visible-scroll-overgangsbackenden finns
-kvar bakom `ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`, men ar inte default eftersom
-tester visar stale-pixel-artefakter vid scroll. Detta ar ett viktigt API-steg,
-men ska inte betraktas som ANA:s langsiktiga scrollmodell.
+strip-redraw ut ur exemplet. Byte Brothers begar nu
+`ANA_SCROLL_BACKEND_HARDWARE` for playfieldet. Det ar ramverkets publika
+"snabbaste native scroll"-begaran. Den riktiga Amiga-backenden finns annu inte:
+den ska bygga pa dedikerade planar playfields, BPLCON1-finscroll,
+bitplane-pekarjustering och blitterritade inkommande tile-kolumner/rader. Tills
+den ar klar faller `HARDWARE` tillbaka till den konservativa tile-layer-vagen.
+Den gamla visible-bitmap-bryggan ar bara tillganglig via explicit
+`ANA_SCROLL_BACKEND_NATIVE`, eftersom testerna visade stale-pixel-artefakter vid
+scroll. Detta ar ett viktigt API-steg, men ska inte betraktas som ANA:s slutliga
+scrollmodell.
 
 Byte Brothers satter `ANA_Game.render_mode = ANA_RENDER_SIDE_SCROLL`. Det ar
 inte en fardig hardware-scroll-backend, men det gor side-scrollbehovet explicit
@@ -205,10 +208,10 @@ For vertikal shooter-scroll ar samma princip:
 Alla plattformar kan anvanda viewport redraw. Den ar enkel och korrekt men inte
 prestationsmalet for stora scrollande spel pa Amiga.
 
-### Experimentell synced visible scroll
+### Scroll backend-val
 
-Det finns en opt-in A1200-overgangsbackend bakom
-`ANA_AMIGA_EXPERIMENTAL_VISIBLE_SCROLL`:
+`ANA_SCROLL_BACKEND_NATIVE` aktiverar den experimentella
+A1200/direct-present-bron:
 
 - flytta befintlig synlig bitmap med blittern
 - flytta chunky-kallan pa samma satt
@@ -216,10 +219,15 @@ Det finns en opt-in A1200-overgangsbackend bakom
 - rita om moving-object restore-regioner i chunky-kallan
 - C2P-konvertera bara dessa dirty regioner
 
-Denna vag kan ge hogre FPS, men testerna visar att den fortfarande kan lamna
-stale pixels/artefakter vid scroll. Den ska darfor inte vara standardvag. Den
-ar kvar som undersokningsspar tills native hardware-scroll-backenden ersatter
-den.
+`ANA_SCROLL_BACKEND_HARDWARE` ar den publika intentionen: anvand en dedikerad
+native hardware-scroll-backend nar en sadan finns. I nuvarande
+A1200/direct-present-backend ar den riktiga BPLCON1/BPLxPTR-vagen inte klar,
+sa `HARDWARE` faller tillbaka till den konservativa tile-layer-vagen i stallet
+for den experimentella visible-bitmap-bron. `ANA_SCROLL_BACKEND_NATIVE` begar
+uttryckligen den bridgen for backend-experiment, `ANA_SCROLL_BACKEND_AUTO` far
+valja snabbaste stabila tillgangliga backend och `ANA_SCROLL_BACKEND_SOFTWARE`
+tvingar portabel redraw. Den slutliga vagen ska anvanda BPLCON1-finscroll,
+bitplane-pekarjustering och blitterritade inkommande tile-kolumner/rader.
 
 ### Snapped dirty strips
 
