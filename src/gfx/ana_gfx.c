@@ -2887,6 +2887,7 @@ static int ana_tile_layer_should_request_native_scroll(
     return ana_tile_layer_can_use_native_scroll(tile_layer);
 }
 
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_NATIVE_SCROLL_ENABLED)
 static int ana_tile_layer_native_scroll_sync_chunky(
     const ANA_TileLayer* tile_layer)
 {
@@ -2904,6 +2905,7 @@ static int ana_tile_layer_native_scroll_sync_chunky(
         return 1;
     }
 }
+#endif
 
 static int ana_tile_layer_can_use_hardware_scroll(
     const ANA_TileLayer* tile_layer)
