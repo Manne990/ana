@@ -216,14 +216,20 @@ Byte Brothers now uses `ANA_TileLayer` with tile read/draw callbacks, so the
 framework owns camera/view strip redraw for the scrolling playfield. This
 reduced example-side bookkeeping and made the scroll contract explicit. A1200
 direct-present builds can request `ANA_SCROLL_BACKEND_HARDWARE` on an
-`ANA_TileLayer`. That is the high-level dedicated hardware-scroll request.
-Current builds keep this path conservative until the BPLCON1/BPLxPTR backend
-exists; `HARDWARE` does not fall through to the experimental visible-bitmap
-bridge. `ANA_SCROLL_BACKEND_SOFTWARE` forces the portable path, and
-`ANA_SCROLL_BACKEND_NATIVE` explicitly requests the bridge for backend
-experiments. Full bitplane-pointer scrolling is still needed for the best
-platformer performance. Byte Brothers declares `ANA_RENDER_SIDE_SCROLL`, which
-is the mode the platformer backend keys from.
+`ANA_TileLayer`. On eligible side-scroll layers this now activates the first
+direct-present Amiga hardware-scroll path: a wide planar playfield bitmap,
+`RasInfo->RxOffset` camera scroll, direct planar tile/actor fills, and a small
+planar HUD cache for fixed overlays. When a layer uses `ANA_SCROLL_SYNC_DIRTY`,
+the Amiga hardware path can skip chunky-shadow synchronization and avoid the
+old C2P overlay cost entirely for fill-rect based actors/HUD. Byte Brothers now
+uses actor redraw coalescing plus this hardware path, and the measured
+A1200-debug run reached 50 FPS with zero converted pixels per frame.
+`ANA_SCROLL_BACKEND_SOFTWARE` forces the portable path, and
+`ANA_SCROLL_BACKEND_NATIVE` explicitly requests the older visible-bitmap bridge
+for backend experiments. The next performance step is a bounded ring/overdraw
+playfield with blitter-updated incoming strips instead of the current
+full-width world bitmap. Byte Brothers declares
+`ANA_RENDER_SIDE_SCROLL`, which is the mode the platformer backend keys from.
 Vertical shooters should use
 `ANA_RENDER_VERTICAL_SCROLL`; free-camera tilemap games should use
 `ANA_RENDER_TILE_4WAY`.

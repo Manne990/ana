@@ -243,6 +243,30 @@ hela viewporten.
 
 ### Hardware scroll
 
+Forsta Amiga-backenden finns for horisontell side-scroll i direct-present-
+byggen:
+
+- `ANA_SCROLL_BACKEND_HARDWARE` kan aktivera en bred planar bitmap som
+  scrollande playfield
+- viewportens `RasInfo->RxOffset` flyttas efter kamerans x-position
+- tile-callbacks som ritar med `ana_fill_rect` kan rita direkt i playfieldet
+- actor-/HUD-rectfills kan ritas direkt i den offsetade planar-bitmapen
+- HUD-lager kan cacheas i en liten planar bitmap och blittas till aktuell
+  `RxOffset` nar kameran ror sig
+- lager som valjer `ANA_SCROLL_SYNC_DIRTY` kan hoppa over chunky-shadow-sync
+  sa direct-planar pathen inte betalar extra CPU-memsets
+
+Begransningar i forsta steget:
+
+- endast `ANA_LAYER_SIDE_SCROLL`
+- endast horisontell kamera (`camera.y == 0`)
+- viewporten maste vara full skarmbredd
+- playfield-bredden ar begransad till 2048 pixlar
+- tile-callbacks som anvander andra ritprimitiver an `ana_fill_rect` faller
+  inte automatiskt in i planar-playfieldet annu
+- HUD-cachen ar for narvarande en Amiga-backend-optimering for skarmfasta
+  HUD-lager ovanpa hardware-scrollat playfield
+
 Langsiktig backend:
 
 - anvand bitplane-start/fine-scroll dar det ar praktiskt
@@ -250,8 +274,9 @@ Langsiktig backend:
 - rita nya tile strips i marginalen
 - behall samma `ANA_Camera`/`ANA_TileLayer`-API
 
-Detta ar troligen nodvandigt for stabil, mjuk fullskarmscroll pa stock A1200
-utan att offra for mycket CPU till C2P.
+Den forsta implementationen ritar om hela playfieldet nar lagret invalideras.
+Nasta prestandasteg ar att ga fran full world-bitmap till ringbuffer/
+overdraw-marginaler med blitterritade inkommande tile-strips.
 
 ## Byte Brothers-migrering
 

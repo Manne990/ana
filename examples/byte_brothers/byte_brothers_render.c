@@ -205,10 +205,72 @@ static void bb_draw_tile_for_layer(
     bb_draw_tile_at((char)tile, x, y);
 }
 
-static void bb_redraw_world_rect(ANA_Rect rect)
+static long bb_rect_area(ANA_Rect rect)
+{
+    if (ana_rect_is_empty(rect)) {
+        return 0L;
+    }
+
+    return (long)rect.w * rect.h;
+}
+
+static int bb_redraw_rects_should_merge(ANA_Rect a, ANA_Rect b)
+{
+    ANA_Rect merged;
+    long merged_area;
+    long separate_area;
+
+    if (ana_rect_intersects(a, b)) {
+        return 1;
+    }
+
+    merged = ana_rect_union(a, b);
+    merged_area = bb_rect_area(merged);
+    separate_area = bb_rect_area(a) + bb_rect_area(b);
+    return merged_area <= separate_area + 64L;
+}
+
+static void bb_coalesce_redraw_rects(
+    ANA_Rect* rects,
+    int* rect_count,
+    int index)
+{
+    int i;
+
+    i = 0;
+    while (i < *rect_count) {
+        if (i == index) {
+            i++;
+            continue;
+        }
+
+        if (ana_rect_contains(rects[index], rects[i]) ||
+                ana_rect_contains(rects[i], rects[index]) ||
+                bb_redraw_rects_should_merge(rects[index], rects[i])) {
+            rects[index] = ana_rect_union(rects[index], rects[i]);
+            if (i < *rect_count - 1) {
+                rects[i] = rects[*rect_count - 1];
+            }
+            (*rect_count)--;
+            if (i < index) {
+                index--;
+            }
+            i = 0;
+            continue;
+        }
+
+        i++;
+    }
+}
+
+static void bb_add_actor_redraw_rect(
+    ANA_Rect* rects,
+    int* rect_count,
+    ANA_Rect rect)
 {
     ANA_Rect padded;
     ANA_Rect world_view;
+    int i;
 
     padded = ana_rect_make(rect.x - 2, rect.y - 2, rect.w + 4, rect.h + 4);
     world_view = ana_camera_world_view(&bb_camera);
@@ -218,24 +280,52 @@ static void bb_redraw_world_rect(ANA_Rect rect)
         return;
     }
 
-    ana_tile_layer_redraw_world_rect(&bb_playfield_layer, padded);
+    for (i = 0; i < *rect_count; i++) {
+        if (ana_rect_contains(rects[i], padded)) {
+            return;
+        }
+
+        if (ana_rect_contains(padded, rects[i]) ||
+                bb_redraw_rects_should_merge(rects[i], padded)) {
+            rects[i] = ana_rect_union(rects[i], padded);
+            bb_coalesce_redraw_rects(rects, rect_count, i);
+            return;
+        }
+    }
+
+    if (*rect_count < 2 + (BB_MAX_ENEMIES * 2)) {
+        rects[*rect_count] = padded;
+        (*rect_count)++;
+        return;
+    }
+
+    rects[0] = ana_rect_union(rects[0], padded);
+    bb_coalesce_redraw_rects(rects, rect_count, 0);
 }
 
 static void bb_redraw_previous_and_current_actors(void)
 {
     int i;
+    int rect_count;
     ANA_Rect rect;
+    ANA_Rect redraw_rects[2 + (BB_MAX_ENEMIES * 2)];
+
+    rect_count = 0;
 
     rect = bb_world_rect(bb_prev_player_x, bb_prev_player_y, BB_PLAYER_W, BB_PLAYER_H);
-    bb_redraw_world_rect(rect);
+    bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
     rect = bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H);
-    bb_redraw_world_rect(rect);
+    bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
 
     for (i = 0; i < bb_enemy_count; i++) {
         rect = bb_world_rect(bb_prev_enemy_x[i], bb_prev_enemy_y[i], 12, 12);
-        bb_redraw_world_rect(rect);
+        bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
         rect = bb_world_rect(bb_enemies[i].x, bb_enemies[i].y, 12, 12);
-        bb_redraw_world_rect(rect);
+        bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+    }
+
+    for (i = 0; i < rect_count; i++) {
+        ana_tile_layer_redraw_world_rect(&bb_playfield_layer, redraw_rects[i]);
     }
 }
 
@@ -380,19 +470,24 @@ void bb_render_invalidate(void)
 void bb_render_draw(void)
 {
     int hud_dirty;
+    int hardware_scroll_available;
 
     hud_dirty = bb_score != bb_prev_score ||
         bb_lives != bb_prev_lives ||
         bb_level_index != bb_prev_level ||
         bb_fragments_left != bb_prev_fragments;
     bb_sync_layers();
+    hardware_scroll_available =
+        ana_tile_layer_hardware_scroll_available(&bb_playfield_layer);
 
     if (bb_full_redraw || bb_prev_camera_x < 0 || bb_prev_camera_y < 0) {
-        ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
-        ana_layer_mark_dirty(&bb_hud_layer);
-        ana_layer_draw_if_dirty(&bb_hud_layer);
+        if (!hardware_scroll_available) {
+            ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
+        }
         ana_tile_layer_invalidate(&bb_playfield_layer);
         ana_tile_layer_draw(&bb_playfield_layer);
+        ana_layer_mark_dirty(&bb_hud_layer);
+        ana_layer_draw_if_dirty(&bb_hud_layer);
         bb_draw_actors();
         bb_full_redraw = 0;
         bb_commit_state();

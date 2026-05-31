@@ -25,14 +25,16 @@ huvudvy, inte en slutgiltig begransning. Senare API ska kunna lagga render mode
 pa scen- eller layer-niva.
 
 A1200-bygget kan begara dedikerad native scroll per tile layer med
-`ANA_SCROLL_BACKEND_HARDWARE`. Den riktiga BPLCON1/bitplane-pointer-vagen ar
-annu inte klar, sa `HARDWARE` faller tillbaka till den konservativa
-tile-layer-vagen i stallet for den experimentella visible-bitmap-bron.
-`ANA_SCROLL_BACKEND_AUTO` far valja snabbaste stabila tillgangliga backend,
-`ANA_SCROLL_BACKEND_NATIVE` begar bridgen uttryckligen for backend-experiment
-och `ANA_SCROLL_BACKEND_SOFTWARE` tvingar portabel redraw. Denna API-yta gor
-att ramverket kan byta till den riktiga hardware-scroll-backenden utan att
-spelkoden ska behova skrivas om.
+`ANA_SCROLL_BACKEND_HARDWARE`. A1200 direct-present har nu en forsta riktig
+hardware-scroll-vag for kvalificerade side-scroll-lager: ramverket allokerar
+en bred planar bitmap, pekar viewportens `RasInfo->BitMap` dit och later
+`RasInfo->RxOffset` folja kamerans x-position. Tile callbacks som ritar med
+`ana_fill_rect` kan skriva direkt i playfieldet, actor-rectfills kan ritas
+direkt till den offsetade planar-bitmapen, och skarmfasta HUD-band kan cacheas
+och blittas till aktuell `RxOffset`. `ANA_SCROLL_BACKEND_AUTO` far valja
+snabbaste stabila tillgangliga backend, `ANA_SCROLL_BACKEND_NATIVE` begar den
+aldre visible-bitmap-bron uttryckligen for backend-experiment och
+`ANA_SCROLL_BACKEND_SOFTWARE` tvingar portabel redraw.
 
 ## Mal
 

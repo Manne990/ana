@@ -284,12 +284,14 @@ backend selection:
 - `ana_tile_layer_hardware_scroll_active`
 
 Use `ANA_SCROLL_BACKEND_HARDWARE` when a scrolling tile layer should use a
-dedicated Amiga hardware-scroll path. `SOFTWARE` forces portable redraw, and
-`NATIVE` explicitly requests the current direct-present visible-bitmap bridge
-for backend experiments. Current A1200 direct-present builds do not route
-`HARDWARE` through that bridge; they use the conservative tile-layer path until
-the final Amiga scroll implementation exists. The planned high-performance
-path is hardware fine scroll, bitplane pointer coarse scroll, and
+dedicated Amiga hardware-scroll path. On eligible A1200 direct-present
+side-scroll layers this path uses a wide planar playfield bitmap plus
+`RasInfo->RxOffset` camera scroll, direct planar `ana_fill_rect` drawing for
+playfield/actors, and a small planar HUD cache for fixed screen layers. Layers
+that opt into `ANA_SCROLL_SYNC_DIRTY` can skip chunky-shadow synchronization in
+this path. `SOFTWARE` forces portable redraw, and `NATIVE` explicitly requests
+the older direct-present visible-bitmap bridge for backend experiments. The
+next high-performance step is a bounded overdraw or ringbuffer playfield with
 blitter-updated incoming tile strips.
 
 Scrolling games should choose the most specific render mode available:

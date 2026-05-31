@@ -552,7 +552,14 @@ static void test_retained_render_helpers(void)
     ana_tile_layer_set_viewport(&tile_layer, ana_rect_make(10, 20, 6, 4));
     ana_tile_layer_set_camera(&tile_layer, &camera);
     ana_tile_layer_set_clear_color(&tile_layer, 9u);
+    ana_tile_layer_set_scroll_backend(
+        &tile_layer,
+        ANA_SCROLL_BACKEND_HARDWARE);
+    assert(ana_tile_layer_scroll_backend(&tile_layer) ==
+        ANA_SCROLL_BACKEND_HARDWARE);
+    assert(!ana_tile_layer_hardware_scroll_available(&tile_layer));
     ana_tile_layer_draw(&tile_layer);
+    assert(!ana_tile_layer_hardware_scroll_active(&tile_layer));
     assert(ana_gfx_draw_pixel(10, 20) == 1);
     assert(ana_gfx_draw_pixel(14, 20) == 2);
     assert(ana_gfx_draw_pixel(12, 22) == 3);

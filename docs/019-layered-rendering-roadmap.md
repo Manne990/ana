@@ -70,9 +70,17 @@ innerloop for A500-lage.
 
 1. Stada nuvarande WIP och behall bara API-delar som hjalper layer-modellen.
 2. Gor `ANA_SCROLL_BACKEND_HARDWARE` till ett sant planar-scroll-kontrakt.
+   Forsta Amiga direct-present-steget finns: en bred planar side-scroll-bitmap
+   med `RasInfo->RxOffset`.
 3. Implementera minsta fungerande planar side-scroll-playfield.
+   Forsta versionen ritar om hela world-playfieldet vid invalidation och
+   anvander Byte Brothers som konsument.
 4. Hall sprites/HUD utanfor scroll-playfieldet.
-5. Anvand Byte Brothers som forsta verifiering.
+   Forsta versionen ritar actor-rectfills direkt i den offsetade planar-
+   bitmapen och cachear HUD-bandet som planar data, sa kamerarorelse kan
+   blitta HUD-cachen i stallet for att kora HUD-callbacken varje frame.
+5. Byt fran full world-bitmap till overdraw/ringbuffer med blitterritade
+   inkommande tile-strips.
 6. Mat artefakter och FPS innan vidare optimering.
 
 Om steg 3 inte snabbt visar verklig planar/hardware-scroll ska arbetet stoppas
