@@ -5,10 +5,15 @@
 /* Dirty redraw renderer for the Byte Brothers scrolling platform sample. */
 
 #define BB_RENDER_SLOTS 3
+#define BB_TILE_DIRTY_RECTS 16
+#define BB_RENDER_ALL_SLOT_MASK ((1u << BB_RENDER_SLOTS) - 1u)
 
 static int bb_full_redraw = 1;
 static int bb_prev_camera_x = -1;
 static int bb_prev_camera_y = -1;
+static ANA_Rect bb_tile_dirty_rects[BB_TILE_DIRTY_RECTS];
+static unsigned char bb_tile_dirty_slot_mask[BB_TILE_DIRTY_RECTS];
+static int bb_tile_dirty_count = 0;
 static int bb_prev_actor_valid[BB_RENDER_SLOTS];
 static int bb_prev_player_x[BB_RENDER_SLOTS];
 static int bb_prev_player_y[BB_RENDER_SLOTS];
@@ -37,6 +42,26 @@ static ANA_Rect bb_world_rect(int x, int y, int w, int h)
 static ANA_Rect bb_world_bounds(void)
 {
     return bb_world_rect(0, 0, BB_MAP_W * BB_TILE, BB_MAP_H * BB_TILE);
+}
+
+static void bb_remove_tile_dirty_rect(int index)
+{
+    int i;
+
+    if (index < 0 || index >= bb_tile_dirty_count) {
+        return;
+    }
+
+    for (i = index; i < bb_tile_dirty_count - 1; i++) {
+        bb_tile_dirty_rects[i] = bb_tile_dirty_rects[i + 1];
+        bb_tile_dirty_slot_mask[i] = bb_tile_dirty_slot_mask[i + 1];
+    }
+    bb_tile_dirty_count--;
+}
+
+static void bb_clear_tile_dirty_rects(void)
+{
+    bb_tile_dirty_count = 0;
 }
 
 static int bb_render_slot(void)
@@ -136,6 +161,8 @@ static void bb_draw_hud(void)
 
     ana_fill_rect(4, 135, 3, 4, 4);
     bb_draw_number(bb_level_index + 1, 143, 3, 4);
+    ana_fill_rect(9, 164, 2, 3, 10);
+    ana_fill_rect(9, 169, 2, 3, 10);
 
     x = 246;
     for (i = 0; i < bb_lives; i++) {
@@ -330,6 +357,40 @@ static void bb_add_actor_redraw_rect(
     bb_coalesce_redraw_rects(rects, rect_count, 0);
 }
 
+static void bb_add_tile_dirty_redraw_rects(
+    ANA_Rect* rects,
+    int* rect_count,
+    int slot,
+    int all_slots)
+{
+    unsigned char slot_mask;
+    int i;
+
+    slot_mask = (unsigned char)(1u << slot);
+    i = 0;
+    while (i < bb_tile_dirty_count) {
+        if ((bb_tile_dirty_slot_mask[i] & slot_mask) == 0u) {
+            i++;
+            continue;
+        }
+
+        bb_add_actor_redraw_rect(rects, rect_count, bb_tile_dirty_rects[i]);
+        if (all_slots) {
+            bb_tile_dirty_slot_mask[i] = 0u;
+        } else {
+            bb_tile_dirty_slot_mask[i] =
+                (unsigned char)(bb_tile_dirty_slot_mask[i] & ~slot_mask);
+        }
+
+        if (bb_tile_dirty_slot_mask[i] == 0u) {
+            bb_remove_tile_dirty_rect(i);
+            continue;
+        }
+
+        i++;
+    }
+}
+
 static ANA_Rect bb_player_redraw_rect(int x, int y)
 {
     return bb_world_rect(x - 10, y, BB_PLAYER_W + 20, BB_PLAYER_H);
@@ -390,7 +451,7 @@ static void bb_draw_actors_in_world_rects(
     }
 }
 
-static void bb_redraw_previous_and_current_actors(int slot)
+static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
 {
     int i;
     int rect_count;
@@ -402,6 +463,11 @@ static void bb_redraw_previous_and_current_actors(int slot)
 
     rect_count = 0;
     player_anim_frame = bb_player_anim_frame();
+    bb_add_tile_dirty_redraw_rects(
+        redraw_rects,
+        &rect_count,
+        slot,
+        all_slots);
 
     player_changed = !bb_prev_actor_valid[slot] ||
         bb_prev_player_x[slot] != bb_player.x ||
@@ -471,50 +537,50 @@ static void bb_draw_player(void)
     sx = rect.x;
     sy = rect.y;
     anim_frame = bb_player_anim_frame();
-    eye_x = bb_player.facing >= 0 ? sx + 13 : sx + 6;
-    front_arm_x = bb_player.facing >= 0 ? sx + 14 : sx + 3;
-    back_arm_x = bb_player.facing >= 0 ? sx + 3 : sx + 14;
+    eye_x = bb_player.facing >= 0 ? sx + 14 : sx + 5;
+    front_arm_x = bb_player.facing >= 0 ? sx + 15 : sx + 1;
+    back_arm_x = bb_player.facing >= 0 ? sx + 1 : sx + 15;
 
-    ana_fill_rect(1, sx + 4, sy, 12, 2);
-    ana_fill_rect(13, sx + 3, sy + 2, 14, 10);
-    ana_fill_rect(5, sx + 5, sy + 3, 10, 8);
-    ana_fill_rect(6, sx + 4, sy + 2, 12, 3);
+    ana_fill_rect(1, sx + 3, sy, 14, 2);
+    ana_fill_rect(13, sx + 2, sy + 2, 16, 10);
+    ana_fill_rect(5, sx + 4, sy + 3, 12, 8);
+    ana_fill_rect(6, sx + 3, sy + 2, 14, 3);
     ana_fill_rect(1, eye_x, sy + 4, 2, 2);
-    ana_fill_rect(13, sx + 4, sy + 11, 12, 14);
-    ana_fill_rect(4, sx + 5, sy + 12, 10, 12);
-    ana_fill_rect(3, sx + 5, sy + 20, 10, 3);
-    ana_fill_rect(1, sx + 7, sy + 14, 6, 2);
+    ana_fill_rect(13, sx + 2, sy + 10, 16, 15);
+    ana_fill_rect(4, sx + 4, sy + 12, 12, 12);
+    ana_fill_rect(3, sx + 4, sy + 20, 12, 3);
+    ana_fill_rect(1, sx + 6, sy + 14, 8, 2);
 
-    ana_fill_rect(13, back_arm_x, sy + 12, 3, 10);
-    ana_fill_rect(4, back_arm_x, sy + 13, 3, 7);
+    ana_fill_rect(13, back_arm_x - 1, sy + 12, 4, 11);
+    ana_fill_rect(4, back_arm_x - 1, sy + 13, 4, 8);
     if (anim_frame == 2) {
-        ana_fill_rect(13, front_arm_x, sy + 14, 3, 9);
-        ana_fill_rect(4, front_arm_x, sy + 14, 3, 6);
+        ana_fill_rect(13, front_arm_x, sy + 14, 4, 10);
+        ana_fill_rect(4, front_arm_x, sy + 14, 4, 7);
     } else {
-        ana_fill_rect(13, front_arm_x, sy + 11, 3, 10);
-        ana_fill_rect(4, front_arm_x, sy + 12, 3, 7);
+        ana_fill_rect(13, front_arm_x, sy + 11, 4, 11);
+        ana_fill_rect(4, front_arm_x, sy + 12, 4, 8);
     }
 
     if (anim_frame == 1) {
-        ana_fill_rect(13, sx + 5, sy + 21, 4, 6);
-        ana_fill_rect(13, sx + 12, sy + 20, 4, 5);
-        ana_fill_rect(13, sx + 3, sy + 25, 7, 3);
-        ana_fill_rect(13, sx + 12, sy + 24, 6, 3);
+        ana_fill_rect(13, sx + 4, sy + 21, 5, 7);
+        ana_fill_rect(13, sx + 12, sy + 20, 5, 6);
+        ana_fill_rect(13, sx + 2, sy + 25, 8, 3);
+        ana_fill_rect(13, sx + 12, sy + 24, 7, 3);
     } else if (anim_frame == 2) {
-        ana_fill_rect(13, sx + 5, sy + 20, 4, 5);
-        ana_fill_rect(13, sx + 12, sy + 21, 4, 6);
-        ana_fill_rect(13, sx + 4, sy + 24, 6, 3);
-        ana_fill_rect(13, sx + 11, sy + 25, 7, 3);
+        ana_fill_rect(13, sx + 4, sy + 20, 5, 6);
+        ana_fill_rect(13, sx + 12, sy + 21, 5, 7);
+        ana_fill_rect(13, sx + 3, sy + 24, 7, 3);
+        ana_fill_rect(13, sx + 11, sy + 25, 8, 3);
     } else if (anim_frame == 3) {
-        ana_fill_rect(13, sx + 5, sy + 21, 5, 4);
-        ana_fill_rect(13, sx + 12, sy + 21, 5, 4);
-        ana_fill_rect(13, sx + 4, sy + 24, 6, 3);
-        ana_fill_rect(13, sx + 12, sy + 24, 6, 3);
+        ana_fill_rect(13, sx + 4, sy + 21, 6, 4);
+        ana_fill_rect(13, sx + 12, sy + 21, 6, 4);
+        ana_fill_rect(13, sx + 3, sy + 24, 7, 3);
+        ana_fill_rect(13, sx + 12, sy + 24, 7, 3);
     } else {
-        ana_fill_rect(13, sx + 5, sy + 21, 4, 6);
-        ana_fill_rect(13, sx + 12, sy + 21, 4, 6);
-        ana_fill_rect(13, sx + 4, sy + 25, 6, 3);
-        ana_fill_rect(13, sx + 11, sy + 25, 6, 3);
+        ana_fill_rect(13, sx + 4, sy + 21, 5, 7);
+        ana_fill_rect(13, sx + 12, sy + 21, 5, 7);
+        ana_fill_rect(13, sx + 3, sy + 25, 7, 3);
+        ana_fill_rect(13, sx + 11, sy + 25, 7, 3);
     }
 
     if (bb_player.dash_ticks > 0) {
@@ -649,13 +715,53 @@ void bb_render_reset(void)
     for (i = 0; i < BB_RENDER_SLOTS; i++) {
         bb_prev_actor_valid[i] = 0;
     }
+    bb_clear_tile_dirty_rects();
     ana_tile_layer_invalidate(&bb_playfield_layer);
 }
 
 void bb_render_invalidate(void)
 {
     bb_full_redraw = 1;
+    bb_clear_tile_dirty_rects();
     ana_tile_layer_invalidate(&bb_playfield_layer);
+}
+
+void bb_render_tile_changed(int tx, int ty)
+{
+    ANA_Rect rect;
+    int i;
+
+    if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
+        return;
+    }
+
+    rect = bb_world_rect(tx * BB_TILE, ty * BB_TILE, BB_TILE, BB_TILE);
+    for (i = 0; i < bb_tile_dirty_count; i++) {
+        if (ana_rect_contains(bb_tile_dirty_rects[i], rect)) {
+            bb_tile_dirty_slot_mask[i] =
+                (unsigned char)BB_RENDER_ALL_SLOT_MASK;
+            return;
+        }
+
+        if (ana_rect_contains(rect, bb_tile_dirty_rects[i]) ||
+                bb_redraw_rects_should_merge(bb_tile_dirty_rects[i], rect)) {
+            bb_tile_dirty_rects[i] =
+                ana_rect_union(bb_tile_dirty_rects[i], rect);
+            bb_tile_dirty_slot_mask[i] =
+                (unsigned char)BB_RENDER_ALL_SLOT_MASK;
+            return;
+        }
+    }
+
+    if (bb_tile_dirty_count >= BB_TILE_DIRTY_RECTS) {
+        bb_render_invalidate();
+        return;
+    }
+
+    bb_tile_dirty_rects[bb_tile_dirty_count] = rect;
+    bb_tile_dirty_slot_mask[bb_tile_dirty_count] =
+        (unsigned char)BB_RENDER_ALL_SLOT_MASK;
+    bb_tile_dirty_count++;
 }
 
 void bb_render_draw(void)
@@ -683,6 +789,7 @@ void bb_render_draw(void)
         ana_layer_draw_if_dirty(&bb_hud_layer);
         bb_draw_actors();
         bb_full_redraw = 0;
+        bb_clear_tile_dirty_rects();
         bb_commit_state(slot);
         return;
     }
@@ -693,7 +800,7 @@ void bb_render_draw(void)
         ana_tile_layer_draw(&bb_playfield_layer);
     }
     slot = bb_render_slot();
-    bb_redraw_previous_and_current_actors(slot);
+    bb_redraw_previous_and_current_actors(slot, !hardware_scroll_available);
 
     if (hud_dirty) {
         ana_layer_mark_dirty(&bb_hud_layer);

@@ -152,8 +152,12 @@ void bb_set_tile(int tx, int ty, char value)
         return;
     }
 
+    if (bb_map[ty][tx] == value) {
+        return;
+    }
+
     bb_map[ty][tx] = value;
-    bb_render_invalidate();
+    bb_render_tile_changed(tx, ty);
 }
 
 int bb_tile_is_solid(char tile)

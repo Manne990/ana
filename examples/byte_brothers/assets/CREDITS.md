@@ -1,5 +1,6 @@
-# Byte Brothers Placeholder Assets
+# Byte Brothers Assets
 
-The first Byte Brothers sample reuses small ANA placeholder MOD/SFX assets from
-the Invaders example so the platformer can exercise music and sound effects
-without adding large binary assets.
+The Byte Brothers sound effects are small ANA placeholder assets.
+
+- `theme.mod`: "10k Reggae Dub" by Jam, reused from the Amaze example so both
+  examples share the same background music.

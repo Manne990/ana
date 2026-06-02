@@ -64,7 +64,7 @@ void bb_assets_load(void)
     config.sfx_can_steal_music = 0;
     config.music_can_use_free_sfx_channels = 0;
     ana_configure_audio(&config);
-    ana_set_music_volume(10);
+    ana_set_music_volume(8);
     ana_set_sound_volume(64);
 
     bb_jump_sound = bb_load_sound_file("jump.anasnd");
