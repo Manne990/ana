@@ -4,13 +4,20 @@
 
 /* Dirty redraw renderer for the Byte Brothers scrolling platform sample. */
 
+#define BB_RENDER_SLOTS 3
+
 static int bb_full_redraw = 1;
 static int bb_prev_camera_x = -1;
 static int bb_prev_camera_y = -1;
-static int bb_prev_player_x = 0;
-static int bb_prev_player_y = 0;
-static int bb_prev_enemy_x[BB_MAX_ENEMIES];
-static int bb_prev_enemy_y[BB_MAX_ENEMIES];
+static int bb_prev_actor_valid[BB_RENDER_SLOTS];
+static int bb_prev_player_x[BB_RENDER_SLOTS];
+static int bb_prev_player_y[BB_RENDER_SLOTS];
+static int bb_prev_player_dash_ticks[BB_RENDER_SLOTS];
+static int bb_prev_player_facing[BB_RENDER_SLOTS];
+static int bb_prev_player_anim_frame[BB_RENDER_SLOTS];
+static int bb_prev_enemy_x[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
+static int bb_prev_enemy_y[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
+static int bb_prev_enemy_alive[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
 static int bb_prev_score = -1;
 static int bb_prev_lives = -1;
 static int bb_prev_level = -1;
@@ -19,9 +26,29 @@ static ANA_TileLayer bb_playfield_layer;
 static ANA_Layer bb_sprite_layer;
 static ANA_Layer bb_hud_layer;
 
+static void bb_draw_player(void);
+static void bb_draw_enemy(const BB_Enemy* enemy);
+
 static ANA_Rect bb_world_rect(int x, int y, int w, int h)
 {
     return ana_rect_make(x, y, w, h);
+}
+
+static ANA_Rect bb_world_bounds(void)
+{
+    return bb_world_rect(0, 0, BB_MAP_W * BB_TILE, BB_MAP_H * BB_TILE);
+}
+
+static int bb_render_slot(void)
+{
+    int slot;
+
+    slot = ana_tile_layer_hardware_scroll_frame_slot(&bb_playfield_layer);
+    if (slot < 0 || slot >= BB_RENDER_SLOTS) {
+        return 0;
+    }
+
+    return slot;
 }
 
 static ANA_Rect bb_view_bounds(void)
@@ -269,12 +296,12 @@ static void bb_add_actor_redraw_rect(
     ANA_Rect rect)
 {
     ANA_Rect padded;
-    ANA_Rect world_view;
+    ANA_Rect world_bounds;
     int i;
 
     padded = ana_rect_make(rect.x - 2, rect.y - 2, rect.w + 4, rect.h + 4);
-    world_view = ana_camera_world_view(&bb_camera);
-    padded = ana_rect_clip(padded, world_view);
+    world_bounds = bb_world_bounds();
+    padded = ana_rect_clip(padded, world_bounds);
 
     if (ana_rect_is_empty(padded)) {
         return;
@@ -303,59 +330,200 @@ static void bb_add_actor_redraw_rect(
     bb_coalesce_redraw_rects(rects, rect_count, 0);
 }
 
-static void bb_redraw_previous_and_current_actors(void)
+static ANA_Rect bb_player_redraw_rect(int x, int y)
+{
+    return bb_world_rect(x - 10, y, BB_PLAYER_W + 20, BB_PLAYER_H);
+}
+
+static int bb_player_anim_frame(void)
+{
+    if (!bb_player.on_ground) {
+        return 3;
+    }
+
+    if (bb_player.vx != 0) {
+        return 1 + ((bb_frame >> 2) & 1);
+    }
+
+    return 0;
+}
+
+static int bb_rect_intersects_any(
+    ANA_Rect rect,
+    const ANA_Rect* redraw_rects,
+    int rect_count)
+{
+    int i;
+
+    for (i = 0; i < rect_count; i++) {
+        if (ana_rect_intersects(redraw_rects[i], rect)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void bb_draw_actors_in_world_rects(
+    const ANA_Rect* redraw_rects,
+    int rect_count)
+{
+    int i;
+    ANA_Rect rect;
+
+    for (i = 0; i < bb_enemy_count; i++) {
+        rect = bb_world_rect(
+            bb_enemies[i].x,
+            bb_enemies[i].y,
+            BB_ENEMY_W,
+            BB_ENEMY_H);
+        if (bb_rect_intersects_any(rect, redraw_rects, rect_count) &&
+                bb_rect_visible_world(rect)) {
+            bb_draw_enemy(&bb_enemies[i]);
+        }
+    }
+
+    rect = bb_player_redraw_rect(bb_player.x, bb_player.y);
+    if (bb_rect_intersects_any(rect, redraw_rects, rect_count) &&
+            bb_rect_visible_world(rect)) {
+        bb_draw_player();
+    }
+}
+
+static void bb_redraw_previous_and_current_actors(int slot)
 {
     int i;
     int rect_count;
+    int player_changed;
+    int player_anim_frame;
+    int enemy_changed;
     ANA_Rect rect;
     ANA_Rect redraw_rects[2 + (BB_MAX_ENEMIES * 2)];
 
     rect_count = 0;
+    player_anim_frame = bb_player_anim_frame();
 
-    rect = bb_world_rect(bb_prev_player_x, bb_prev_player_y, BB_PLAYER_W, BB_PLAYER_H);
-    bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
-    rect = bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H);
-    bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+    player_changed = !bb_prev_actor_valid[slot] ||
+        bb_prev_player_x[slot] != bb_player.x ||
+        bb_prev_player_y[slot] != bb_player.y ||
+        bb_prev_player_dash_ticks[slot] > 0 ||
+        bb_player.dash_ticks > 0 ||
+        bb_prev_player_facing[slot] != bb_player.facing ||
+        bb_prev_player_anim_frame[slot] != player_anim_frame;
+
+    if (player_changed && bb_prev_actor_valid[slot]) {
+        rect = bb_player_redraw_rect(
+            bb_prev_player_x[slot],
+            bb_prev_player_y[slot]);
+        bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+    }
+    if (player_changed) {
+        rect = bb_player_redraw_rect(bb_player.x, bb_player.y);
+        bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+    }
 
     for (i = 0; i < bb_enemy_count; i++) {
-        rect = bb_world_rect(bb_prev_enemy_x[i], bb_prev_enemy_y[i], 12, 12);
-        bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
-        rect = bb_world_rect(bb_enemies[i].x, bb_enemies[i].y, 12, 12);
-        bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+        enemy_changed = !bb_prev_actor_valid[slot] ||
+            bb_prev_enemy_x[slot][i] != bb_enemies[i].x ||
+            bb_prev_enemy_y[slot][i] != bb_enemies[i].y ||
+            bb_prev_enemy_alive[slot][i] != bb_enemies[i].alive;
+
+        if (enemy_changed &&
+                bb_prev_actor_valid[slot] &&
+                bb_prev_enemy_alive[slot][i]) {
+            rect = bb_world_rect(
+                bb_prev_enemy_x[slot][i],
+                bb_prev_enemy_y[slot][i],
+                BB_ENEMY_W,
+                BB_ENEMY_H);
+            bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+        }
+        if (enemy_changed && bb_enemies[i].alive) {
+            rect = bb_world_rect(
+                bb_enemies[i].x,
+                bb_enemies[i].y,
+                BB_ENEMY_W,
+                BB_ENEMY_H);
+            bb_add_actor_redraw_rect(redraw_rects, &rect_count, rect);
+        }
     }
 
     for (i = 0; i < rect_count; i++) {
         ana_tile_layer_redraw_world_rect(&bb_playfield_layer, redraw_rects[i]);
     }
+
+    bb_draw_actors_in_world_rects(redraw_rects, rect_count);
 }
 
 static void bb_draw_player(void)
 {
     ANA_Rect rect;
+    int anim_frame;
+    int eye_x;
+    int front_arm_x;
+    int back_arm_x;
     int sx;
     int sy;
-
-    if (bb_player.invuln_ticks > 0 && (bb_frame & 4) != 0) {
-        return;
-    }
 
     rect = ana_camera_world_to_screen_rect(
         &bb_camera,
         bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H));
     sx = rect.x;
     sy = rect.y;
+    anim_frame = bb_player_anim_frame();
+    eye_x = bb_player.facing >= 0 ? sx + 13 : sx + 6;
+    front_arm_x = bb_player.facing >= 0 ? sx + 14 : sx + 3;
+    back_arm_x = bb_player.facing >= 0 ? sx + 3 : sx + 14;
 
-    ana_fill_rect(4, sx + 2, sy + 4, 6, 8);
-    ana_fill_rect(5, sx + 3, sy, 5, 5);
-    ana_fill_rect(1, sx + 4, sy + 2, 2, 1);
-    ana_fill_rect(13, sx + 1, sy + 12, 4, 2);
-    ana_fill_rect(13, sx + 6, sy + 12, 4, 2);
+    ana_fill_rect(1, sx + 4, sy, 12, 2);
+    ana_fill_rect(13, sx + 3, sy + 2, 14, 10);
+    ana_fill_rect(5, sx + 5, sy + 3, 10, 8);
+    ana_fill_rect(6, sx + 4, sy + 2, 12, 3);
+    ana_fill_rect(1, eye_x, sy + 4, 2, 2);
+    ana_fill_rect(13, sx + 4, sy + 11, 12, 14);
+    ana_fill_rect(4, sx + 5, sy + 12, 10, 12);
+    ana_fill_rect(3, sx + 5, sy + 20, 10, 3);
+    ana_fill_rect(1, sx + 7, sy + 14, 6, 2);
+
+    ana_fill_rect(13, back_arm_x, sy + 12, 3, 10);
+    ana_fill_rect(4, back_arm_x, sy + 13, 3, 7);
+    if (anim_frame == 2) {
+        ana_fill_rect(13, front_arm_x, sy + 14, 3, 9);
+        ana_fill_rect(4, front_arm_x, sy + 14, 3, 6);
+    } else {
+        ana_fill_rect(13, front_arm_x, sy + 11, 3, 10);
+        ana_fill_rect(4, front_arm_x, sy + 12, 3, 7);
+    }
+
+    if (anim_frame == 1) {
+        ana_fill_rect(13, sx + 5, sy + 21, 4, 6);
+        ana_fill_rect(13, sx + 12, sy + 20, 4, 5);
+        ana_fill_rect(13, sx + 3, sy + 25, 7, 3);
+        ana_fill_rect(13, sx + 12, sy + 24, 6, 3);
+    } else if (anim_frame == 2) {
+        ana_fill_rect(13, sx + 5, sy + 20, 4, 5);
+        ana_fill_rect(13, sx + 12, sy + 21, 4, 6);
+        ana_fill_rect(13, sx + 4, sy + 24, 6, 3);
+        ana_fill_rect(13, sx + 11, sy + 25, 7, 3);
+    } else if (anim_frame == 3) {
+        ana_fill_rect(13, sx + 5, sy + 21, 5, 4);
+        ana_fill_rect(13, sx + 12, sy + 21, 5, 4);
+        ana_fill_rect(13, sx + 4, sy + 24, 6, 3);
+        ana_fill_rect(13, sx + 12, sy + 24, 6, 3);
+    } else {
+        ana_fill_rect(13, sx + 5, sy + 21, 4, 6);
+        ana_fill_rect(13, sx + 12, sy + 21, 4, 6);
+        ana_fill_rect(13, sx + 4, sy + 25, 6, 3);
+        ana_fill_rect(13, sx + 11, sy + 25, 6, 3);
+    }
 
     if (bb_player.dash_ticks > 0) {
         if (bb_player.facing > 0) {
-            ana_fill_rect(4, sx - 5, sy + 6, 3, 2);
+            ana_fill_rect(3, sx - 8, sy + 12, 6, 3);
+            ana_fill_rect(4, sx - 5, sy + 16, 3, 2);
         } else {
-            ana_fill_rect(4, sx + BB_PLAYER_W + 2, sy + 6, 3, 2);
+            ana_fill_rect(3, sx + BB_PLAYER_W + 2, sy + 12, 6, 3);
+            ana_fill_rect(4, sx + BB_PLAYER_W + 2, sy + 16, 3, 2);
         }
     }
 }
@@ -372,15 +540,25 @@ static void bb_draw_enemy(const BB_Enemy* enemy)
 
     rect = ana_camera_world_to_screen_rect(
         &bb_camera,
-        bb_world_rect(enemy->x, enemy->y, 12, 12));
+        bb_world_rect(enemy->x, enemy->y, BB_ENEMY_W, BB_ENEMY_H));
     sx = rect.x;
     sy = rect.y;
-    ana_fill_rect(7, sx + 1, sy + 3, 10, 8);
-    ana_fill_rect(15, sx + 3, sy + 1, 6, 3);
-    ana_fill_rect(1, sx + 3, sy + 5, 2, 2);
-    ana_fill_rect(1, sx + 7, sy + 5, 2, 2);
-    ana_fill_rect(13, sx + 2, sy + 11, 3, 2);
-    ana_fill_rect(13, sx + 7, sy + 11, 3, 2);
+
+    ana_fill_rect(1, sx + 5, sy + 2, 5, 4);
+    ana_fill_rect(1, sx + 14, sy + 2, 5, 4);
+    ana_fill_rect(13, sx + 2, sy + 6, 20, 16);
+    ana_fill_rect(7, sx + 3, sy + 7, 18, 14);
+    ana_fill_rect(15, sx + 6, sy + 3, 12, 7);
+    ana_fill_rect(7, sx + 8, sy + 2, 8, 3);
+    ana_fill_rect(1, sx + 6, sy + 11, 4, 4);
+    ana_fill_rect(1, sx + 14, sy + 11, 4, 4);
+    ana_fill_rect(13, sx + 8, sy + 12, 2, 2);
+    ana_fill_rect(13, sx + 16, sy + 12, 2, 2);
+    ana_fill_rect(1, sx + 9, sy + 18, 6, 2);
+    ana_fill_rect(13, sx + 5, sy + 19, 5, 4);
+    ana_fill_rect(13, sx + 14, sy + 19, 5, 4);
+    ana_fill_rect(15, sx + 4, sy + 6, 3, 3);
+    ana_fill_rect(15, sx + 17, sy + 6, 3, 3);
 }
 
 static void bb_draw_actors(void)
@@ -389,7 +567,11 @@ static void bb_draw_actors(void)
     ANA_Rect rect;
 
     for (i = 0; i < bb_enemy_count; i++) {
-        rect = bb_world_rect(bb_enemies[i].x, bb_enemies[i].y, 12, 12);
+        rect = bb_world_rect(
+            bb_enemies[i].x,
+            bb_enemies[i].y,
+            BB_ENEMY_W,
+            BB_ENEMY_H);
         if (bb_rect_visible_world(rect)) {
             bb_draw_enemy(&bb_enemies[i]);
         }
@@ -401,28 +583,34 @@ static void bb_draw_actors(void)
     }
 }
 
-static void bb_commit_state(void)
+static void bb_commit_state(int slot)
 {
     int i;
 
     bb_prev_camera_x = bb_camera_x;
     bb_prev_camera_y = bb_camera_y;
-    bb_prev_player_x = bb_player.x;
-    bb_prev_player_y = bb_player.y;
+    bb_prev_player_x[slot] = bb_player.x;
+    bb_prev_player_y[slot] = bb_player.y;
+    bb_prev_player_dash_ticks[slot] = bb_player.dash_ticks;
+    bb_prev_player_facing[slot] = bb_player.facing;
+    bb_prev_player_anim_frame[slot] = bb_player_anim_frame();
     bb_prev_score = bb_score;
     bb_prev_lives = bb_lives;
     bb_prev_level = bb_level_index;
     bb_prev_fragments = bb_fragments_left;
 
     for (i = 0; i < BB_MAX_ENEMIES; i++) {
-        bb_prev_enemy_x[i] = bb_enemies[i].x;
-        bb_prev_enemy_y[i] = bb_enemies[i].y;
+        bb_prev_enemy_x[slot][i] = bb_enemies[i].x;
+        bb_prev_enemy_y[slot][i] = bb_enemies[i].y;
+        bb_prev_enemy_alive[slot][i] = bb_enemies[i].alive;
     }
+    bb_prev_actor_valid[slot] = 1;
 }
 
 void bb_render_reset(void)
 {
     ANA_Rect hud_viewport;
+    int i;
 
     ana_tile_layer_init(
         &bb_playfield_layer,
@@ -458,6 +646,9 @@ void bb_render_reset(void)
     bb_prev_lives = -1;
     bb_prev_level = -1;
     bb_prev_fragments = -1;
+    for (i = 0; i < BB_RENDER_SLOTS; i++) {
+        bb_prev_actor_valid[i] = 0;
+    }
     ana_tile_layer_invalidate(&bb_playfield_layer);
 }
 
@@ -471,6 +662,7 @@ void bb_render_draw(void)
 {
     int hud_dirty;
     int hardware_scroll_available;
+    int slot;
 
     hud_dirty = bb_score != bb_prev_score ||
         bb_lives != bb_prev_lives ||
@@ -486,26 +678,27 @@ void bb_render_draw(void)
         }
         ana_tile_layer_invalidate(&bb_playfield_layer);
         ana_tile_layer_draw(&bb_playfield_layer);
+        slot = bb_render_slot();
         ana_layer_mark_dirty(&bb_hud_layer);
         ana_layer_draw_if_dirty(&bb_hud_layer);
         bb_draw_actors();
         bb_full_redraw = 0;
-        bb_commit_state();
+        bb_commit_state(slot);
         return;
     }
 
-    if (bb_camera_x != bb_prev_camera_x || bb_camera_y != bb_prev_camera_y) {
+    if (hardware_scroll_available ||
+            bb_camera_x != bb_prev_camera_x ||
+            bb_camera_y != bb_prev_camera_y) {
         ana_tile_layer_draw(&bb_playfield_layer);
-        bb_redraw_previous_and_current_actors();
-    } else {
-        bb_redraw_previous_and_current_actors();
     }
+    slot = bb_render_slot();
+    bb_redraw_previous_and_current_actors(slot);
 
     if (hud_dirty) {
         ana_layer_mark_dirty(&bb_hud_layer);
     }
     ana_layer_draw_if_dirty(&bb_hud_layer);
 
-    bb_draw_actors();
-    bb_commit_state();
+    bb_commit_state(slot);
 }

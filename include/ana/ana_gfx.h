@@ -272,6 +272,7 @@ int ana_tile_layer_native_scroll_available(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_native_scroll_active(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_available(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_active(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_hardware_scroll_frame_slot(const ANA_TileLayer* tile_layer);
 void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer);
 void ana_tile_layer_draw(ANA_TileLayer* tile_layer);
 void ana_tile_layer_redraw_world_rect(

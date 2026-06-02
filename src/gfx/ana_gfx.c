@@ -31,6 +31,7 @@
 #define ANA_FONT_HEADER_SIZE 16
 #define ANA_AMIGA_MAX_DIRTY_RECTS 64
 #define ANA_AMIGA_HARDWARE_SCROLL_MAX_WIDTH 2048
+#define ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT 3
 #define ANA_LAYER_DISABLED_VALUE 0x414e4101
 #define ANA_COPY_8_PIXELS(dest, src) \
     do { \
@@ -189,7 +190,7 @@ struct ANA_AmigaFramebufferState {
 };
 
 struct ANA_AmigaHardwareScrollState {
-    struct BitMap bitmap;
+    struct BitMap bitmaps[ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT];
     struct RastPort rastport;
     struct BitMap hud_cache_bitmap;
     struct RastPort hud_cache_rastport;
@@ -203,10 +204,14 @@ struct ANA_AmigaHardwareScrollState {
     int map_height;
     int tile_width;
     int tile_height;
+    int draw_index;
+    int visible_index;
     int draw_active;
     int draw_offset_x;
     int draw_offset_y;
     int offset_x;
+    int committed_offset_x;
+    int view_offset_dirty;
     int rastport_ready;
     int blit_pending;
     int draw_clip_active;
@@ -1400,6 +1405,63 @@ static void ana_amiga_hardware_scroll_reset_state(void)
     memset(&ana_amiga_hardware_scroll, 0, sizeof(ana_amiga_hardware_scroll));
 }
 
+static struct BitMap* ana_amiga_hardware_scroll_bitmap_at(int index)
+{
+    if (index < 0 || index >= ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT) {
+        return NULL;
+    }
+
+    return &ana_amiga_hardware_scroll.bitmaps[index];
+}
+
+static struct BitMap* ana_amiga_hardware_scroll_draw_bitmap(void)
+{
+    return ana_amiga_hardware_scroll_bitmap_at(
+        ana_amiga_hardware_scroll.draw_index);
+}
+
+static int ana_amiga_hardware_scroll_next_draw_index(
+    int old_visible_index,
+    int new_visible_index)
+{
+    int index;
+
+    for (index = 0;
+            index < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT;
+            index++) {
+        if (index != old_visible_index && index != new_visible_index) {
+            return index;
+        }
+    }
+
+    for (index = 0;
+            index < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT;
+            index++) {
+        if (index != new_visible_index) {
+            return index;
+        }
+    }
+
+    return new_visible_index;
+}
+
+static int ana_amiga_hardware_scroll_owns_bitmap(struct BitMap* bitmap)
+{
+    int i;
+
+    if (bitmap == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT; i++) {
+        if (bitmap == &ana_amiga_hardware_scroll.bitmaps[i]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static void ana_amiga_hardware_scroll_wait_blit(void)
 {
     if (!ana_amiga_hardware_scroll.blit_pending) {
@@ -1450,6 +1512,7 @@ static void ana_amiga_hardware_scroll_free_hud_cache(void)
 
 static void ana_amiga_hardware_scroll_free(void)
 {
+    int buffer;
     int plane;
 
     if (!ana_amiga_hardware_scroll.ready) {
@@ -1461,13 +1524,19 @@ static void ana_amiga_hardware_scroll_free(void)
     ana_amiga_hardware_scroll_wait_blit();
     ana_amiga_hardware_scroll_free_hud_cache();
 
-    for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-        if (ana_amiga_hardware_scroll.bitmap.Planes[plane] != NULL) {
-            FreeRaster(
-                ana_amiga_hardware_scroll.bitmap.Planes[plane],
-                ana_amiga_hardware_scroll.width,
-                ana_amiga_hardware_scroll.height);
-            ana_amiga_hardware_scroll.bitmap.Planes[plane] = NULL;
+    for (buffer = 0;
+            buffer < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT;
+            buffer++) {
+        for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+            if (ana_amiga_hardware_scroll.bitmaps[buffer].Planes[plane] !=
+                    NULL) {
+                FreeRaster(
+                    ana_amiga_hardware_scroll.bitmaps[buffer].Planes[plane],
+                    ana_amiga_hardware_scroll.width,
+                    ana_amiga_hardware_scroll.height);
+                ana_amiga_hardware_scroll.bitmaps[buffer].Planes[plane] =
+                    NULL;
+            }
         }
     }
 
@@ -1477,7 +1546,7 @@ static void ana_amiga_hardware_scroll_free(void)
 static int ana_amiga_hardware_scroll_active(void)
 {
     return ana_amiga_hardware_scroll.ready &&
-        ana_amiga_visible_bitmap == &ana_amiga_hardware_scroll.bitmap;
+        ana_amiga_hardware_scroll.owner_valid;
 }
 
 static int ana_amiga_hardware_scroll_dest_offset_x(void)
@@ -1523,6 +1592,7 @@ static int ana_amiga_hardware_scroll_matches(const ANA_TileLayer* tile_layer)
 static int ana_amiga_hardware_scroll_alloc(const ANA_TileLayer* tile_layer)
 {
     ANA_Rect viewport;
+    int buffer;
     int plane;
     int width;
     int world_w;
@@ -1554,21 +1624,26 @@ static int ana_amiga_hardware_scroll_alloc(const ANA_TileLayer* tile_layer)
         width = ANA_DEFAULT_WIDTH;
     }
 
-    InitBitMap(
-        &ana_amiga_hardware_scroll.bitmap,
-        ANA_DEFAULT_BITPLANES,
-        width,
-        ANA_DEFAULT_HEIGHT);
+    for (buffer = 0;
+            buffer < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT;
+            buffer++) {
+        InitBitMap(
+            &ana_amiga_hardware_scroll.bitmaps[buffer],
+            ANA_DEFAULT_BITPLANES,
+            width,
+            ANA_DEFAULT_HEIGHT);
 
-    for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-        ana_amiga_hardware_scroll.bitmap.Planes[plane] =
-            AllocRaster(width, ANA_DEFAULT_HEIGHT);
-        if (ana_amiga_hardware_scroll.bitmap.Planes[plane] == NULL) {
-            ana_amiga_hardware_scroll.ready = 1;
-            ana_amiga_hardware_scroll.width = width;
-            ana_amiga_hardware_scroll.height = ANA_DEFAULT_HEIGHT;
-            ana_amiga_hardware_scroll_free();
-            return 0;
+        for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
+            ana_amiga_hardware_scroll.bitmaps[buffer].Planes[plane] =
+                AllocRaster(width, ANA_DEFAULT_HEIGHT);
+            if (ana_amiga_hardware_scroll.bitmaps[buffer].Planes[plane] ==
+                    NULL) {
+                ana_amiga_hardware_scroll.ready = 1;
+                ana_amiga_hardware_scroll.width = width;
+                ana_amiga_hardware_scroll.height = ANA_DEFAULT_HEIGHT;
+                ana_amiga_hardware_scroll_free();
+                return 0;
+            }
         }
     }
 
@@ -1582,23 +1657,33 @@ static int ana_amiga_hardware_scroll_alloc(const ANA_TileLayer* tile_layer)
     ana_amiga_hardware_scroll.map_height = world_h;
     ana_amiga_hardware_scroll.tile_width = tile_layer->tile_width;
     ana_amiga_hardware_scroll.tile_height = tile_layer->tile_height;
+    ana_amiga_hardware_scroll.draw_index = 0;
+    ana_amiga_hardware_scroll.visible_index = 0;
     ana_amiga_hardware_scroll.draw_active = 0;
     ana_amiga_hardware_scroll.draw_offset_x = 0;
     ana_amiga_hardware_scroll.draw_offset_y = 0;
     ana_amiga_hardware_scroll.offset_x = 0;
+    ana_amiga_hardware_scroll.committed_offset_x = 0;
+    ana_amiga_hardware_scroll.view_offset_dirty = 1;
     InitRastPort(&ana_amiga_hardware_scroll.rastport);
     ana_amiga_hardware_scroll.rastport.BitMap =
-        &ana_amiga_hardware_scroll.bitmap;
+        ana_amiga_hardware_scroll_draw_bitmap();
     ana_amiga_hardware_scroll.rastport_ready = 1;
     ana_amiga_hardware_scroll.blit_pending = 0;
     ana_amiga_hardware_scroll.sync_chunky = 1;
-    ana_amiga_clear_bitmap(&ana_amiga_hardware_scroll.bitmap);
+    for (buffer = 0;
+            buffer < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT;
+            buffer++) {
+        ana_amiga_clear_bitmap(&ana_amiga_hardware_scroll.bitmaps[buffer]);
+    }
 
     return 1;
 }
 
 static void ana_amiga_hardware_scroll_set_view_offset(int x)
 {
+    struct BitMap* draw_bitmap;
+
     if (!ana_amiga_hardware_scroll.ready || ana_amiga_screen == NULL ||
             ana_amiga_screen->ViewPort.RasInfo == NULL) {
         return;
@@ -1611,14 +1696,68 @@ static void ana_amiga_hardware_scroll_set_view_offset(int x)
         x = ana_amiga_hardware_scroll.width - ANA_DEFAULT_WIDTH;
     }
 
+    draw_bitmap = ana_amiga_hardware_scroll_draw_bitmap();
+    if (draw_bitmap == NULL) {
+        return;
+    }
+
+    if (ana_amiga_hardware_scroll.offset_x != x ||
+            ana_amiga_hardware_scroll.committed_offset_x != x ||
+            ana_amiga_hardware_scroll.draw_index !=
+                ana_amiga_hardware_scroll.visible_index ||
+            ana_amiga_screen->ViewPort.RasInfo->BitMap !=
+                draw_bitmap) {
+        ana_amiga_hardware_scroll.view_offset_dirty = 1;
+    }
     ana_amiga_hardware_scroll.offset_x = x;
-    ana_amiga_visible_bitmap = &ana_amiga_hardware_scroll.bitmap;
-    ana_amiga_screen->RastPort.BitMap = &ana_amiga_hardware_scroll.bitmap;
-    ana_amiga_screen->ViewPort.RasInfo->BitMap =
-        &ana_amiga_hardware_scroll.bitmap;
-    ana_amiga_screen->ViewPort.RasInfo->RxOffset = (WORD)x;
+}
+
+static void ana_amiga_hardware_scroll_commit_view_offset(void)
+{
+    struct BitMap* draw_bitmap;
+    int old_visible_index;
+
+    if (!ana_amiga_hardware_scroll.ready || ana_amiga_screen == NULL ||
+            ana_amiga_screen->ViewPort.RasInfo == NULL) {
+        return;
+    }
+
+    draw_bitmap = ana_amiga_hardware_scroll_draw_bitmap();
+    if (draw_bitmap == NULL) {
+        return;
+    }
+
+    if (!ana_amiga_hardware_scroll.view_offset_dirty &&
+            ana_amiga_hardware_scroll.committed_offset_x ==
+                ana_amiga_hardware_scroll.offset_x &&
+            ana_amiga_hardware_scroll.draw_index ==
+                ana_amiga_hardware_scroll.visible_index &&
+            ana_amiga_screen->ViewPort.RasInfo->BitMap ==
+                draw_bitmap) {
+        return;
+    }
+
+    ana_amiga_hardware_scroll_wait_hud_cache_blit();
+    ana_amiga_hardware_scroll_wait_blit();
+    old_visible_index = ana_amiga_hardware_scroll.visible_index;
+    ana_amiga_visible_bitmap = draw_bitmap;
+    ana_amiga_screen->RastPort.BitMap = draw_bitmap;
+    ana_amiga_screen->ViewPort.RasInfo->BitMap = draw_bitmap;
+    ana_amiga_screen->ViewPort.RasInfo->RxOffset =
+        (WORD)ana_amiga_hardware_scroll.offset_x;
     ana_amiga_screen->ViewPort.RasInfo->RyOffset = 0;
     ScrollVPort(&ana_amiga_screen->ViewPort);
+    ana_amiga_hardware_scroll.visible_index =
+        ana_amiga_hardware_scroll.draw_index;
+    ana_amiga_hardware_scroll.committed_offset_x =
+        ana_amiga_hardware_scroll.offset_x;
+    ana_amiga_hardware_scroll.view_offset_dirty = 0;
+    ana_amiga_hardware_scroll.draw_index =
+        ana_amiga_hardware_scroll_next_draw_index(
+            old_visible_index,
+            ana_amiga_hardware_scroll.visible_index);
+    ana_amiga_hardware_scroll.rastport.BitMap =
+        ana_amiga_hardware_scroll_draw_bitmap();
 }
 
 static void ana_amiga_hardware_scroll_deactivate(void)
@@ -1635,6 +1774,9 @@ static void ana_amiga_hardware_scroll_deactivate(void)
     ana_amiga_set_screen_bitmap_direct(ana_amiga_original_bitmap);
     ana_amiga_visible_bitmap = ana_amiga_original_bitmap;
     ana_amiga_hardware_scroll.offset_x = 0;
+    ana_amiga_hardware_scroll.committed_offset_x = 0;
+    ana_amiga_hardware_scroll.view_offset_dirty = 0;
+    ana_amiga_hardware_scroll.owner_valid = 0;
 }
 
 static void ana_amiga_hardware_scroll_begin_draw(
@@ -1760,10 +1902,16 @@ static void ana_amiga_hardware_scroll_update_hud_cache(
 static void ana_amiga_hardware_scroll_restore_hud_cache(void)
 {
     ANA_Rect viewport;
+    struct BitMap* draw_bitmap;
 
     if (!ana_amiga_hardware_scroll_active() ||
             !ana_amiga_hardware_scroll.hud_cache_ready ||
             !ana_amiga_hardware_scroll.hud_cache_valid) {
+        return;
+    }
+
+    draw_bitmap = ana_amiga_hardware_scroll_draw_bitmap();
+    if (draw_bitmap == NULL) {
         return;
     }
 
@@ -1774,7 +1922,7 @@ static void ana_amiga_hardware_scroll_restore_hud_cache(void)
         &ana_amiga_hardware_scroll.hud_cache_bitmap,
         viewport.x,
         0,
-        &ana_amiga_hardware_scroll.bitmap,
+        draw_bitmap,
         ana_amiga_hardware_scroll.offset_x + viewport.x,
         viewport.y,
         viewport.w,
@@ -1825,8 +1973,14 @@ static int ana_amiga_hardware_scroll_fill_rect(
     int shadow_end_x;
     int shadow_end_y;
     int shadow_row;
+    struct BitMap* draw_bitmap;
 
     if (!ana_amiga_hardware_scroll.ready || width <= 0 || height <= 0) {
+        return 0;
+    }
+
+    draw_bitmap = ana_amiga_hardware_scroll_draw_bitmap();
+    if (draw_bitmap == NULL) {
         return 0;
     }
 
@@ -1892,7 +2046,12 @@ static int ana_amiga_hardware_scroll_fill_rect(
         screen_y,
         end_x - transform_x,
         end_y - transform_y);
-    if (ana_amiga_hardware_scroll.sync_chunky &&
+    /*
+     * Screen-space overlays still need a current chunky shadow so any later
+     * C2P dirty rect cannot restore stale background over them.
+     */
+    if ((ana_amiga_hardware_scroll.sync_chunky ||
+                !ana_amiga_hardware_scroll.draw_active) &&
             screen_x < ANA_DEFAULT_WIDTH &&
             screen_y < ANA_DEFAULT_HEIGHT &&
             end_x - transform_x > 0 &&
@@ -1924,8 +2083,7 @@ static int ana_amiga_hardware_scroll_fill_rect(
     }
 
     if (ana_amiga_hardware_scroll.rastport_ready) {
-        ana_amiga_hardware_scroll.rastport.BitMap =
-            &ana_amiga_hardware_scroll.bitmap;
+        ana_amiga_hardware_scroll.rastport.BitMap = draw_bitmap;
         SetAPen(&ana_amiga_hardware_scroll.rastport, color);
         RectFill(
             &ana_amiga_hardware_scroll.rastport,
@@ -1945,16 +2103,16 @@ static int ana_amiga_hardware_scroll_fill_rect(
     right_mask = (unsigned char)(0xffu << (7 - ((end_x - 1) & 7)));
 
     for (plane = 0; plane < ANA_DEFAULT_BITPLANES; plane++) {
-        if (ana_amiga_hardware_scroll.bitmap.Planes[plane] == NULL) {
+        if (draw_bitmap->Planes[plane] == NULL) {
             continue;
         }
 
         fill_byte = (color & (1u << plane)) != 0u ? 0xffu : 0x00u;
         for (py = start_y; py < end_y; py++) {
             row = ((unsigned char*)
-                ana_amiga_hardware_scroll.bitmap.Planes[plane]) +
+                draw_bitmap->Planes[plane]) +
                 ((unsigned long)py *
-                    ana_amiga_hardware_scroll.bitmap.BytesPerRow);
+                    draw_bitmap->BytesPerRow);
 
             if (start_byte_x == end_byte_x) {
                 mask = (unsigned char)(left_mask & right_mask);
@@ -1989,6 +2147,51 @@ static int ana_amiga_hardware_scroll_fill_rect(
     }
 
     return 1;
+}
+
+static void ana_amiga_hardware_scroll_copy_draw_to_other_buffer(void)
+{
+    int buffer;
+    struct BitMap* draw_bitmap;
+    struct BitMap* other_bitmap;
+
+    if (!ana_amiga_hardware_scroll.ready) {
+        return;
+    }
+
+    draw_bitmap = ana_amiga_hardware_scroll_draw_bitmap();
+    if (draw_bitmap == NULL) {
+        return;
+    }
+
+    ana_amiga_hardware_scroll_wait_blit();
+    for (buffer = 0;
+            buffer < ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT;
+            buffer++) {
+        if (buffer == ana_amiga_hardware_scroll.draw_index) {
+            continue;
+        }
+
+        other_bitmap = ana_amiga_hardware_scroll_bitmap_at(buffer);
+        if (other_bitmap == NULL) {
+            continue;
+        }
+
+        BltBitMap(
+            draw_bitmap,
+            0,
+            0,
+            other_bitmap,
+            0,
+            0,
+            ana_amiga_hardware_scroll.width,
+            ana_amiga_hardware_scroll.height,
+            0xc0,
+            0xff,
+            NULL);
+        ana_amiga_hardware_scroll.blit_pending = 1;
+        ana_amiga_hardware_scroll_wait_blit();
+    }
 }
 
 static void ana_amiga_reset_screen_buffers(void)
@@ -2532,7 +2735,7 @@ static void ana_amiga_copy_chunky_rect_to_bitplanes_offset(
         return;
     }
 
-    dest_width = bitmap == &ana_amiga_hardware_scroll.bitmap ?
+    dest_width = ana_amiga_hardware_scroll_owns_bitmap(bitmap) ?
         ana_amiga_hardware_scroll.width :
         ANA_DEFAULT_WIDTH;
     if (dest_x_offset < 0 ||
@@ -2649,7 +2852,11 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 #endif
 
 #ifdef ANA_AMIGA_DIRECT_PRESENT
-    next_visible = ana_amiga_visible_bitmap;
+    if (ana_amiga_hardware_scroll_active()) {
+        next_visible = ana_amiga_hardware_scroll_draw_bitmap();
+    } else {
+        next_visible = ana_amiga_visible_bitmap;
+    }
     previous_visible = ana_amiga_visible_bitmap;
 #else
     next_visible = ana_amiga_draw_bitmap;
@@ -2750,6 +2957,7 @@ static void ana_amiga_present_buffer(const unsigned char* chunky)
 #ifdef ANA_DEBUG_STATS
     stage_start = ana_platform_perf_ticks();
 #endif
+    ana_amiga_hardware_scroll_commit_view_offset();
 #ifdef ANA_AMIGA_DIRECT_PRESENT
 #ifndef ANA_AMIGA_DIRECT_PRESENT_SYNC
 #ifdef ANA_DEBUG_STATS
@@ -3778,11 +3986,30 @@ static int ana_tile_layer_should_request_hardware_scroll(
 }
 
 #if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_DIRECT_PRESENT)
+static void ana_tile_layer_clear_hardware_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect)
+{
+    ANA_Rect viewport;
+
+    if (tile_layer == NULL || ana_rect_is_empty(world_rect)) {
+        return;
+    }
+
+    viewport = ana_tile_layer_viewport_bounds(tile_layer);
+    ana_fill_rect(
+        tile_layer->clear_color,
+        world_rect.x - tile_layer->layer.camera.x + viewport.x,
+        world_rect.y - tile_layer->layer.camera.y + viewport.y,
+        world_rect.w,
+        world_rect.h);
+}
+
 static void ana_tile_layer_redraw_hardware_world_rect(
     ANA_TileLayer* tile_layer,
     ANA_Rect world_rect)
 {
-    ANA_Rect view;
+    ANA_Rect world;
     ANA_Rect viewport;
     ANA_Rect clipped;
     ANA_Rect bitmap_clip;
@@ -3791,8 +4018,8 @@ static void ana_tile_layer_redraw_hardware_world_rect(
         return;
     }
 
-    view = ana_camera_world_view(&tile_layer->layer.camera);
-    clipped = ana_rect_clip(world_rect, view);
+    world = ana_tile_layer_world_bounds(tile_layer);
+    clipped = ana_rect_clip(world_rect, world);
     if (ana_rect_is_empty(clipped)) {
         return;
     }
@@ -3806,7 +4033,7 @@ static void ana_tile_layer_redraw_hardware_world_rect(
 
     ana_amiga_hardware_scroll_begin_draw(tile_layer);
     ana_amiga_hardware_scroll_set_draw_clip(bitmap_clip);
-    ana_tile_layer_clear_world_rect(tile_layer, clipped);
+    ana_tile_layer_clear_hardware_world_rect(tile_layer, clipped);
     ana_tile_layer_draw_tiles_in_world_rect(tile_layer, clipped);
     ana_amiga_hardware_scroll_end_draw();
 }
@@ -3834,11 +4061,12 @@ static int ana_tile_layer_draw_hardware_scroll(ANA_TileLayer* tile_layer)
     ana_amiga_hardware_scroll_set_view_offset(tile_layer->layer.camera.x);
 
     if (redraw_all) {
-        ana_amiga_clear_bitmap(&ana_amiga_hardware_scroll.bitmap);
+        ana_amiga_clear_bitmap(ana_amiga_hardware_scroll_draw_bitmap());
         world = ana_tile_layer_world_bounds(tile_layer);
         ana_amiga_hardware_scroll_begin_draw(tile_layer);
         ana_tile_layer_draw_tiles_in_world_rect(tile_layer, world);
         ana_amiga_hardware_scroll_end_draw();
+        ana_amiga_hardware_scroll_copy_draw_to_other_buffer();
     }
 
     ana_amiga_hardware_scroll.sync_chunky =
@@ -4018,6 +4246,21 @@ int ana_tile_layer_hardware_scroll_available(const ANA_TileLayer* tile_layer)
 int ana_tile_layer_hardware_scroll_active(const ANA_TileLayer* tile_layer)
 {
     return tile_layer != NULL && tile_layer->hardware_scroll_active;
+}
+
+int ana_tile_layer_hardware_scroll_frame_slot(const ANA_TileLayer* tile_layer)
+{
+#if defined(ANA_TARGET_AMIGA) && defined(ANA_AMIGA_DIRECT_PRESENT)
+    if (tile_layer != NULL &&
+            tile_layer->hardware_scroll_active &&
+            ana_amiga_hardware_scroll_active()) {
+        return ana_amiga_hardware_scroll.draw_index;
+    }
+#else
+    (void)tile_layer;
+#endif
+
+    return 0;
 }
 
 void ana_tile_layer_redraw_world_rect(

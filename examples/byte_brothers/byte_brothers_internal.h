@@ -15,8 +15,10 @@
 #define BB_MAX_ENEMIES 8
 #define BB_CAMERA_SNAP_X 1
 #define BB_CAMERA_SNAP_Y 1
-#define BB_PLAYER_W 10
-#define BB_PLAYER_H 14
+#define BB_PLAYER_W 20
+#define BB_PLAYER_H 28
+#define BB_ENEMY_W 24
+#define BB_ENEMY_H 24
 #define BB_PLAYER_SPEED 2
 #define BB_DASH_SPEED 5
 #define BB_DASH_TICKS 8

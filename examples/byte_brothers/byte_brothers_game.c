@@ -101,6 +101,21 @@ static int bb_start_y = 0;
 
 static void bb_load_level(int level);
 
+static int bb_actor_tile_x(int tile_x, int width)
+{
+    return tile_x * BB_TILE + ((BB_TILE - width) / 2);
+}
+
+static int bb_player_tile_y(int tile_y)
+{
+    return (tile_y + 1) * BB_TILE - BB_PLAYER_H - 1;
+}
+
+static int bb_enemy_tile_y(int tile_y)
+{
+    return (tile_y + 1) * BB_TILE - BB_ENEMY_H - 2;
+}
+
 static void bb_sync_camera_compat(void)
 {
     bb_camera_x = bb_camera.x;
@@ -550,11 +565,15 @@ static void bb_update_enemies(void)
 
         if ((bb_frame & 1) == 0) {
             next_x = enemy->x + enemy->vx;
-            if (bb_rect_hits_solid(next_x, enemy->y, 12, 12)) {
+            if (bb_rect_hits_solid(
+                    next_x,
+                    enemy->y,
+                    BB_ENEMY_W,
+                    BB_ENEMY_H)) {
                 enemy->vx = -enemy->vx;
             } else {
-                probe_x = next_x + (enemy->vx > 0 ? 12 : -1);
-                probe_y = enemy->y + 14;
+                probe_x = next_x + (enemy->vx > 0 ? BB_ENEMY_W : -1);
+                probe_y = enemy->y + BB_ENEMY_H + 2;
                 if (!bb_has_floor_at(probe_x, probe_y)) {
                     enemy->vx = -enemy->vx;
                 } else {
@@ -570,8 +589,8 @@ static void bb_update_enemies(void)
                 BB_PLAYER_H,
                 enemy->x,
                 enemy->y,
-                12,
-                12)) {
+                BB_ENEMY_W,
+                BB_ENEMY_H)) {
             bb_player_hit();
         }
     }
@@ -592,13 +611,14 @@ static void bb_load_level(int level)
         for (x = 0; x < BB_MAP_W; x++) {
             tile = bb_map[y][x];
             if (tile == 'S') {
-                bb_start_x = x * BB_TILE + 3;
-                bb_start_y = y * BB_TILE + 1;
+                bb_start_x = bb_actor_tile_x(x, BB_PLAYER_W);
+                bb_start_y = bb_player_tile_y(y);
                 bb_map[y][x] = '.';
             } else if (tile == 'v' || tile == 'T') {
                 if (bb_enemy_count < BB_MAX_ENEMIES) {
-                    bb_enemies[bb_enemy_count].x = x * BB_TILE + 2;
-                    bb_enemies[bb_enemy_count].y = y * BB_TILE + 2;
+                    bb_enemies[bb_enemy_count].x =
+                        bb_actor_tile_x(x, BB_ENEMY_W);
+                    bb_enemies[bb_enemy_count].y = bb_enemy_tile_y(y);
                     bb_enemies[bb_enemy_count].vx = (bb_enemy_count & 1) ? -1 : 1;
                     bb_enemies[bb_enemy_count].alive = 1;
                     bb_enemy_count++;
