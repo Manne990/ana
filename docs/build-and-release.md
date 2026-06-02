@@ -114,7 +114,7 @@ make release-package
 Output:
 
 ```text
-build/release/ana-0.2.0-dev.tar.gz
+build/release/ana-0.2.0.tar.gz
 ```
 
 The package contains:
@@ -169,5 +169,5 @@ The current version string lives in:
 include/ana/ana_version.h
 ```
 
-Current `main` uses `ANA_VERSION_STRING` `0.2.0-dev`. The frozen 0.1 release is
+Current `main` uses `ANA_VERSION_STRING` `0.2.0`. The frozen 0.1 release is
 tagged as `v0.1.0`.

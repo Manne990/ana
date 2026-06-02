@@ -26,8 +26,26 @@
 #define BB_GRAVITY 1
 #define BB_MAX_FALL 6
 #define BB_INVULN_TICKS 50
+#define BB_CAMERA_TARGET_X 136
 #define BB_WORLD_W (BB_MAP_W * BB_TILE)
 #define BB_WORLD_H (BB_MAP_H * BB_TILE)
+
+#define BB_TILE_EMPTY '.'
+#define BB_TILE_SOLID '#'
+#define BB_TILE_PLATFORM '-'
+#define BB_TILE_POWER '?'
+#define BB_TILE_BONUS 'B'
+#define BB_TILE_GATE 'G'
+#define BB_TILE_FRAGMENT '*'
+#define BB_TILE_RARE_FRAGMENT 'o'
+#define BB_TILE_CODE_FRAGMENT 'D'
+#define BB_TILE_HIDDEN 'H'
+#define BB_TILE_SPIKE '^'
+#define BB_TILE_WATER '~'
+#define BB_TILE_EXIT 'E'
+#define BB_TILE_PLAYER_START 'S'
+#define BB_TILE_ENEMY 'v'
+#define BB_TILE_ENEMY_ALT 'T'
 
 typedef struct BB_Player {
     int x;
@@ -56,8 +74,6 @@ extern int bb_score;
 extern int bb_lives;
 extern int bb_fragments_left;
 extern ANA_Camera bb_camera;
-extern int bb_camera_x;
-extern int bb_camera_y;
 extern int bb_frame;
 
 char bb_tile_at(int tx, int ty);

@@ -2,8 +2,10 @@
 
 #include "byte_brothers_assets.h"
 #include "byte_brothers_internal.h"
+#include "byte_brothers_levels.h"
 #include "byte_brothers_render.h"
 
+#include <stdio.h>
 #include <string.h>
 
 /* Platforming rules, text-map loading, collision, enemies, and progression. */
@@ -17,89 +19,18 @@ int bb_score = 0;
 int bb_lives = 3;
 int bb_fragments_left = 0;
 ANA_Camera bb_camera;
-int bb_camera_x = 0;
-int bb_camera_y = 0;
 int bb_frame = 0;
-
-static const char* bb_levels[BB_LEVEL_COUNT][BB_MAP_H] = {
-    {
-        "................................................................",
-        "................................................................",
-        ".......................................................*........",
-        "......................*......?.......................-----....E.",
-        ".................----------.............*....................###",
-        "....................................--------....................",
-        "..........*..................H..........................v.......",
-        "......---------...........########..............----............",
-        "................................................................",
-        "....................v....................*......................",
-        "....S...........----------............----------................",
-        "########.......................?...........................#####",
-        "###########.............---------------..............###########",
-        "###############..................................###############",
-        "####################.............D...........###################",
-        "################################################################"
-    },
-    {
-        "................................................................",
-        ".......................................................G....E...",
-        "......................................................#######...",
-        "..............*.........................D.......................",
-        "..........---------..............---------------................",
-        "................................................................",
-        "....................~~~~~...................*...................",
-        "....S.....-----.................v.......----------..............",
-        "########........................................................",
-        "###########............?.........................H..............",
-        ".................-------------..............#########...........",
-        "................................................................",
-        "...........*..................v.........................*.......",
-        ".......---------...........########.................---------...",
-        "................................................................",
-        "################################################################"
-    },
-    {
-        "................................................................",
-        "............................................................E...",
-        ".......................................................#########",
-        ".............*.................B.B.B.....................*......",
-        ".........---------..........#########...............---------...",
-        ".................................?..............................",
-        "....S...........B.B...........--------.........v................",
-        "########.....########...............................########....",
-        "................................................................",
-        "........H....................*.............B.B.B................",
-        ".....########.............----------.....#########..............",
-        "........................v.......................................",
-        "...............*......................*.........................",
-        "..........------------............------------..................",
-        "......................................................o.........",
-        "################################################################"
-    },
-    {
-        "................................................................",
-        ".......................................................E........",
-        ".....................................................#####......",
-        "..........*.............^...........*...........................",
-        "......----------......#####.....----------..............T.......",
-        "....................................................########....",
-        "..................v......................~~~~~..................",
-        "....S.....----..........?...........---------------.............",
-        "########........................................................",
-        "###########............H....................*...................",
-        ".................-------------..........----------..............",
-        "..............................v.................................",
-        "...........*.............^^^^^^......................*..........",
-        ".......---------........########.................---------......",
-        ".....................................o..........................",
-        "################################################################"
-    }
-};
 
 static int bb_start_x = 0;
 static int bb_start_y = 0;
 
 static void bb_load_level(int level);
+
+#define BB_TILE_FLAG_SOLID 0x01u
+#define BB_TILE_FLAG_PLATFORM 0x02u
+#define BB_TILE_FLAG_HAZARD 0x04u
+#define BB_TILE_FLAG_COLLECTIBLE 0x08u
+#define BB_TILE_FLAG_GOAL 0x10u
 
 static int bb_actor_tile_x(int tile_x, int width)
 {
@@ -116,12 +47,6 @@ static int bb_enemy_tile_y(int tile_y)
     return (tile_y + 1) * BB_TILE - BB_ENEMY_H - 2;
 }
 
-static void bb_sync_camera_compat(void)
-{
-    bb_camera_x = bb_camera.x;
-    bb_camera_y = bb_camera.y;
-}
-
 static void bb_reset_camera(void)
 {
     ana_camera_init(
@@ -134,13 +59,12 @@ static void bb_reset_camera(void)
         BB_WORLD_H);
     ana_camera_set_snap(&bb_camera, BB_CAMERA_SNAP_X, BB_CAMERA_SNAP_Y);
     ana_camera_set_position(&bb_camera, 0, 0);
-    bb_sync_camera_compat();
 }
 
 char bb_tile_at(int tx, int ty)
 {
     if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
-        return '#';
+        return BB_TILE_SOLID;
     }
 
     return bb_map[ty][tx];
@@ -160,29 +84,53 @@ void bb_set_tile(int tx, int ty, char value)
     bb_render_tile_changed(tx, ty);
 }
 
+static unsigned char bb_tile_flags(char tile)
+{
+    switch (tile) {
+    case BB_TILE_SOLID:
+    case BB_TILE_POWER:
+    case BB_TILE_BONUS:
+    case BB_TILE_GATE:
+        return BB_TILE_FLAG_SOLID;
+    case BB_TILE_PLATFORM:
+        return BB_TILE_FLAG_PLATFORM;
+    case BB_TILE_SPIKE:
+    case BB_TILE_WATER:
+        return BB_TILE_FLAG_HAZARD;
+    case BB_TILE_FRAGMENT:
+    case BB_TILE_RARE_FRAGMENT:
+    case BB_TILE_CODE_FRAGMENT:
+        return BB_TILE_FLAG_COLLECTIBLE;
+    case BB_TILE_EXIT:
+        return BB_TILE_FLAG_GOAL;
+    default:
+        return 0u;
+    }
+}
+
 int bb_tile_is_solid(char tile)
 {
-    return tile == '#' || tile == '?' || tile == 'B' || tile == 'G';
+    return (bb_tile_flags(tile) & BB_TILE_FLAG_SOLID) != 0u;
 }
 
 int bb_tile_is_platform(char tile)
 {
-    return tile == '-';
+    return (bb_tile_flags(tile) & BB_TILE_FLAG_PLATFORM) != 0u;
 }
 
 int bb_tile_is_hazard(char tile)
 {
-    return tile == '^' || tile == '~';
+    return (bb_tile_flags(tile) & BB_TILE_FLAG_HAZARD) != 0u;
 }
 
 int bb_tile_is_collectible(char tile)
 {
-    return tile == '*' || tile == 'o' || tile == 'D';
+    return (bb_tile_flags(tile) & BB_TILE_FLAG_COLLECTIBLE) != 0u;
 }
 
 int bb_tile_is_goal(char tile)
 {
-    return tile == 'E';
+    return (bb_tile_flags(tile) & BB_TILE_FLAG_GOAL) != 0u;
 }
 
 static void bb_set_palette(void)
@@ -209,36 +157,25 @@ static void bb_set_palette(void)
     ana_set_palette(colors, 16);
 }
 
-static int bb_rect_intersects(
-    int ax,
-    int ay,
-    int aw,
-    int ah,
-    int bx,
-    int by,
-    int bw,
-    int bh)
+static ANA_Rect bb_tiles_for_rect(int x, int y, int w, int h)
 {
-    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    return ana_tile_rect_for_world_rect(
+        ana_rect_make(x, y, w, h),
+        BB_TILE,
+        BB_TILE);
 }
 
 static int bb_rect_hits_solid(int x, int y, int w, int h)
 {
-    int tx0;
-    int ty0;
-    int tx1;
-    int ty1;
+    ANA_Rect tiles;
     int tx;
     int ty;
     char tile;
 
-    tx0 = x / BB_TILE;
-    ty0 = y / BB_TILE;
-    tx1 = (x + w - 1) / BB_TILE;
-    ty1 = (y + h - 1) / BB_TILE;
+    tiles = bb_tiles_for_rect(x, y, w, h);
 
-    for (ty = ty0; ty <= ty1; ty++) {
-        for (tx = tx0; tx <= tx1; tx++) {
+    for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
+        for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
             tile = bb_tile_at(tx, ty);
             if (bb_tile_is_solid(tile)) {
                 return 1;
@@ -251,20 +188,14 @@ static int bb_rect_hits_solid(int x, int y, int w, int h)
 
 static int bb_rect_hits_hazard(int x, int y, int w, int h)
 {
-    int tx0;
-    int ty0;
-    int tx1;
-    int ty1;
+    ANA_Rect tiles;
     int tx;
     int ty;
 
-    tx0 = x / BB_TILE;
-    ty0 = y / BB_TILE;
-    tx1 = (x + w - 1) / BB_TILE;
-    ty1 = (y + h - 1) / BB_TILE;
+    tiles = bb_tiles_for_rect(x, y, w, h);
 
-    for (ty = ty0; ty <= ty1; ty++) {
-        for (tx = tx0; tx <= tx1; tx++) {
+    for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
+        for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
             if (bb_tile_is_hazard(bb_tile_at(tx, ty))) {
                 return 1;
             }
@@ -276,12 +207,14 @@ static int bb_rect_hits_hazard(int x, int y, int w, int h)
 
 static int bb_has_floor_at(int x, int y)
 {
+    ANA_Rect tile_rect;
     int tx;
     int ty;
     char tile;
 
-    tx = x / BB_TILE;
-    ty = y / BB_TILE;
+    tile_rect = bb_tiles_for_rect(x, y, 1, 1);
+    tx = tile_rect.x;
+    ty = tile_rect.y;
     tile = bb_tile_at(tx, ty);
     return bb_tile_is_solid(tile) || bb_tile_is_platform(tile);
 }
@@ -295,6 +228,7 @@ static int bb_hits_platform_on_descent(int x, int old_y, int new_y, int w, int h
     int new_bottom;
     int platform_top;
     int ty;
+    ANA_Rect tiles;
 
     old_bottom = old_y + h;
     new_bottom = new_y + h;
@@ -302,9 +236,10 @@ static int bb_hits_platform_on_descent(int x, int old_y, int new_y, int w, int h
         return 0;
     }
 
-    tx0 = (x + 1) / BB_TILE;
-    tx1 = (x + w - 2) / BB_TILE;
-    ty = new_bottom / BB_TILE;
+    tiles = bb_tiles_for_rect(x + 1, new_bottom, w - 2, 1);
+    tx0 = tiles.x;
+    tx1 = tiles.x + tiles.w - 1;
+    ty = tiles.y;
     platform_top = ty * BB_TILE;
 
     if (old_bottom > platform_top || new_bottom < platform_top) {
@@ -322,23 +257,23 @@ static int bb_hits_platform_on_descent(int x, int old_y, int new_y, int w, int h
 
 static int bb_bump_head_tiles(int head_y)
 {
-    int tx0;
-    int tx1;
+    ANA_Rect tiles;
     int tx;
     int ty;
     char tile;
     int bumped;
 
-    tx0 = (bb_player.x + 1) / BB_TILE;
-    tx1 = (bb_player.x + BB_PLAYER_W - 2) / BB_TILE;
-    ty = head_y / BB_TILE;
+    tiles = bb_tiles_for_rect(bb_player.x + 1, head_y, BB_PLAYER_W - 2, 1);
+    ty = tiles.y;
     bumped = 0;
 
-    for (tx = tx0; tx <= tx1; tx++) {
+    for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
         tile = bb_tile_at(tx, ty);
-        if (tile == '?' || tile == 'H' || tile == 'B') {
-            bb_set_tile(tx, ty, '.');
-            bb_score += tile == 'B' ? 5 : 25;
+        if (tile == BB_TILE_POWER ||
+                tile == BB_TILE_HIDDEN ||
+                tile == BB_TILE_BONUS) {
+            bb_set_tile(tx, ty, BB_TILE_EMPTY);
+            bb_score += tile == BB_TILE_BONUS ? 5 : 25;
             bb_assets_play_power();
             bumped = 1;
         }
@@ -471,12 +406,7 @@ static void bb_move_player_v(int dy)
 
 static void bb_clamp_player_to_world(void)
 {
-    if (bb_player.x < 0) {
-        bb_player.x = 0;
-    }
-    if (bb_player.x > BB_WORLD_W - BB_PLAYER_W) {
-        bb_player.x = BB_WORLD_W - BB_PLAYER_W;
-    }
+    bb_player.x = ana_clamp_int(bb_player.x, 0, BB_WORLD_W - BB_PLAYER_W);
     if (bb_player.y > BB_WORLD_H) {
         bb_player_hit();
     }
@@ -484,35 +414,34 @@ static void bb_clamp_player_to_world(void)
 
 static void bb_collect_at_player(void)
 {
-    int tx0;
-    int tx1;
-    int ty0;
-    int ty1;
+    ANA_Rect tiles;
     int tx;
     int ty;
     char tile;
 
-    tx0 = bb_player.x / BB_TILE;
-    tx1 = (bb_player.x + BB_PLAYER_W - 1) / BB_TILE;
-    ty0 = bb_player.y / BB_TILE;
-    ty1 = (bb_player.y + BB_PLAYER_H - 1) / BB_TILE;
+    tiles = bb_tiles_for_rect(
+        bb_player.x,
+        bb_player.y,
+        BB_PLAYER_W,
+        BB_PLAYER_H);
 
-    for (ty = ty0; ty <= ty1; ty++) {
-        for (tx = tx0; tx <= tx1; tx++) {
+    for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
+        for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
             tile = bb_tile_at(tx, ty);
-            if (tile == '*') {
+            if (tile == BB_TILE_FRAGMENT) {
                 bb_score += 10;
                 bb_fragments_left--;
-                bb_set_tile(tx, ty, '.');
+                bb_set_tile(tx, ty, BB_TILE_EMPTY);
                 bb_assets_play_collect();
-            } else if (tile == 'o') {
+            } else if (tile == BB_TILE_RARE_FRAGMENT) {
                 bb_score += 100;
                 bb_fragments_left--;
-                bb_set_tile(tx, ty, '.');
+                bb_set_tile(tx, ty, BB_TILE_EMPTY);
                 bb_assets_play_power();
-            } else if (tile == 'D') {
+            } else if (tile == BB_TILE_CODE_FRAGMENT) {
                 bb_score += 50;
-                bb_set_tile(tx, ty, '.');
+                bb_fragments_left--;
+                bb_set_tile(tx, ty, BB_TILE_EMPTY);
                 bb_assets_play_power();
             }
         }
@@ -521,20 +450,18 @@ static void bb_collect_at_player(void)
 
 static int bb_player_on_goal(void)
 {
-    int tx0;
-    int tx1;
-    int ty0;
-    int ty1;
+    ANA_Rect tiles;
     int tx;
     int ty;
 
-    tx0 = bb_player.x / BB_TILE;
-    tx1 = (bb_player.x + BB_PLAYER_W - 1) / BB_TILE;
-    ty0 = bb_player.y / BB_TILE;
-    ty1 = (bb_player.y + BB_PLAYER_H - 1) / BB_TILE;
+    tiles = bb_tiles_for_rect(
+        bb_player.x,
+        bb_player.y,
+        BB_PLAYER_W,
+        BB_PLAYER_H);
 
-    for (ty = ty0; ty <= ty1; ty++) {
-        for (tx = tx0; tx <= tx1; tx++) {
+    for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
+        for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
             if (bb_tile_is_goal(bb_tile_at(tx, ty))) {
                 return 1;
             }
@@ -548,9 +475,8 @@ static void bb_update_camera(void)
 {
     int target;
 
-    target = bb_player.x - 136;
+    target = bb_player.x - BB_CAMERA_TARGET_X;
     ana_camera_set_position(&bb_camera, target, 0);
-    bb_sync_camera_compat();
 }
 
 static void bb_update_enemies(void)
@@ -586,15 +512,17 @@ static void bb_update_enemies(void)
             }
         }
 
-        if (bb_rect_intersects(
-                bb_player.x,
-                bb_player.y,
-                BB_PLAYER_W,
-                BB_PLAYER_H,
-                enemy->x,
-                enemy->y,
-                BB_ENEMY_W,
-                BB_ENEMY_H)) {
+        if (ana_rect_intersects(
+                ana_rect_make(
+                    bb_player.x,
+                    bb_player.y,
+                    BB_PLAYER_W,
+                    BB_PLAYER_H),
+                ana_rect_make(
+                    enemy->x,
+                    enemy->y,
+                    BB_ENEMY_W,
+                    BB_ENEMY_H))) {
             bb_player_hit();
         }
     }
@@ -614,11 +542,11 @@ static void bb_load_level(int level)
         memcpy(bb_map[y], bb_levels[level][y], BB_MAP_W + 1);
         for (x = 0; x < BB_MAP_W; x++) {
             tile = bb_map[y][x];
-            if (tile == 'S') {
+            if (tile == BB_TILE_PLAYER_START) {
                 bb_start_x = bb_actor_tile_x(x, BB_PLAYER_W);
                 bb_start_y = bb_player_tile_y(y);
-                bb_map[y][x] = '.';
-            } else if (tile == 'v' || tile == 'T') {
+                bb_map[y][x] = BB_TILE_EMPTY;
+            } else if (tile == BB_TILE_ENEMY || tile == BB_TILE_ENEMY_ALT) {
                 if (bb_enemy_count < BB_MAX_ENEMIES) {
                     bb_enemies[bb_enemy_count].x =
                         bb_actor_tile_x(x, BB_ENEMY_W);
@@ -627,7 +555,7 @@ static void bb_load_level(int level)
                     bb_enemies[bb_enemy_count].alive = 1;
                     bb_enemy_count++;
                 }
-                bb_map[y][x] = '.';
+                bb_map[y][x] = BB_TILE_EMPTY;
             } else if (bb_tile_is_collectible(tile)) {
                 bb_fragments_left++;
             }
@@ -636,6 +564,11 @@ static void bb_load_level(int level)
 
     bb_reset_player();
     bb_render_reset();
+    printf(
+        "Byte Brothers level %d loaded: enemies=%d, fragments=%d\n",
+        level + 1,
+        bb_enemy_count,
+        bb_fragments_left);
 }
 
 void byte_brothers_load(void)

@@ -71,6 +71,14 @@ static void test_rect_helpers(void)
     assert(ana_rect_contains(bounds, ana_rect_make(2, 2, 4, 4)));
     assert(!ana_rect_contains(bounds, ana_rect_make(8, 8, 4, 4)));
     assert(!ana_rect_contains(bounds, ana_rect_make(8, 8, 0, 4)));
+    assert(ana_rect_should_merge(
+        ana_rect_make(0, 0, 4, 4),
+        ana_rect_make(4, 0, 4, 4),
+        0));
+    assert(!ana_rect_should_merge(
+        ana_rect_make(0, 0, 4, 4),
+        ana_rect_make(10, 0, 4, 4),
+        0));
 
     aligned = ana_rect_align_x8(ana_rect_make(5, 7, 9, 3), 0, 320);
     assert(aligned.x == 0);
@@ -89,6 +97,91 @@ static void test_rect_helpers(void)
     aligned = ana_rect_align_x8(ana_rect_make(-3, 0, 6, 2), -16, 16);
     assert(aligned.x == -8);
     assert(aligned.w == 16);
+}
+
+static void test_rect_list(void)
+{
+    ANA_Rect storage[4];
+    ANA_RectList list;
+    ANA_Rect rect;
+
+    ana_rect_list_init(&list, storage, 4);
+    ana_rect_list_set_bounds(&list, ana_rect_make(0, 0, 100, 100));
+    ana_rect_list_set_merge_slack(&list, 0);
+
+    ana_rect_list_add(&list, ana_rect_make(10, 10, 10, 10));
+    assert(ana_rect_list_count(&list) == 1);
+    rect = ana_rect_list_rect(&list, 0);
+    assert(rect.x == 10);
+    assert(rect.y == 10);
+    assert(rect.w == 10);
+    assert(rect.h == 10);
+
+    ana_rect_list_add(&list, ana_rect_make(12, 12, 3, 3));
+    assert(ana_rect_list_count(&list) == 1);
+
+    ana_rect_list_add(&list, ana_rect_make(18, 10, 10, 10));
+    assert(ana_rect_list_count(&list) == 1);
+    rect = ana_rect_list_rect(&list, 0);
+    assert(rect.x == 10);
+    assert(rect.y == 10);
+    assert(rect.w == 18);
+    assert(rect.h == 10);
+
+    ana_rect_list_add_padded(&list, ana_rect_make(98, 98, 10, 10), 2);
+    assert(ana_rect_list_count(&list) == 2);
+    rect = ana_rect_list_rect(&list, 1);
+    assert(rect.x == 96);
+    assert(rect.y == 96);
+    assert(rect.w == 4);
+    assert(rect.h == 4);
+
+    ana_rect_list_clear(&list);
+    assert(ana_rect_list_count(&list) == 0);
+}
+
+static void test_tile_rect_helpers(void)
+{
+    ANA_Rect tiles;
+
+    tiles = ana_tile_rect_for_world_rect(ana_rect_make(0, 0, 16, 16), 16, 16);
+    assert(tiles.x == 0);
+    assert(tiles.y == 0);
+    assert(tiles.w == 1);
+    assert(tiles.h == 1);
+
+    tiles = ana_tile_rect_for_world_rect(ana_rect_make(15, 31, 2, 2), 16, 16);
+    assert(tiles.x == 0);
+    assert(tiles.y == 1);
+    assert(tiles.w == 2);
+    assert(tiles.h == 2);
+
+    tiles = ana_tile_rect_for_world_rect(ana_rect_make(-2, -1, 4, 2), 16, 16);
+    assert(tiles.x == -1);
+    assert(tiles.y == -1);
+    assert(tiles.w == 2);
+    assert(tiles.h == 2);
+
+    tiles = ana_tile_rect_for_world_rect(ana_rect_make(0, 0, 0, 4), 16, 16);
+    assert(ana_rect_is_empty(tiles));
+}
+
+static void test_path_join(void)
+{
+    char path[16];
+
+    ana_path_join(path, (int)sizeof(path), "assets/", "theme.mod");
+    assert(path[0] == 'a');
+    assert(path[7] == 't');
+    assert(path[14] == 'o');
+    assert(path[15] == '\0');
+
+    ana_path_join(path, 5, "abc", "def");
+    assert(path[0] == 'a');
+    assert(path[1] == 'b');
+    assert(path[2] == 'c');
+    assert(path[3] == 'd');
+    assert(path[4] == '\0');
 }
 
 static void test_clamp_int(void)
@@ -193,6 +286,9 @@ int main(void)
 {
     test_rect_intersections();
     test_rect_helpers();
+    test_rect_list();
+    test_tile_rect_helpers();
+    test_path_join();
     test_clamp_int();
     test_camera();
     test_timer();

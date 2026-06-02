@@ -12,6 +12,15 @@ typedef struct ANA_Rect {
     int h;
 } ANA_Rect;
 
+typedef struct ANA_RectList {
+    ANA_Rect* rects;
+    int count;
+    int capacity;
+    ANA_Rect bounds;
+    int bounds_enabled;
+    int merge_slack;
+} ANA_RectList;
+
 typedef struct ANA_Timer {
     int ticks;
     int interval;
@@ -37,7 +46,25 @@ ANA_Rect ana_rect_align_x8(ANA_Rect rect, int min_x, int max_x);
 int ana_rect_is_empty(ANA_Rect rect);
 int ana_rect_contains(ANA_Rect outer, ANA_Rect inner);
 int ana_rect_intersects(ANA_Rect a, ANA_Rect b);
+int ana_rect_should_merge(ANA_Rect a, ANA_Rect b, int merge_slack);
+void ana_rect_list_init(ANA_RectList* list, ANA_Rect* rects, int capacity);
+void ana_rect_list_set_bounds(ANA_RectList* list, ANA_Rect bounds);
+void ana_rect_list_set_merge_slack(ANA_RectList* list, int merge_slack);
+void ana_rect_list_clear(ANA_RectList* list);
+int ana_rect_list_count(const ANA_RectList* list);
+ANA_Rect ana_rect_list_rect(const ANA_RectList* list, int index);
+void ana_rect_list_add(ANA_RectList* list, ANA_Rect rect);
+void ana_rect_list_add_padded(ANA_RectList* list, ANA_Rect rect, int padding);
 int ana_clamp_int(int value, int min_value, int max_value);
+ANA_Rect ana_tile_rect_for_world_rect(
+    ANA_Rect world_rect,
+    int tile_width,
+    int tile_height);
+void ana_path_join(
+    char* path,
+    int capacity,
+    const char* root,
+    const char* name);
 void ana_camera_init(
     ANA_Camera* camera,
     int view_x,

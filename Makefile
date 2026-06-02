@@ -114,12 +114,14 @@ AMAZE_ASSET_STAMP := $(AMAZE_ASSET_BUILD_DIR)/.stamp
 BYTE_BROTHERS_SRCS := \
 	examples/byte_brothers/main.c \
 	examples/byte_brothers/byte_brothers_game.c \
+	examples/byte_brothers/byte_brothers_levels.c \
 	examples/byte_brothers/byte_brothers_render.c \
 	examples/byte_brothers/byte_brothers_assets.c
 BYTE_BROTHERS_HEADERS := \
 	examples/byte_brothers/byte_brothers_assets.h \
 	examples/byte_brothers/byte_brothers_game.h \
 	examples/byte_brothers/byte_brothers_internal.h \
+	examples/byte_brothers/byte_brothers_levels.h \
 	examples/byte_brothers/byte_brothers_render.h
 BYTE_BROTHERS_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/byte_brothers
 BYTE_BROTHERS_ASSET_DIR := $(BYTE_BROTHERS_ASSET_BUILD_DIR)/assets
@@ -181,8 +183,10 @@ AMAZE_A1200_ADF := $(ADF_DIR)/amaze-a1200.adf
 AMAZE_A1200_DEBUG_ADF := $(ADF_DIR)/amaze-a1200-debug.adf
 BYTE_BROTHERS_A1200_ADF := $(ADF_DIR)/byte-brothers-a1200.adf
 BYTE_BROTHERS_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-a1200-debug.adf
+BYTE_BROTHERS_SPRITES_A1200_ADF := $(ADF_DIR)/byte-brothers-sprites-a1200.adf
+BYTE_BROTHERS_SPRITES_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-sprites-a1200-debug.adf
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-sprites-a1200-adf byte-brothers-sprites-a1200-debug-adf release-package clean-assets clean
 
 all: lib examples tools
 
@@ -246,6 +250,10 @@ byte-brothers-a1200-adf: $(BYTE_BROTHERS_A1200_ADF)
 
 byte-brothers-a1200-debug-adf: $(BYTE_BROTHERS_A1200_DEBUG_ADF)
 
+byte-brothers-sprites-a1200-adf: $(BYTE_BROTHERS_SPRITES_A1200_ADF)
+
+byte-brothers-sprites-a1200-debug-adf: $(BYTE_BROTHERS_SPRITES_A1200_DEBUG_ADF)
+
 release-package:
 	$(RM) $(RELEASE_ROOT)
 	mkdir -p $(RELEASE_DIR)
@@ -295,7 +303,7 @@ $(BUILD_DIR)/examples/byte_brothers/byte_brothers: $(BYTE_BROTHERS_SRCS) $(BYTE_
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(BYTE_BROTHERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c tools/ana-convert/vendor/stb_image.h
+$(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c tools/ana-convert/vendor/stb_image.h include/ana/ana_version.h
 	mkdir -p $(@D)
 	$(HOST_CC) $(TOOL_CFLAGS) $< $(HOST_LDFLAGS) -o $@
 
@@ -479,6 +487,10 @@ $(BYTE_BROTHERS_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/byte_brothers/byte
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l BYTE1200 $(BYTE_BROTHERS_ASSET_DIR)
 
+$(BYTE_BROTHERS_SPRITES_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/byte_brothers/byte_brothers $(BYTE_BROTHERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l BBSPR1200 $(BYTE_BROTHERS_ASSET_DIR)
+
 $(INVADERS_DEBUG_ADF): $(AMIGA_INVADERS_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l ANAInvDbg $(INVADERS_ASSET_DIR)
@@ -502,6 +514,10 @@ $(AMAZE_A1200_DEBUG_ADF): $(AMIGA_AMAZE_A1200_DEBUG_BIN) $(AMAZE_ASSET_STAMP)
 $(BYTE_BROTHERS_A1200_DEBUG_ADF): $(AMIGA_BYTE_BROTHERS_A1200_DEBUG_BIN) $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(ADFTOOL) -i $< -a $@ -l BYTE12Dbg $(BYTE_BROTHERS_ASSET_DIR)
+
+$(BYTE_BROTHERS_SPRITES_A1200_DEBUG_ADF): $(AMIGA_BYTE_BROTHERS_A1200_DEBUG_BIN) $(BYTE_BROTHERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(ADFTOOL) -i $< -a $@ -l BBSPRTDbg $(BYTE_BROTHERS_ASSET_DIR)
 
 $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 	mkdir -p $(@D)

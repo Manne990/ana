@@ -54,6 +54,27 @@ static int ana_ceil_x8(int value)
     return value + (8 - remainder);
 }
 
+static int ana_floor_div(int value, int divisor)
+{
+    int quotient;
+    int remainder;
+
+    if (divisor < 0) {
+        divisor = -divisor;
+    }
+    if (divisor == 0) {
+        return 0;
+    }
+
+    quotient = value / divisor;
+    remainder = value % divisor;
+    if (remainder < 0) {
+        quotient--;
+    }
+
+    return quotient;
+}
+
 ANA_Rect ana_rect_make(int x, int y, int w, int h)
 {
     ANA_Rect rect;
@@ -154,6 +175,202 @@ int ana_rect_intersects(ANA_Rect a, ANA_Rect b)
         b.y < a.y + a.h;
 }
 
+static long ana_rect_area(ANA_Rect rect)
+{
+    if (ana_rect_is_empty(rect)) {
+        return 0L;
+    }
+
+    return (long)rect.w * rect.h;
+}
+
+static int ana_rects_should_merge(ANA_Rect a, ANA_Rect b, int merge_slack)
+{
+    ANA_Rect merged;
+    long merged_area;
+    long separate_area;
+
+    if (ana_rect_intersects(a, b)) {
+        return 1;
+    }
+
+    if (merge_slack < 0) {
+        merge_slack = 0;
+    }
+
+    merged = ana_rect_union(a, b);
+    merged_area = ana_rect_area(merged);
+    separate_area = ana_rect_area(a) + ana_rect_area(b);
+
+    return merged_area <= separate_area + (long)merge_slack;
+}
+
+int ana_rect_should_merge(ANA_Rect a, ANA_Rect b, int merge_slack)
+{
+    return ana_rects_should_merge(a, b, merge_slack);
+}
+
+static void ana_rect_list_remove(ANA_RectList* list, int index)
+{
+    int i;
+
+    if (list == 0 || list->rects == 0 ||
+            index < 0 || index >= list->count) {
+        return;
+    }
+
+    for (i = index; i < list->count - 1; i++) {
+        list->rects[i] = list->rects[i + 1];
+    }
+    list->count--;
+}
+
+static void ana_rect_list_coalesce(ANA_RectList* list, int index)
+{
+    int i;
+
+    if (list == 0 || list->rects == 0 ||
+            index < 0 || index >= list->count) {
+        return;
+    }
+
+    i = 0;
+    while (i < list->count) {
+        if (i == index) {
+            i++;
+            continue;
+        }
+
+        if (ana_rect_contains(list->rects[index], list->rects[i]) ||
+                ana_rect_contains(list->rects[i], list->rects[index]) ||
+                ana_rects_should_merge(
+                    list->rects[index],
+                    list->rects[i],
+                    list->merge_slack)) {
+            list->rects[index] =
+                ana_rect_union(list->rects[index], list->rects[i]);
+            ana_rect_list_remove(list, i);
+            if (i < index) {
+                index--;
+            }
+            i = 0;
+            continue;
+        }
+
+        i++;
+    }
+}
+
+void ana_rect_list_init(ANA_RectList* list, ANA_Rect* rects, int capacity)
+{
+    if (list == 0) {
+        return;
+    }
+
+    list->rects = rects;
+    list->count = 0;
+    list->capacity = capacity > 0 ? capacity : 0;
+    list->bounds = ana_rect_make(0, 0, 0, 0);
+    list->bounds_enabled = 0;
+    list->merge_slack = 64;
+}
+
+void ana_rect_list_set_bounds(ANA_RectList* list, ANA_Rect bounds)
+{
+    if (list == 0) {
+        return;
+    }
+
+    list->bounds = bounds;
+    list->bounds_enabled = !ana_rect_is_empty(bounds);
+}
+
+void ana_rect_list_set_merge_slack(ANA_RectList* list, int merge_slack)
+{
+    if (list == 0) {
+        return;
+    }
+
+    list->merge_slack = merge_slack >= 0 ? merge_slack : 0;
+}
+
+void ana_rect_list_clear(ANA_RectList* list)
+{
+    if (list != 0) {
+        list->count = 0;
+    }
+}
+
+int ana_rect_list_count(const ANA_RectList* list)
+{
+    return list != 0 ? list->count : 0;
+}
+
+ANA_Rect ana_rect_list_rect(const ANA_RectList* list, int index)
+{
+    if (list == 0 || list->rects == 0 ||
+            index < 0 || index >= list->count) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    return list->rects[index];
+}
+
+void ana_rect_list_add(ANA_RectList* list, ANA_Rect rect)
+{
+    int i;
+
+    if (list == 0 || list->rects == 0 || list->capacity <= 0) {
+        return;
+    }
+
+    if (list->bounds_enabled) {
+        rect = ana_rect_clip(rect, list->bounds);
+    }
+    if (ana_rect_is_empty(rect)) {
+        return;
+    }
+
+    for (i = 0; i < list->count; i++) {
+        if (ana_rect_contains(list->rects[i], rect)) {
+            return;
+        }
+
+        if (ana_rect_contains(rect, list->rects[i]) ||
+                ana_rects_should_merge(
+                    list->rects[i],
+                    rect,
+                    list->merge_slack)) {
+            list->rects[i] = ana_rect_union(list->rects[i], rect);
+            ana_rect_list_coalesce(list, i);
+            return;
+        }
+    }
+
+    if (list->count < list->capacity) {
+        list->rects[list->count] = rect;
+        list->count++;
+        return;
+    }
+
+    list->rects[0] = ana_rect_union(list->rects[0], rect);
+    ana_rect_list_coalesce(list, 0);
+}
+
+void ana_rect_list_add_padded(ANA_RectList* list, ANA_Rect rect, int padding)
+{
+    if (padding < 0) {
+        padding = 0;
+    }
+
+    rect = ana_rect_make(
+        rect.x - padding,
+        rect.y - padding,
+        rect.w + padding * 2,
+        rect.h + padding * 2);
+    ana_rect_list_add(list, rect);
+}
+
 ANA_Rect ana_rect_align_x8(ANA_Rect rect, int min_x, int max_x)
 {
     int tmp;
@@ -206,6 +423,61 @@ int ana_clamp_int(int value, int min_value, int max_value)
     }
 
     return value;
+}
+
+ANA_Rect ana_tile_rect_for_world_rect(
+    ANA_Rect world_rect,
+    int tile_width,
+    int tile_height)
+{
+    int tx0;
+    int ty0;
+    int tx1;
+    int ty1;
+
+    if (ana_rect_is_empty(world_rect) ||
+            tile_width <= 0 ||
+            tile_height <= 0) {
+        return ana_rect_make(0, 0, 0, 0);
+    }
+
+    tx0 = ana_floor_div(world_rect.x, tile_width);
+    ty0 = ana_floor_div(world_rect.y, tile_height);
+    tx1 = ana_floor_div(world_rect.x + world_rect.w - 1, tile_width);
+    ty1 = ana_floor_div(world_rect.y + world_rect.h - 1, tile_height);
+
+    return ana_rect_make(tx0, ty0, tx1 - tx0 + 1, ty1 - ty0 + 1);
+}
+
+void ana_path_join(
+    char* path,
+    int capacity,
+    const char* root,
+    const char* name)
+{
+    int pos;
+
+    if (path == 0 || capacity <= 0) {
+        return;
+    }
+
+    pos = 0;
+    if (root != 0) {
+        while (root[pos] != '\0' && pos < capacity - 1) {
+            path[pos] = root[pos];
+            pos++;
+        }
+    }
+
+    if (name != 0) {
+        while (*name != '\0' && pos < capacity - 1) {
+            path[pos] = *name;
+            name++;
+            pos++;
+        }
+    }
+
+    path[pos] = '\0';
 }
 
 static int ana_camera_max_x(const ANA_Camera* camera)

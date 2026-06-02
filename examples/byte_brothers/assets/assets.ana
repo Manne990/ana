@@ -1,8 +1,13 @@
 ANA_ASSETS 1
 
-sound jump jump.anasfx
-sound collect collect.anasfx
-sound power power.anasfx
-sound hit hit.anasfx
-sound goal goal.anasfx
+palette game palette.png --colors 16
+
+image player player.png --palette game --frame-width 20 --frame-height 28 --transparent #ff00ff
+image enemy enemy.png --palette game --transparent #ff00ff
+
+sound jump jump.wav --rate 8000 --volume 24 --priority 1
+sound collect collect.wav --rate 8000 --volume 36 --priority 2
+sound power power.wav --rate 8000 --volume 44 --priority 4
+sound hit hit.wav --rate 8000 --volume 42 --priority 5
+sound goal goal.wav --rate 8000 --volume 24 --priority 1
 music theme theme.mod

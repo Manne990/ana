@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 
-/* Audio setup for the Byte Brothers platform sample. */
+/* Image and audio setup for the Byte Brothers platform sample. */
 
 #ifdef ANA_TARGET_AMIGA
 #define BB_ASSET_ROOT "assets/"
@@ -17,31 +17,14 @@ static ANA_Sound bb_hit_sound = NULL;
 static ANA_Sound bb_goal_sound = NULL;
 static ANA_Music bb_theme_music = NULL;
 static int bb_loaded = 0;
-
-static void bb_build_asset_path(char* path, const char* name, int capacity)
-{
-    int pos;
-
-    pos = 0;
-    while (BB_ASSET_ROOT[pos] != '\0' && pos < capacity - 1) {
-        path[pos] = BB_ASSET_ROOT[pos];
-        pos++;
-    }
-
-    while (*name != '\0' && pos < capacity - 1) {
-        path[pos] = *name;
-        name++;
-        pos++;
-    }
-
-    path[pos] = '\0';
-}
+ANA_Image bb_player_image = NULL;
+ANA_Image bb_enemy_image = NULL;
 
 static ANA_Sound bb_load_sound_file(const char* name)
 {
     char path[96];
 
-    bb_build_asset_path(path, name, (int)sizeof(path));
+    ana_path_join(path, (int)sizeof(path), BB_ASSET_ROOT, name);
     return ana_load_sound(path);
 }
 
@@ -49,8 +32,16 @@ static ANA_Music bb_load_music_file(const char* name)
 {
     char path[96];
 
-    bb_build_asset_path(path, name, (int)sizeof(path));
+    ana_path_join(path, (int)sizeof(path), BB_ASSET_ROOT, name);
     return ana_load_music(path);
+}
+
+static ANA_Image bb_load_image_file(const char* name)
+{
+    char path[96];
+
+    ana_path_join(path, (int)sizeof(path), BB_ASSET_ROOT, name);
+    return ana_load_image(path);
 }
 
 void bb_assets_load(void)
@@ -67,6 +58,8 @@ void bb_assets_load(void)
     ana_set_music_volume(8);
     ana_set_sound_volume(64);
 
+    bb_player_image = bb_load_image_file("player.anaimg");
+    bb_enemy_image = bb_load_image_file("enemy.anaimg");
     bb_jump_sound = bb_load_sound_file("jump.anasnd");
     bb_collect_sound = bb_load_sound_file("collect.anasnd");
     bb_power_sound = bb_load_sound_file("power.anasnd");
@@ -78,7 +71,9 @@ void bb_assets_load(void)
         ana_play_music(bb_theme_music, ANA_MUSIC_LOOP);
     }
 
-    bb_loaded = bb_jump_sound != NULL &&
+    bb_loaded = bb_player_image != NULL &&
+        bb_enemy_image != NULL &&
+        bb_jump_sound != NULL &&
         bb_collect_sound != NULL &&
         bb_power_sound != NULL &&
         bb_hit_sound != NULL &&
@@ -106,6 +101,12 @@ void bb_assets_unload(void)
     if (bb_goal_sound != NULL) {
         ana_free_sound(bb_goal_sound);
     }
+    if (bb_enemy_image != NULL) {
+        ana_free_image(bb_enemy_image);
+    }
+    if (bb_player_image != NULL) {
+        ana_free_image(bb_player_image);
+    }
     if (bb_theme_music != NULL) {
         ana_free_music(bb_theme_music);
     }
@@ -116,6 +117,8 @@ void bb_assets_unload(void)
     bb_hit_sound = NULL;
     bb_goal_sound = NULL;
     bb_theme_music = NULL;
+    bb_player_image = NULL;
+    bb_enemy_image = NULL;
 }
 
 void bb_assets_play_jump(void)

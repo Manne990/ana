@@ -14,11 +14,9 @@ structure, but be designed around C and Amiga hardware.
 
 ## Current Status
 
-ANA 0.1.0 is tagged as the "Invaders Release": a small framework release
-demonstrated by a playable Space Invaders-style example. Current `main` is
-post-0.1 development toward 0.2 and adds `AMAze`, a compact maze-chase sample
-with simple SFX and rudimentary pathfinding, plus `Byte Brothers`, an early
-side-scrolling platform sample.
+ANA 0.2.0 builds on the tagged 0.1.0 "Invaders Release" with `AMAze`, a
+compact maze-chase sample with simple SFX and rudimentary pathfinding, plus
+`Byte Brothers`, an early side-scrolling platform sample.
 
 Implemented so far:
 
@@ -277,7 +275,7 @@ make release-package
 The archive is written to:
 
 ```text
-build/release/ana-0.2.0-dev.tar.gz
+build/release/ana-0.2.0.tar.gz
 ```
 
 See [Build and release package guide](docs/build-and-release.md) for package

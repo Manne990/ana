@@ -1,9 +1,12 @@
 #ifndef BYTE_BROTHERS_ASSETS_H
 #define BYTE_BROTHERS_ASSETS_H
 
-/* Loads and owns Byte Brothers audio assets. */
+/* Loads and owns Byte Brothers image and audio assets. */
 
 #include "ana.h"
+
+extern ANA_Image bb_player_image;
+extern ANA_Image bb_enemy_image;
 
 void bb_assets_load(void);
 void bb_assets_unload(void);
