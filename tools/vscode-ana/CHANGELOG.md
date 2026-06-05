@@ -10,3 +10,4 @@
   `.ana-sdk` instead of a hardcoded repository path.
 - Treat the patch segment as the extension build number for local and CI VSIX
   packages.
+- Added a packaged extension icon for the VS Code Extensions view and header.

@@ -2,8 +2,9 @@
   "name": "ana-vscode",
   "displayName": "ANA for VS Code",
   "description": "Workflow integration for ANA Amiga game development in Visual Studio Code.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "ana",
+  "icon": "resources/ANA-logo.png",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -16,6 +17,10 @@
   "categories": [
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#111111",
+    "theme": "dark"
+  },
   "keywords": [
     "ana",
     "amiga",
