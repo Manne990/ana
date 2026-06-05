@@ -2,8 +2,8 @@
   "name": "ana-vscode",
   "displayName": "ANA for VS Code",
   "description": "Workflow integration for ANA Amiga game development in Visual Studio Code.",
-  "version": "0.1.2",
-  "publisher": "ana",
+  "version": "0.2.2",
+  "publisher": "loveteams-ai",
   "icon": "resources/ANA-logo.png",
   "license": "MIT",
   "repository": {
@@ -42,6 +42,11 @@
     "onCommand:ana.runAdf",
     "onCommand:ana.convertAsset",
     "onCommand:ana.openAssetManifest",
+    "onCommand:ana.refreshDiagnostics",
+    "onCommand:ana.validateAssetManifest",
+    "onCommand:ana.previewAssetManifest",
+    "onCommand:ana.copyManifestBuildCommand",
+    "onCommand:ana.showMemoryBudget",
     "workspaceContains:include/ana/ana.h",
     "workspaceContains:include/ana/ana_version.h",
     "onLanguage:c"
@@ -106,6 +111,31 @@
       {
         "command": "ana.openAssetManifest",
         "title": "Open Asset Manifest",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.refreshDiagnostics",
+        "title": "Refresh Diagnostics",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.validateAssetManifest",
+        "title": "Validate Asset Manifest",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.previewAssetManifest",
+        "title": "Preview Asset Manifest",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.copyManifestBuildCommand",
+        "title": "Copy Manifest Build Command",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.showMemoryBudget",
+        "title": "Show Memory Budget",
         "category": "ANA"
       }
     ],
@@ -191,11 +221,36 @@
           "command": "ana.openAssetManifest",
           "when": "resourceExtname == .ana",
           "group": "navigation@21"
+        },
+        {
+          "command": "ana.validateAssetManifest",
+          "when": "resourceExtname == .ana",
+          "group": "navigation@22"
+        },
+        {
+          "command": "ana.previewAssetManifest",
+          "when": "resourceExtname == .ana",
+          "group": "navigation@23"
+        },
+        {
+          "command": "ana.copyManifestBuildCommand",
+          "when": "resourceExtname == .ana",
+          "group": "navigation@24"
         }
       ],
       "editor/title": [
         {
           "command": "ana.openAssetManifest",
+          "when": "resourceExtname == .ana",
+          "group": "navigation"
+        },
+        {
+          "command": "ana.validateAssetManifest",
+          "when": "resourceExtname == .ana",
+          "group": "navigation"
+        },
+        {
+          "command": "ana.previewAssetManifest",
           "when": "resourceExtname == .ana",
           "group": "navigation"
         }

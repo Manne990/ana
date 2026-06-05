@@ -5,6 +5,7 @@ import { convertAsset, openAssetManifest } from "./assets";
 import { getBuildCommand } from "./buildCommands";
 import { readAnaConfig, workspaceRootFromVscode, type AnaExtensionConfig } from "./config";
 import { registerContentCompletion } from "./contentCompletion";
+import { createDiagnosticsController, type DiagnosticsController } from "./diagnostics";
 import { emulatorArgs, resolveEmulatorExecutable } from "./emulator";
 import { runProcess } from "./runner";
 import { createProjectFromTemplate, installTemplates } from "./templates";
@@ -99,7 +100,10 @@ async function ensureAnaRoot(): Promise<string | undefined> {
   return root;
 }
 
-async function runBuild(key: Parameters<typeof getBuildCommand>[0]): Promise<void> {
+async function runBuild(
+  key: Parameters<typeof getBuildCommand>[0],
+  diagnostics: DiagnosticsController
+): Promise<void> {
   const root = await ensureAnaRoot();
 
   if (!root) {
@@ -108,18 +112,24 @@ async function runBuild(key: Parameters<typeof getBuildCommand>[0]): Promise<voi
 
   const config = await readResolvedAnaConfig(root);
   const command = getBuildCommand(key, config.makePath);
+  let log = "";
   const exitCode = await runProcess({
     cwd: root,
     label: command.label,
     command: command.command,
     args: command.args,
     output,
-    showOutput: config.showCommandsBeforeRun
+    showOutput: config.showCommandsBeforeRun,
+    onOutput(value) {
+      log += value;
+    }
   });
 
   if (exitCode === 0) {
+    diagnostics.clearBuildFailure(root);
     vscode.window.showInformationMessage(`ANA ${command.label} completed.`);
   } else {
+    diagnostics.reportBuildFailure(root, command.label, log);
     vscode.window.showErrorMessage(`ANA ${command.label} failed. See the ANA output channel.`);
   }
 }
@@ -314,7 +324,10 @@ async function runToolchainCheck(): Promise<void> {
 }
 
 async function configurePaths(): Promise<void> {
-  await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:ana.ana-vscode");
+  await vscode.commands.executeCommand(
+    "workbench.action.openSettings",
+    "@ext:loveteams-ai.ana-vscode"
+  );
 }
 
 async function convertSelectedAsset(resource?: vscode.Uri): Promise<void> {
@@ -331,6 +344,14 @@ async function convertSelectedAsset(resource?: vscode.Uri): Promise<void> {
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(output);
   registerContentCompletion(context);
+  const diagnostics = createDiagnosticsController(
+    context,
+    workspaceRootOrConfiguredSdk,
+    readResolvedAnaConfig,
+    output
+  );
+
+  void diagnostics.refresh();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("ana.checkToolchain", () => {
@@ -346,19 +367,19 @@ export function activate(context: vscode.ExtensionContext): void {
       void createProjectFromTemplate(context);
     }),
     vscode.commands.registerCommand("ana.buildHost", () => {
-      void runBuild("buildHost");
+      void runBuild("buildHost", diagnostics);
     }),
     vscode.commands.registerCommand("ana.runHostExample", () => {
       void runHostExample();
     }),
     vscode.commands.registerCommand("ana.buildAmiga", () => {
-      void runBuild("buildAmiga");
+      void runBuild("buildAmiga", diagnostics);
     }),
     vscode.commands.registerCommand("ana.buildAdf", () => {
-      void runBuild("buildAdf");
+      void runBuild("buildAdf", diagnostics);
     }),
     vscode.commands.registerCommand("ana.buildA1200Adf", () => {
-      void runBuild("buildA1200Adf");
+      void runBuild("buildA1200Adf", diagnostics);
     }),
     vscode.commands.registerCommand("ana.runAdf", () => {
       void runAdf();
@@ -368,6 +389,23 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("ana.openAssetManifest", (resource?: vscode.Uri) => {
       void openAssetManifest(resource);
+    }),
+    vscode.commands.registerCommand("ana.refreshDiagnostics", () => {
+      void diagnostics.refresh().then(() => {
+        vscode.window.showInformationMessage("ANA diagnostics refreshed.");
+      });
+    }),
+    vscode.commands.registerCommand("ana.validateAssetManifest", (resource?: vscode.Uri) => {
+      void diagnostics.validateManifest(resource);
+    }),
+    vscode.commands.registerCommand("ana.previewAssetManifest", (resource?: vscode.Uri) => {
+      void diagnostics.previewManifest(resource);
+    }),
+    vscode.commands.registerCommand("ana.copyManifestBuildCommand", (resource?: vscode.Uri) => {
+      void diagnostics.copyManifestBuildCommand(resource);
+    }),
+    vscode.commands.registerCommand("ana.showMemoryBudget", () => {
+      void diagnostics.showMemoryBudget();
     })
   );
 }

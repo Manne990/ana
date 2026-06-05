@@ -14,6 +14,7 @@ export interface RunOptions {
   args: string[];
   output: OutputSink;
   showOutput: boolean;
+  onOutput?(value: string): void;
 }
 
 export async function runProcess(options: RunOptions): Promise<number> {
@@ -45,11 +46,21 @@ export async function runProcess(options: RunOptions): Promise<number> {
       windowsHide: true
     });
 
-    child.stdout.on("data", (chunk: Buffer) => output.append(chunk.toString()));
-    child.stderr.on("data", (chunk: Buffer) => output.append(chunk.toString()));
+    child.stdout.on("data", (chunk: Buffer) => {
+      const value = chunk.toString();
+      output.append(value);
+      options.onOutput?.(value);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      const value = chunk.toString();
+      output.append(value);
+      options.onOutput?.(value);
+    });
 
     child.on("error", (error) => {
-      output.appendLine(`error: ${error.message}`);
+      const value = `error: ${error.message}\n`;
+      output.append(value);
+      options.onOutput?.(value);
       finish(-1);
     });
 

@@ -4,7 +4,7 @@ ANA for VS Code streamlines ANA Amiga game development in Visual Studio Code.
 It brings the core ANA workflow into the editor without replacing the C/C++
 extension or ANA's command-line tools.
 
-## v0.1 Features
+## v0.2 Features
 
 - Check ANA toolchain paths and show actionable status.
 - Build host, Amiga, ADF, and A1200 ADF targets through existing Make targets.
@@ -16,10 +16,16 @@ extension or ANA's command-line tools.
 - Open ANA asset manifests from commands and editor buttons.
 - Convert PNG/PPM assets through `ana-convert`.
 - Suggest generated ANA asset paths inside ANA asset-loading calls.
+- Surface ANA asset and manifest diagnostics in the VS Code Problems panel.
+- Validate asset manifests for missing sources, unknown palettes, frame
+  dimensions, generated outputs, and target-profile implications.
+- Validate exact PPM and paletted PNG colors against available ANA palettes.
+- Preview asset manifests in a structured editor view.
+- Show an approximate target-profile memory budget from manifest outputs and
+  source assets, plus measured ADF and Amiga executable outputs when present.
 
 The default target profile is `a1200-baseline`: stock A1200 without Fast RAM.
-A500 and AGA profiles are present only as future/experimental profile names in
-v0.1.
+A500 and AGA diagnostics are experimental and do not imply runtime support yet.
 
 ## Commands
 
@@ -37,6 +43,11 @@ v0.1.
 | `ANA: Run ADF in Emulator` | Lets you choose an ADF and launches it in FS-UAE, WinUAE, or a custom emulator. FS-UAE can use `ana.fsUaeConfigPath` and the selected ADF overrides `floppy_drive_0`. |
 | `ANA: Convert Asset` | Converts selected PNG/PPM assets through `ana-convert`, including image, spritesheet, palette, and bitmap font flows. |
 | `ANA: Open Asset Manifest` | Opens an `.ana` asset manifest from the active file, Explorer context menu, or a workspace picker. |
+| `ANA: Refresh Diagnostics` | Re-runs manifest and asset diagnostics for the workspace and updates the Problems panel. |
+| `ANA: Validate Asset Manifest` | Validates the selected `.ana` manifest and reports diagnostics. |
+| `ANA: Preview Asset Manifest` | Opens a structured preview of manifest assets, generated outputs, diagnostics, and memory budget. |
+| `ANA: Copy Manifest Build Command` | Copies the equivalent `ana-convert build ... --out ...` command for the selected manifest. |
+| `ANA: Show Memory Budget` | Writes an approximate target-profile memory budget to the ANA output channel. |
 
 ## Development
 
