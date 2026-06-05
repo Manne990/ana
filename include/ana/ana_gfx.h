@@ -165,6 +165,7 @@ void ana_scroll_rect(
     unsigned char clear_color);
 void ana_present(void);
 ANA_RenderStats ana_render_stats(void);
+void* ana_gfx_native_viewport(void);
 
 ANA_Image ana_load_image(const char* path);
 ANA_Image ana_load_image_data(const unsigned char* bytes, long size);
@@ -174,6 +175,8 @@ void ana_draw_image_frame(ANA_Image image, int frame, int x, int y);
 int ana_image_width(ANA_Image image);
 int ana_image_height(ANA_Image image);
 int ana_image_frame_count(ANA_Image image);
+int ana_image_pixel_index(ANA_Image image, int frame, int x, int y);
+int ana_image_pixel_visible(ANA_Image image, int frame, int x, int y);
 
 ANA_Rect ana_retained_clear_rect(
     ANA_Rect rect,
@@ -276,6 +279,9 @@ int ana_tile_layer_hardware_scroll_frame_slot(const ANA_TileLayer* tile_layer);
 void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer);
 void ana_tile_layer_draw(ANA_TileLayer* tile_layer);
 void ana_tile_layer_redraw_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect);
+void ana_tile_layer_restore_world_rect(
     ANA_TileLayer* tile_layer,
     ANA_Rect world_rect);
 

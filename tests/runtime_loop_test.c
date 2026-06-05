@@ -118,6 +118,26 @@ static void test_runtime_rejects_bad_profile(void)
     assert(stats.frames == 0);
 }
 
+static void test_runtime_warmup_frame_is_not_counted(void)
+{
+    ANA_Game game;
+    ANA_RunStats stats;
+
+    reset_counts();
+    game = make_game();
+    game.warmup_frames = 1;
+
+    assert(ana_run(&game) == ANA_OK);
+    assert(init_count == 1);
+    assert(load_count == 1);
+    assert(update_count == 3);
+    assert(draw_count == 3);
+    assert(shutdown_count == 1);
+
+    stats = ana_last_run_stats();
+    assert(stats.frames == 2);
+}
+
 static void test_runtime_rejects_bad_render_mode(void)
 {
     ANA_Game game;
@@ -156,6 +176,7 @@ int main(void)
 {
     test_runtime_loop();
     test_runtime_rejects_bad_profile();
+    test_runtime_warmup_frame_is_not_counted();
     test_runtime_rejects_bad_render_mode();
     test_runtime_uses_default_profile_values();
     assert(ana_run(0) == ANA_ERROR_INVALID_ARGUMENT);

@@ -5,6 +5,7 @@
 
 #include "ana.h"
 
+void byte_brothers_init(void);
 void byte_brothers_load(void);
 void byte_brothers_update(ANA_Time time);
 void byte_brothers_draw(void);

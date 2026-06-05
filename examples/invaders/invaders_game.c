@@ -798,12 +798,7 @@ void invaders_init(void)
     invaders_assets_loaded = 0;
 
     ana_input_clear_key_map();
-    ana_input_map_key_to_direction(ANA_KEY_LEFT, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
-    ana_input_map_key_to_direction(ANA_KEY_A, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
-    ana_input_map_key_to_direction(ANA_KEY_RIGHT, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
-    ana_input_map_key_to_direction(ANA_KEY_D, ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT);
-    ana_input_map_key_to_action(ANA_KEY_SPACE, ANA_INPUT_DEVICE_0, ANA_ACTION_1);
-    ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
+    ana_input_map_default_keys(ANA_INPUT_DEVICE_0);
 }
 
 void invaders_load(void)

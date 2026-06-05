@@ -42,6 +42,7 @@ typedef enum ANA_Key {
     ANA_KEY_SPACE,
     ANA_KEY_RETURN,
     ANA_KEY_ESCAPE,
+    ANA_KEY_Q,
     ANA_KEY_A,
     ANA_KEY_D,
     ANA_KEY_W,
@@ -66,6 +67,7 @@ void ana_input_clear_key_map(void);
 void ana_input_map_key_to_direction(ANA_Key key, ANA_InputDevice device, ANA_InputDirection direction);
 void ana_input_map_key_to_action(ANA_Key key, ANA_InputDevice device, ANA_InputAction action);
 void ana_input_map_key_to_quit(ANA_Key key);
+void ana_input_map_action_to_quit(ANA_InputDevice device, ANA_InputAction action);
 void ana_input_map_default_keys(ANA_InputDevice device);
 ```
 
@@ -82,8 +84,13 @@ ana_input_clear_key_map();
 ana_input_map_key_to_direction(ANA_KEY_LEFT, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
 ana_input_map_key_to_direction(ANA_KEY_A, ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT);
 ana_input_map_key_to_action(ANA_KEY_SPACE, ANA_INPUT_DEVICE_0, ANA_ACTION_1);
-ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
 ```
+
+`ana_input_clear_key_map()` rensar direction/action-mapping och custom
+quit-tangenter, men Escape ar alltid global quit i ANA. Ett spel ska alltsa
+inte behova lagga tillbaka ESC efter att det har byggt sin egen mapping.
+`ana_input_map_action_to_quit()` kan anvandas nar en emulator eller gamepad
+levererar quit som en joystick/gamepad-knapp i stallet for som en tangent.
 
 ## Standardmapping
 
@@ -91,6 +98,7 @@ ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
 
 - joystick/gamepad vanster/hoger till `ANA_INPUT_LEFT` och `ANA_INPUT_RIGHT`
 - joystick fire eller gamepad primary button till `ANA_ACTION_1`
+- joystick/gamepad tredje knapp kan mappas till quit via `ana_input_map_action_to_quit`
 - tangentbordspilar eller A/D som utvecklingsalternativ
 - Space eller Ctrl som `ANA_ACTION_1`
 - Escape som quit via `ana_quit_requested()`
@@ -100,9 +108,11 @@ Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 
 ## Implementerad Amiga-backend
 
-Amiga-bygget oppnar ett borderless window pa ANA-screenen och laser
-`IDCMP_RAWKEY` varje frame. Raw key events uppdaterar samma key-state som
-host/test-backenden, sa spelets mapping fungerar likadant:
+Amiga-bygget laser tangentbordets aktuella matrix via `keyboard.device` och
+`KBD_READMATRIX`. Det ger stabil held-state for spelkontroller och quit utan
+att vara beroende av sena Intuition-events. `IDCMP_RAWKEY` och
+`IDCMP_VANILLAKEY` finns kvar som fallback om matrix-lasningen inte kan
+oppnas. Tangenterna uppdaterar samma key-state som host/test-backenden:
 
 - cursor left/right/up/down
 - A/D/W/S
@@ -119,9 +129,16 @@ CIAA PRA bit 7) och `ANA_INPUT_DEVICE_1` mappar till den andra porten
 host-tangentbordets pilar till joystick-porten fungerar utan att spelet
 behover skilja pa joystick och tangentbord.
 
+FS-UAE kan antingen leverera host-tangenter som riktiga Amiga-tangenter eller
+som joystick-hardware. ANA ska stodja bada vagen. For tangentbord som joystick
+kan port 1 vara `Keyboard`, med pilar/A-D/W-S/Space/X mappade till
+joystick-riktningar och knappar. Tangenter som ska vara riktiga
+Amiga-tangenter, exempelvis Esc/C/Q for quit, ska mappas som `action_key_*` sa
+att de syns i keyboard-matrix.
+
 ## Prestanda och beteende
 
-- Input-state ska uppdateras en gang per frame.
+- Input-state ska uppdateras innan varje simulation update.
 - `pressed` ska bara vara sann for overgangen upp -> ner.
 - `released` ska bara vara sann for overgangen ner -> upp.
 - Lasning av input ska inte allokera minne.

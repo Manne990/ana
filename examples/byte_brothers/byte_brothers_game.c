@@ -23,14 +23,30 @@ int bb_frame = 0;
 
 static int bb_start_x = 0;
 static int bb_start_y = 0;
+static int bb_jump_latched = 0;
 
 static void bb_load_level(int level);
+
+static void bb_map_input(void)
+{
+    ana_input_clear_key_map();
+    ana_input_map_default_keys(ANA_INPUT_DEVICE_0);
+    ana_input_map_key_to_action(ANA_KEY_X, ANA_INPUT_DEVICE_0, ANA_ACTION_2);
+    ana_input_map_key_to_action(ANA_KEY_Z, ANA_INPUT_DEVICE_0, ANA_ACTION_2);
+    ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
+    ana_input_map_key_to_quit(ANA_KEY_C);
+    ana_input_map_key_to_quit(ANA_KEY_Q);
+}
 
 #define BB_TILE_FLAG_SOLID 0x01u
 #define BB_TILE_FLAG_PLATFORM 0x02u
 #define BB_TILE_FLAG_HAZARD 0x04u
 #define BB_TILE_FLAG_COLLECTIBLE 0x08u
 #define BB_TILE_FLAG_GOAL 0x10u
+
+#ifndef BB_MAX_ACTIVE_ENEMIES
+#define BB_MAX_ACTIVE_ENEMIES BB_MAX_ENEMIES
+#endif
 
 static int bb_actor_tile_x(int tile_x, int width)
 {
@@ -175,6 +191,9 @@ static int bb_rect_hits_solid(int x, int y, int w, int h)
     tiles = bb_tiles_for_rect(x, y, w, h);
 
     for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
+        if (ty < 0) {
+            continue;
+        }
         for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
             tile = bb_tile_at(tx, ty);
             if (bb_tile_is_solid(tile)) {
@@ -547,7 +566,8 @@ static void bb_load_level(int level)
                 bb_start_y = bb_player_tile_y(y);
                 bb_map[y][x] = BB_TILE_EMPTY;
             } else if (tile == BB_TILE_ENEMY || tile == BB_TILE_ENEMY_ALT) {
-                if (bb_enemy_count < BB_MAX_ENEMIES) {
+                if (bb_enemy_count < BB_MAX_ENEMIES &&
+                        bb_enemy_count < BB_MAX_ACTIVE_ENEMIES) {
                     bb_enemies[bb_enemy_count].x =
                         bb_actor_tile_x(x, BB_ENEMY_W);
                     bb_enemies[bb_enemy_count].y = bb_enemy_tile_y(y);
@@ -563,6 +583,7 @@ static void bb_load_level(int level)
     }
 
     bb_reset_player();
+    bb_jump_latched = 0;
     bb_render_reset();
     printf(
         "Byte Brothers level %d loaded: enemies=%d, fragments=%d\n",
@@ -571,14 +592,15 @@ static void bb_load_level(int level)
         bb_fragments_left);
 }
 
+void byte_brothers_init(void)
+{
+    bb_map_input();
+}
+
 void byte_brothers_load(void)
 {
     bb_set_palette();
-    ana_input_map_default_keys(ANA_INPUT_DEVICE_0);
-    ana_input_map_key_to_action(ANA_KEY_X, ANA_INPUT_DEVICE_0, ANA_ACTION_2);
-    ana_input_map_key_to_action(ANA_KEY_Z, ANA_INPUT_DEVICE_0, ANA_ACTION_2);
     bb_assets_load();
-
     bb_level_index = 0;
     bb_score = 0;
     bb_lives = 3;
@@ -591,8 +613,14 @@ void byte_brothers_update(ANA_Time time)
     int move;
     int dash_pressed;
     int jump_pressed;
+    int jump_down;
 
     (void)time;
+
+    if (ana_quit_requested()) {
+        ana_quit();
+        return;
+    }
 
     bb_frame++;
 
@@ -610,12 +638,27 @@ void byte_brothers_update(ANA_Time time)
         bb_player.facing = 1;
     }
 
-    jump_pressed = ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1);
-    dash_pressed = ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_2);
+    jump_down =
+        ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1) ||
+        ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_4) ||
+        ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_UP);
+    jump_pressed =
+        ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1) ||
+        ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_4) ||
+        ana_input_direction_pressed(ANA_INPUT_DEVICE_0, ANA_INPUT_UP) ||
+        (jump_down && !bb_jump_latched);
+    dash_pressed =
+        ana_input_direction_pressed(ANA_INPUT_DEVICE_0, ANA_INPUT_DOWN) ||
+        ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_2);
+
+    if (!jump_down) {
+        bb_jump_latched = 0;
+    }
 
     if (jump_pressed && bb_player.on_ground) {
         bb_player.vy = BB_JUMP_SPEED;
         bb_player.on_ground = 0;
+        bb_jump_latched = 1;
         bb_assets_play_jump();
     }
 
@@ -680,5 +723,6 @@ void byte_brothers_draw(void)
 
 void byte_brothers_shutdown(void)
 {
+    bb_render_shutdown();
     bb_assets_unload();
 }

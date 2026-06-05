@@ -1,0 +1,40 @@
+{
+  "ANA Game": {
+    "prefix": "ana-game",
+    "body": [
+      "ANA_Game game = {0};",
+      "",
+      "game.init = ${1:game_init};",
+      "game.load = ${2:game_load};",
+      "game.update = ${3:game_update};",
+      "game.draw = ${4:game_draw};",
+      "game.shutdown = ${5:game_shutdown};",
+      "game.width = ANA_DEFAULT_WIDTH;",
+      "game.height = ANA_DEFAULT_HEIGHT;",
+      "game.fps = ANA_DEFAULT_FPS;",
+      "game.colors = ANA_DEFAULT_COLORS;",
+      "game.screen_mode = ANA_SCREEN_PAL_LORES;",
+      "game.render_mode = ANA_RENDER_DIRTY;",
+      "game.debug_stats = 0;",
+      "",
+      "return ana_run(&game);"
+    ],
+    "description": "Initialize and run an ANA game."
+  },
+  "ANA Load Image": {
+    "prefix": "ana-load-image",
+    "body": [
+      "ANA_Image ${1:image};",
+      "${1:image} = ana_load_image(\"${2:assets/player.anaimg}\");"
+    ],
+    "description": "Load an ANA image asset."
+  },
+  "ANA Input Defaults": {
+    "prefix": "ana-input-defaults",
+    "body": [
+      "ana_input_clear_key_map();",
+      "ana_input_map_default_keys(ANA_INPUT_DEVICE_0);"
+    ],
+    "description": "Map default ANA input keys."
+  }
+}

@@ -31,6 +31,7 @@ typedef struct ANA_Game {
     ANA_ScreenMode screen_mode;
     ANA_RenderMode render_mode;
     int debug_stats;
+    int warmup_frames;
 } ANA_Game;
 
 #ifdef __cplusplus

@@ -1,0 +1,233 @@
+{
+  "name": "ana-vscode",
+  "displayName": "ANA for VS Code",
+  "description": "Workflow integration for ANA Amiga game development in Visual Studio Code.",
+  "version": "0.1.1",
+  "publisher": "ana",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Manne990/ana.git",
+    "directory": "tools/vscode-ana"
+  },
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "ana",
+    "amiga",
+    "gamedev",
+    "retro",
+    "c"
+  ],
+  "main": "./dist/src/extension.js",
+  "activationEvents": [
+    "onCommand:ana.checkToolchain",
+    "onCommand:ana.configurePaths",
+    "onCommand:ana.installTemplates",
+    "onCommand:ana.createProject",
+    "onCommand:ana.buildHost",
+    "onCommand:ana.runHostExample",
+    "onCommand:ana.buildAmiga",
+    "onCommand:ana.buildAdf",
+    "onCommand:ana.buildA1200Adf",
+    "onCommand:ana.runAdf",
+    "onCommand:ana.convertAsset",
+    "onCommand:ana.openAssetManifest",
+    "workspaceContains:include/ana/ana.h",
+    "workspaceContains:include/ana/ana_version.h",
+    "onLanguage:c"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "ana.checkToolchain",
+        "title": "Check Toolchain",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.configurePaths",
+        "title": "Configure Paths",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.installTemplates",
+        "title": "Install Templates",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.createProject",
+        "title": "Create Project",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.buildHost",
+        "title": "Build Host",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.runHostExample",
+        "title": "Run Host Example",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.buildAmiga",
+        "title": "Build Amiga",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.buildAdf",
+        "title": "Build ADF",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.buildA1200Adf",
+        "title": "Build A1200 ADF",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.runAdf",
+        "title": "Run ADF in Emulator",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.convertAsset",
+        "title": "Convert Asset",
+        "category": "ANA"
+      },
+      {
+        "command": "ana.openAssetManifest",
+        "title": "Open Asset Manifest",
+        "category": "ANA"
+      }
+    ],
+    "configuration": {
+      "title": "ANA",
+      "properties": {
+        "ana.sdkPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to an external ANA SDK or repository root. Empty means generated ANA projects use their local .ana-sdk."
+        },
+        "ana.makePath": {
+          "type": "string",
+          "default": "make",
+          "description": "Path to make."
+        },
+        "ana.anaConvertPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to ana-convert. Empty means use the workspace build output or PATH."
+        },
+        "ana.adfToolPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to gadf. Empty means use PATH or $HOME/go/bin/gadf."
+        },
+        "ana.emulator": {
+          "type": "string",
+          "default": "fs-uae",
+          "enum": [
+            "fs-uae",
+            "winuae",
+            "custom"
+          ],
+          "description": "Emulator command style used by ANA: Run ADF in Emulator."
+        },
+        "ana.emulatorPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the emulator executable. Empty means use the selected emulator name on PATH."
+        },
+        "ana.fsUaeConfigPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional FS-UAE .fs-uae configuration file. The selected ADF is still passed as a command-line override."
+        },
+        "ana.defaultTargetProfile": {
+          "type": "string",
+          "default": "a1200-baseline",
+          "enum": [
+            "a1200-baseline",
+            "portable-amiga",
+            "a500-experimental",
+            "aga-experimental"
+          ],
+          "description": "Default ANA target profile."
+        },
+        "ana.defaultAdf": {
+          "type": "string",
+          "default": "",
+          "description": "Default ADF path for ANA: Run ADF in Emulator."
+        },
+        "ana.showCommandsBeforeRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the ANA output channel before running build, conversion, or emulator commands."
+        },
+        "ana.supportedSdkRange": {
+          "type": "string",
+          "default": ">=0.2.0 <0.3.0",
+          "description": "ANA SDK versions this extension version is expected to work with."
+        }
+      }
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "ana.convertAsset",
+          "when": "resourceExtname == .png || resourceExtname == .ppm",
+          "group": "navigation@20"
+        },
+        {
+          "command": "ana.openAssetManifest",
+          "when": "resourceExtname == .ana",
+          "group": "navigation@21"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "ana.openAssetManifest",
+          "when": "resourceExtname == .ana",
+          "group": "navigation"
+        }
+      ]
+    },
+    "snippets": [
+      {
+        "language": "c",
+        "path": "./snippets/ana.code-snippets"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "lint": "eslint src test scripts",
+    "test": "npm run compile && vscode-test",
+    "bump-build": "node scripts/bump-build-version.mjs",
+    "package": "npm run bump-build && npm run package:current",
+    "package:current": "node scripts/package-current-version.mjs",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.7",
+    "@types/vscode": "1.92.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.3",
+    "eslint": "^9.39.1",
+    "globals": "^15.15.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.1"
+  },
+  "overrides": {
+    "diff": "^9.0.0",
+    "serialize-javascript": "^7.0.5"
+  }
+}

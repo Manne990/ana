@@ -1,0 +1,6 @@
+{
+  "name": "{{projectName}}",
+  "type": "ana-project",
+  "sdkPath": ".ana-sdk",
+  "targetProfile": "a1200-baseline"
+}

@@ -1,0 +1,4 @@
+ANA_ASSETS 1
+
+palette game player.ppm --colors 16
+image player player.ppm --palette game --transparent #ff00ff

@@ -67,9 +67,11 @@ void bb_assets_load(void)
     bb_goal_sound = bb_load_sound_file("goal.anasnd");
     bb_theme_music = bb_load_music_file("theme.mod");
 
+#ifndef BB_DISABLE_MUSIC
     if (bb_theme_music != NULL) {
         ana_play_music(bb_theme_music, ANA_MUSIC_LOOP);
     }
+#endif
 
     bb_loaded = bb_player_image != NULL &&
         bb_enemy_image != NULL &&
@@ -77,8 +79,13 @@ void bb_assets_load(void)
         bb_collect_sound != NULL &&
         bb_power_sound != NULL &&
         bb_hit_sound != NULL &&
-        bb_goal_sound != NULL &&
+        bb_goal_sound != NULL
+#ifndef BB_DISABLE_MUSIC
+        &&
         bb_theme_music != NULL;
+#else
+        ;
+#endif
 }
 
 void bb_assets_unload(void)

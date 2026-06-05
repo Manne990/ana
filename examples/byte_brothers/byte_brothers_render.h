@@ -7,5 +7,6 @@ void bb_render_reset(void);
 void bb_render_invalidate(void);
 void bb_render_tile_changed(int tx, int ty);
 void bb_render_draw(void);
+void bb_render_shutdown(void);
 
 #endif

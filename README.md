@@ -160,6 +160,9 @@ Start here:
 - [Known limitations](docs/known-limitations.md)
 - [Scroll, camera, and tilemap spec](docs/017-scroll-camera-tilemap.md)
 - [Render modes and backends spec](docs/018-render-modes-and-backends.md)
+- [VS Code plugin v0.1 workflow spec](docs/020-vscode-plugin-v0-1-workflow.md)
+- [VS Code plugin v0.2 diagnostics spec](docs/021-vscode-plugin-v0-2-diagnostics.md)
+- [VS Code plugin v0.3 rich experience spec](docs/022-vscode-plugin-v0-3-rich-experience.md)
 - [ANA 0.1 release notes](docs/release-notes-0.1.md)
 
 ## Example Shape

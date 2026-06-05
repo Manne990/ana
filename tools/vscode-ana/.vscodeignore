@@ -1,0 +1,15 @@
+node_modules/
+scripts/
+src/
+test/
+dist/test/
+ana-sdk/build/
+ana-sdk/.git/
+fixtures/
+.vscode-test.mjs
+eslint.config.mjs
+tsconfig.json
+package-lock.json
+.gitignore
+*.vsix
+*.log

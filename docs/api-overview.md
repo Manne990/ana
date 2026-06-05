@@ -226,10 +226,16 @@ Keyboard mapping:
 - `ana_input_map_key_to_direction`
 - `ana_input_map_key_to_action`
 - `ana_input_map_key_to_quit`
+- `ana_input_map_action_to_quit`
 - `ana_input_map_default_keys`
 
 The intent is that joystick, keyboard, and later gamepad-style input can map to
-the same game-facing directions and actions.
+the same game-facing directions and actions. `ana_quit_requested()` includes a
+framework-global Escape quit binding; `ana_input_clear_key_map()` does not
+remove that binding.
+Games can also bind a joystick/gamepad action to quit with
+`ana_input_map_action_to_quit()`, useful for emulator keyboard-to-joystick
+profiles where host keys are delivered as joystick buttons.
 
 ## Sound
 
