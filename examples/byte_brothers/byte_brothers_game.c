@@ -36,6 +36,7 @@ static void bb_map_input(void)
     ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
     ana_input_map_key_to_quit(ANA_KEY_C);
     ana_input_map_key_to_quit(ANA_KEY_Q);
+    ana_input_map_action_to_quit(ANA_INPUT_DEVICE_0, ANA_ACTION_3);
 }
 
 #define BB_TILE_FLAG_SOLID 0x01u

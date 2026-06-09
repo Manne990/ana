@@ -3,9 +3,12 @@
 #include <stdio.h>
 
 #ifdef ANA_TARGET_AMIGA
+#include <dos/dos.h>
 #include <exec/types.h>
 #include <hardware/cia.h>
 #include <hardware/custom.h>
+#include <proto/dos.h>
+#include <string.h>
 
 extern struct CIA ciaa;
 extern struct Custom custom;
@@ -18,10 +21,19 @@ extern struct Custom custom;
 #define PROBE_TEXT_SCALE 2
 #define PROBE_CHAR_W 8
 #define PROBE_CHAR_H 12
+#ifndef PROBE_RUNTIME_TICKS
+#ifdef ANA_TARGET_AMIGA
 #define PROBE_RUNTIME_TICKS 1500
+#else
+#define PROBE_RUNTIME_TICKS 3
+#endif
+#endif
+
+#define PROBE_RESULT_FILE "ana_input_probe_result.txt"
 
 static ANA_InputDebug probe_debug;
 static int probe_tick;
+static int probe_update_count;
 static int probe_seen_c;
 static int probe_seen_q;
 static int probe_seen_escape;
@@ -32,6 +44,129 @@ static int probe_seen_vanilla;
 static int probe_seen_backend0;
 static int probe_seen_backend1;
 static int probe_last_event_count;
+static int probe_wrote_final;
+
+#ifdef ANA_TARGET_AMIGA
+static void probe_write_text(BPTR file, const char* text)
+{
+    Write(file, (APTR)text, (LONG)strlen(text));
+}
+
+static void probe_write_unsigned_value(BPTR file, unsigned int value)
+{
+    char digits[12];
+    int count;
+    int i;
+
+    count = 0;
+    do {
+        digits[count] = (char)('0' + (value % 10u));
+        count++;
+        value /= 10u;
+    } while (value > 0u && count < (int)sizeof(digits));
+
+    for (i = count - 1; i >= 0; i--) {
+        Write(file, (APTR)&digits[i], 1);
+    }
+}
+
+static void probe_write_string_line(BPTR file, const char* label, const char* value)
+{
+    probe_write_text(file, label);
+    probe_write_text(file, "=");
+    probe_write_text(file, value);
+    probe_write_text(file, "\n");
+}
+
+static void probe_write_int_line(BPTR file, const char* label, int value)
+{
+    probe_write_text(file, label);
+    probe_write_text(file, "=");
+    if (value < 0) {
+        probe_write_text(file, "-");
+        probe_write_unsigned_value(file, (unsigned int)(0 - value));
+    } else {
+        probe_write_unsigned_value(file, (unsigned int)value);
+    }
+    probe_write_text(file, "\n");
+}
+
+static void probe_write_uint_line(BPTR file, const char* label, unsigned int value)
+{
+    probe_write_text(file, label);
+    probe_write_text(file, "=");
+    probe_write_unsigned_value(file, value);
+    probe_write_text(file, "\n");
+}
+#endif
+
+static void probe_write_result(const char* phase, const char* result_name)
+{
+#ifdef ANA_TARGET_AMIGA
+    static const char* paths[] = {
+        "DH0:" PROBE_RESULT_FILE,
+        "a1200:" PROBE_RESULT_FILE,
+        "a500:" PROBE_RESULT_FILE,
+        "RAM:" PROBE_RESULT_FILE,
+        "PROGDIR:" PROBE_RESULT_FILE,
+        NULL};
+    BPTR file;
+    int i;
+
+    file = (BPTR)0;
+    for (i = 0; paths[i] != NULL; i++) {
+        file = Open((STRPTR)paths[i], MODE_NEWFILE);
+        if (file != (BPTR)0) {
+            break;
+        }
+    }
+    if (file == (BPTR)0) {
+        printf("ANA input probe could not write result file.\n");
+        return;
+    }
+
+    probe_write_int_line(file, "ana_input_probe_result", 1);
+    probe_write_string_line(file, "phase", phase);
+    probe_write_string_line(file, "result", result_name);
+    probe_write_int_line(file, "tick", probe_tick);
+    probe_write_int_line(file, "update_count", probe_update_count);
+    probe_write_int_line(file, "runtime_ticks", PROBE_RUNTIME_TICKS);
+    probe_write_int_line(file, "event_count", probe_debug.event_count);
+    probe_write_int_line(file, "raw_count", probe_debug.raw_count);
+    probe_write_int_line(file, "vanilla_count", probe_debug.vanilla_count);
+    probe_write_int_line(file, "matrix_count", probe_debug.matrix_count);
+    probe_write_int_line(file, "matrix_ready", probe_debug.matrix_ready);
+    probe_write_int_line(file, "last_class", probe_debug.last_class);
+    probe_write_int_line(file, "last_code", probe_debug.last_code);
+    probe_write_int_line(file, "last_key", probe_debug.last_key);
+    probe_write_int_line(file, "last_is_down", probe_debug.last_is_down);
+    probe_write_uint_line(file, "current0", probe_debug.current_state[0]);
+    probe_write_uint_line(file, "backend0", probe_debug.backend_state[0]);
+    probe_write_uint_line(file, "current1", probe_debug.current_state[1]);
+    probe_write_uint_line(file, "backend1", probe_debug.backend_state[1]);
+    probe_write_int_line(file, "key_c_down", probe_debug.key_c_down);
+    probe_write_int_line(file, "key_q_down", probe_debug.key_q_down);
+    probe_write_int_line(file, "key_escape_down", probe_debug.key_escape_down);
+    probe_write_int_line(file, "key_space_down", probe_debug.key_space_down);
+    probe_write_int_line(file, "key_x_down", probe_debug.key_x_down);
+    probe_write_int_line(file, "quit_requested", probe_debug.quit_requested);
+    probe_write_int_line(file, "seen_c", probe_seen_c);
+    probe_write_int_line(file, "seen_q", probe_seen_q);
+    probe_write_int_line(file, "seen_escape", probe_seen_escape);
+    probe_write_int_line(file, "seen_space", probe_seen_space);
+    probe_write_int_line(file, "seen_x", probe_seen_x);
+    probe_write_int_line(file, "seen_raw", probe_seen_raw);
+    probe_write_int_line(file, "seen_vanilla", probe_seen_vanilla);
+    probe_write_int_line(file, "seen_backend0", probe_seen_backend0);
+    probe_write_int_line(file, "seen_backend1", probe_seen_backend1);
+
+    Close(file);
+    printf("ANA input probe wrote result to %s.\n", paths[i]);
+#else
+    (void)phase;
+    (void)result_name;
+#endif
+}
 
 static unsigned char probe_glyph_bits(char ch, int row)
 {
@@ -327,11 +462,14 @@ static void probe_init(void)
     probe_seen_backend0 = 0;
     probe_seen_backend1 = 0;
     probe_last_event_count = 0;
+    probe_wrote_final = 0;
+    probe_update_count = 0;
 }
 
 static void probe_update(ANA_Time time)
 {
     probe_tick = time.tick;
+    probe_update_count++;
     ana_input_debug_snapshot(&probe_debug);
 
     if (probe_debug.raw_count > 0) {
@@ -375,15 +513,11 @@ static void probe_update(ANA_Time time)
         probe_seen_c = 1;
     }
 
-#ifdef ANA_TARGET_AMIGA
-    if (time.tick >= PROBE_RUNTIME_TICKS) {
+    if (probe_update_count >= PROBE_RUNTIME_TICKS) {
+        probe_write_result("pre_quit", "ANA_OK");
+        probe_wrote_final = 1;
         ana_quit();
     }
-#else
-    if (time.tick >= 3) {
-        ana_quit();
-    }
-#endif
 }
 
 static void probe_draw_input_state(int y)
@@ -512,8 +646,12 @@ int main(void)
 
     printf("ANA input probe started.\n");
     printf("Shows keyboard events, ANA states, and Amiga joystick registers.\n");
+    probe_write_result("main_start", "START");
 
     result = ana_run(&game);
+    if (!probe_wrote_final) {
+        probe_write_result("post_run", ana_result_name(result));
+    }
 
     printf("ANA input probe finished with %s.\n", ana_result_name(result));
     printf("Type input_probe to run it again.\n");

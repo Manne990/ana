@@ -101,18 +101,21 @@ levererar quit som en joystick/gamepad-knapp i stallet for som en tangent.
 - joystick/gamepad tredje knapp kan mappas till quit via `ana_input_map_action_to_quit`
 - tangentbordspilar eller A/D som utvecklingsalternativ
 - Space eller Ctrl som `ANA_ACTION_1`
+- X eller Z som `ANA_ACTION_2`
+- C eller V som `ANA_ACTION_3`
 - Escape som quit via `ana_quit_requested()`
-- Return kan senare mappas till en action, exempelvis `ANA_ACTION_4`
+- Return som `ANA_ACTION_4`
 
 Exakta tangenter kan justeras efter Amiga-konvention och implementation.
 
 ## Implementerad Amiga-backend
 
 Amiga-bygget laser tangentbordets aktuella matrix via `keyboard.device` och
-`KBD_READMATRIX`. Det ger stabil held-state for spelkontroller och quit utan
-att vara beroende av sena Intuition-events. `IDCMP_RAWKEY` och
-`IDCMP_VANILLAKEY` finns kvar som fallback om matrix-lasningen inte kan
-oppnas. Tangenterna uppdaterar samma key-state som host/test-backenden:
+`KBD_READMATRIX`, och kombinerar den med `IDCMP_RAWKEY` nar Intuition skickar
+riktiga key down/up-events. Matrix och RAWKEY ar alltsa parallella kallor till
+samma key-state. `IDCMP_VANILLAKEY` anvands som pulse/fallback eftersom den
+inte har release-events. Tangenterna uppdaterar samma key-state som
+host/test-backenden:
 
 - cursor left/right/up/down
 - A/D/W/S
@@ -135,6 +138,11 @@ kan port 1 vara `Keyboard`, med pilar/A-D/W-S/Space/X mappade till
 joystick-riktningar och knappar. Tangenter som ska vara riktiga
 Amiga-tangenter, exempelvis Esc/C/Q for quit, ska mappas som `action_key_*` sa
 att de syns i keyboard-matrix.
+
+Om en emulatorprofil inte levererar vissa host-tangenter stabilt som riktiga
+Amiga-key-events kan spelet i stallet mappa en joystick/gamepad-action till
+quit. Byte Brothers anvander `ANA_ACTION_3` for detta, och FS-UAE kan till
+exempel mappa C/Q/Esc till `action_joy_1_3rd_button`.
 
 ## Prestanda och beteende
 

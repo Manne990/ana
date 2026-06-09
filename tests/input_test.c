@@ -60,6 +60,14 @@ static void test_default_keyboard_mapping(void)
     assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
     assert(ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
 
+    ana_input_set_pending_key_state(ANA_KEY_X, 1);
+    ana_input_set_pending_key_state(ANA_KEY_C, 1);
+    ana_input_update();
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_2));
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_3));
+
+    ana_input_set_pending_key_state(ANA_KEY_X, 0);
+    ana_input_set_pending_key_state(ANA_KEY_C, 0);
     ana_input_set_pending_key_state(ANA_KEY_LEFT, 0);
     ana_input_set_pending_key_state(ANA_KEY_SPACE, 0);
     ana_input_update();
