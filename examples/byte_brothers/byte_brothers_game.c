@@ -8,6 +8,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(ANA_TARGET_AMIGA) && defined(BB_EMULATOR_HARNESS)
+#include <dos/dos.h>
+#include <exec/types.h>
+#include <proto/dos.h>
+#endif
+
 /* Platforming rules, text-map loading, collision, enemies, and progression. */
 
 char bb_map[BB_MAP_H][BB_MAP_W + 1];
@@ -47,6 +53,257 @@ static void bb_map_input(void)
 
 #ifndef BB_MAX_ACTIVE_ENEMIES
 #define BB_MAX_ACTIVE_ENEMIES BB_MAX_ENEMIES
+#endif
+
+#ifdef BB_EMULATOR_HARNESS
+#ifndef BB_HARNESS_FRAMES
+#define BB_HARNESS_FRAMES 100
+#endif
+#define BB_HARNESS_RESULT_FILE "ana_byte_brothers_result.txt"
+#endif
+
+#if defined(ANA_TARGET_AMIGA) && defined(BB_EMULATOR_HARNESS)
+static void bb_harness_write_text(BPTR file, const char* text)
+{
+    Write(file, (APTR)text, (LONG)strlen(text));
+}
+
+static void bb_harness_write_unsigned_long(BPTR file, unsigned long value)
+{
+    char digits[16];
+    int count;
+    int i;
+
+    count = 0;
+    do {
+        digits[count] = (char)('0' + (value % 10ul));
+        count++;
+        value /= 10ul;
+    } while (value > 0ul && count < (int)sizeof(digits));
+
+    for (i = count - 1; i >= 0; i--) {
+        Write(file, (APTR)&digits[i], 1);
+    }
+}
+
+static void bb_harness_write_string_line(
+    BPTR file,
+    const char* label,
+    const char* value)
+{
+    bb_harness_write_text(file, label);
+    bb_harness_write_text(file, "=");
+    bb_harness_write_text(file, value);
+    bb_harness_write_text(file, "\n");
+}
+
+static void bb_harness_write_long_line(
+    BPTR file,
+    const char* label,
+    long value)
+{
+    bb_harness_write_text(file, label);
+    bb_harness_write_text(file, "=");
+    if (value < 0L) {
+        bb_harness_write_text(file, "-");
+        bb_harness_write_unsigned_long(file, (unsigned long)(0L - value));
+    } else {
+        bb_harness_write_unsigned_long(file, (unsigned long)value);
+    }
+    bb_harness_write_text(file, "\n");
+}
+
+static void bb_harness_write_int_line(
+    BPTR file,
+    const char* label,
+    int value)
+{
+    bb_harness_write_long_line(file, label, (long)value);
+}
+
+static void bb_harness_write_result(void)
+{
+    static const char* paths[] = {
+        "DH0:" BB_HARNESS_RESULT_FILE,
+        "SYS:" BB_HARNESS_RESULT_FILE,
+        "PROGDIR:" BB_HARNESS_RESULT_FILE,
+        "a1200:" BB_HARNESS_RESULT_FILE,
+        "RAM:" BB_HARNESS_RESULT_FILE,
+        NULL};
+    BPTR file;
+    int i;
+    ANA_RunStats run_stats;
+    ANA_RenderStats render_stats;
+    BB_RenderStats sprite_stats;
+
+    file = (BPTR)0;
+    for (i = 0; paths[i] != NULL; i++) {
+        file = Open((STRPTR)paths[i], MODE_NEWFILE);
+        if (file != (BPTR)0) {
+            break;
+        }
+    }
+    if (file == (BPTR)0) {
+        printf("Byte Brothers could not write harness result file.\n");
+        return;
+    }
+
+    run_stats = ana_last_run_stats();
+    render_stats = ana_render_stats();
+    sprite_stats = bb_render_stats();
+
+    bb_harness_write_int_line(file, "ana_byte_brothers_result", 1);
+    bb_harness_write_string_line(file, "phase", "shutdown");
+    bb_harness_write_string_line(file, "version", ANA_VERSION_STRING);
+    bb_harness_write_int_line(file, "harness_frames", BB_HARNESS_FRAMES);
+    bb_harness_write_int_line(file, "bb_frame", bb_frame);
+    bb_harness_write_int_line(file, "level", bb_level_index + 1);
+    bb_harness_write_int_line(file, "score", bb_score);
+    bb_harness_write_int_line(file, "lives", bb_lives);
+    bb_harness_write_int_line(file, "fragments_left", bb_fragments_left);
+    bb_harness_write_int_line(file, "enemy_count", bb_enemy_count);
+    bb_harness_write_int_line(file, "player_x", bb_player.x);
+    bb_harness_write_int_line(file, "player_y", bb_player.y);
+    bb_harness_write_int_line(file, "camera_x", bb_camera.x);
+    bb_harness_write_int_line(file, "camera_y", bb_camera.y);
+    bb_harness_write_int_line(file, "assets_loaded", bb_assets_loaded());
+    bb_harness_write_long_line(file, "run_frames", run_stats.frames);
+    bb_harness_write_long_line(file, "elapsed_ticks", run_stats.elapsed_ticks);
+    bb_harness_write_long_line(
+        file,
+        "ticks_per_second",
+        run_stats.ticks_per_second);
+    bb_harness_write_long_line(
+        file,
+        "average_fps_x100",
+        run_stats.average_fps_x100);
+    bb_harness_write_long_line(
+        file,
+        "perf_ticks_per_second",
+        run_stats.perf_ticks_per_second);
+    bb_harness_write_long_line(
+        file,
+        "input_perf_ticks",
+        run_stats.input_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "update_perf_ticks",
+        run_stats.update_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "draw_perf_ticks",
+        run_stats.draw_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "present_perf_ticks",
+        run_stats.present_perf_ticks);
+    bb_harness_write_long_line(file, "render_frames", render_stats.frames);
+    bb_harness_write_long_line(
+        file,
+        "dirty_rects",
+        render_stats.dirty_rects);
+    bb_harness_write_long_line(
+        file,
+        "max_dirty_rects",
+        render_stats.max_dirty_rects);
+    bb_harness_write_long_line(
+        file,
+        "converted_pixels",
+        render_stats.converted_pixels);
+    bb_harness_write_long_line(
+        file,
+        "max_converted_pixels",
+        render_stats.max_converted_pixels);
+    bb_harness_write_long_line(
+        file,
+        "planar_clear_pixels",
+        render_stats.planar_clear_pixels);
+    bb_harness_write_long_line(
+        file,
+        "chunky_clear_pixels",
+        render_stats.chunky_clear_pixels);
+    bb_harness_write_long_line(
+        file,
+        "present_total_perf_ticks",
+        render_stats.present_total_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "present_clear_perf_ticks",
+        render_stats.present_clear_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "present_convert_perf_ticks",
+        render_stats.present_convert_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "present_flip_perf_ticks",
+        render_stats.present_flip_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "screen_buffer_flips",
+        render_stats.screen_buffer_flips);
+    bb_harness_write_long_line(file, "direct_flips", render_stats.direct_flips);
+    bb_harness_write_long_line(
+        file,
+        "hw_enemy_update_calls",
+        sprite_stats.hw_enemy_update_calls);
+    bb_harness_write_long_line(
+        file,
+        "hw_enemy_visible_moves",
+        sprite_stats.hw_enemy_visible_moves);
+    bb_harness_write_int_line(
+        file,
+        "hw_enemy_ready",
+        sprite_stats.hw_enemy_ready);
+    bb_harness_write_int_line(
+        file,
+        "hw_enemy_failed",
+        sprite_stats.hw_enemy_failed);
+    bb_harness_write_int_line(
+        file,
+        "hw_enemy_sprite_count",
+        sprite_stats.hw_enemy_sprite_count);
+    bb_harness_write_int_line(
+        file,
+        "hw_enemy_slot_count",
+        sprite_stats.hw_enemy_slot_count);
+    bb_harness_write_long_line(
+        file,
+        "bitmap_enemy_draws",
+        sprite_stats.bitmap_enemy_draws);
+    bb_harness_write_long_line(file, "full_redraws", sprite_stats.full_redraws);
+    bb_harness_write_long_line(
+        file,
+        "tile_layer_draws",
+        sprite_stats.tile_layer_draws);
+    bb_harness_write_long_line(
+        file,
+        "tile_redraw_world_rects",
+        sprite_stats.tile_redraw_world_rects);
+    bb_harness_write_long_line(
+        file,
+        "tile_restore_world_rects",
+        sprite_stats.tile_restore_world_rects);
+    bb_harness_write_long_line(
+        file,
+        "actor_redraw_passes",
+        sprite_stats.actor_redraw_passes);
+    bb_harness_write_long_line(file, "player_draws", sprite_stats.player_draws);
+    bb_harness_write_string_line(
+        file,
+        "hw_enemy_status",
+        sprite_stats.hw_enemy_status != NULL ?
+            sprite_stats.hw_enemy_status :
+            "unknown");
+    bb_harness_write_int_line(file, "result_complete", 1);
+
+    Close(file);
+    printf("Byte Brothers wrote harness result to %s.\n", paths[i]);
+}
+#elif defined(BB_EMULATOR_HARNESS)
+static void bb_harness_write_result(void)
+{
+}
 #endif
 
 static int bb_actor_tile_x(int tile_x, int width)
@@ -710,6 +967,12 @@ void byte_brothers_update(ANA_Time time)
 
     bb_update_camera();
 
+#ifdef BB_EMULATOR_HARNESS
+    if (bb_frame >= BB_HARNESS_FRAMES) {
+        ana_quit();
+    }
+#endif
+
 #ifndef ANA_TARGET_AMIGA
     if (bb_frame >= 80) {
         ana_quit();
@@ -724,6 +987,9 @@ void byte_brothers_draw(void)
 
 void byte_brothers_shutdown(void)
 {
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_write_result();
+#endif
     bb_render_shutdown();
     bb_assets_unload();
 }

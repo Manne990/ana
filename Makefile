@@ -24,6 +24,7 @@ AMIGA_PRESENT_CFLAGS ?= -DANA_AMIGA_DIRECT_PRESENT
 AMIGA_CFLAGS ?= $(AMIGA_BASE_CFLAGS) $(AMIGA_PRESENT_CFLAGS)
 AMIGA_DEBUG_CFLAGS ?= $(AMIGA_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_INPUT_PROBE_HARNESS_CFLAGS ?= $(AMIGA_CFLAGS) -DPROBE_RUNTIME_TICKS=100
+AMIGA_BYTE_BROTHERS_HARNESS_CFLAGS ?= $(AMIGA_A1200_DEBUG_CFLAGS) -DBB_EMULATOR_HARNESS -DBB_HARNESS_FRAMES=120 -DBB_INPUT_DEBUG_OVERLAY=0
 AMIGA_BUFFERED_DEBUG_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_SYNC_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_AMIGA_DIRECT_PRESENT -DANA_AMIGA_DIRECT_PRESENT_SYNC -DANA_DEBUG_STATS
 AMIGA_A1200_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68020 -DANA_TARGET_AMIGA -DANA_AMIGA_A1200_BASELINE
@@ -171,6 +172,7 @@ AMIGA_A1200_EXAMPLE_BINS := \
 
 AMIGA_INPUT_PROBE_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/input-probe-a1200-debug/input_probe
 AMIGA_INPUT_PROBE_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/input_probe/input_probe
+AMIGA_BYTE_BROTHERS_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/byte_brothers/byte_brothers
 AMIGA_INVADERS_DEBUG_BIN := $(AMIGA_DEBUG_BUILD_DIR)/examples/invaders-debug/invaders
 AMIGA_INVADERS_BUFFERED_DEBUG_BIN := $(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/examples/invaders-buffered-debug/invaders
 AMIGA_INVADERS_SYNC_BIN := $(AMIGA_SYNC_BUILD_DIR)/examples/invaders-sync/invaders
@@ -196,7 +198,7 @@ AMAZE_A1200_DEBUG_ADF := $(ADF_DIR)/amaze-a1200-debug.adf
 BYTE_BROTHERS_A1200_ADF := $(ADF_DIR)/byte-brothers-a1200.adf
 BYTE_BROTHERS_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-a1200-debug.adf
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf emulator-input-probe invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf emulator-input-probe emulator-byte-brothers invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf release-package clean-assets clean
 
 all: lib examples tools
 
@@ -232,6 +234,8 @@ amiga-input-probe-a1200-debug: $(AMIGA_INPUT_PROBE_A1200_DEBUG_BIN)
 
 amiga-input-probe-harness: $(AMIGA_INPUT_PROBE_HARNESS_BIN)
 
+amiga-byte-brothers-harness: $(AMIGA_BYTE_BROTHERS_HARNESS_BIN)
+
 amiga-invaders-debug: $(AMIGA_INVADERS_DEBUG_BIN)
 
 amiga-invaders-buffered-debug: $(AMIGA_INVADERS_BUFFERED_DEBUG_BIN)
@@ -262,6 +266,9 @@ input-probe-harness-adf: $(INPUT_PROBE_HARNESS_ADF)
 
 emulator-input-probe:
 	python3 tools/emulator/run_input_probe.py --no-send-keys
+
+emulator-byte-brothers:
+	python3 tools/emulator/run_byte_brothers.py
 
 amaze-a1200-adf: $(AMAZE_A1200_ADF)
 
@@ -495,6 +502,10 @@ $(AMIGA_AMAZE_A1200_DEBUG_BIN): $(AMAZE_SRCS) $(AMAZE_HEADERS) $(AMIGA_A1200_DEB
 $(AMIGA_BYTE_BROTHERS_A1200_DEBUG_BIN): $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADERS) $(AMIGA_A1200_DEBUG_LIBANA) $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_A1200_DEBUG_CFLAGS) $(BYTE_BROTHERS_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
+$(AMIGA_BYTE_BROTHERS_HARNESS_BIN): $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADERS) $(AMIGA_A1200_DEBUG_LIBANA) $(BYTE_BROTHERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_BYTE_BROTHERS_HARNESS_CFLAGS) $(BYTE_BROTHERS_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
 $(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
 	mkdir -p $(@D)

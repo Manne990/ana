@@ -55,6 +55,12 @@ static ANA_TileLayer bb_playfield_layer;
 static ANA_Layer bb_sprite_layer;
 static ANA_Layer bb_hud_layer;
 static long bb_debug_bitmap_enemy_draws = 0L;
+static long bb_debug_full_redraws = 0L;
+static long bb_debug_tile_layer_draws = 0L;
+static long bb_debug_tile_redraw_world_rects = 0L;
+static long bb_debug_tile_restore_world_rects = 0L;
+static long bb_debug_actor_redraw_passes = 0L;
+static long bb_debug_player_draws = 0L;
 
 static void bb_draw_player(void);
 static void bb_draw_enemy(const BB_Enemy* enemy);
@@ -975,6 +981,7 @@ static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
     ANA_RectList restore_rects;
     ANA_RectList redraw_rects;
 
+    bb_debug_actor_redraw_passes++;
     ana_rect_list_init(
         &tile_rects,
         tile_rect_storage,
@@ -1085,17 +1092,20 @@ static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
 
     if (all_slots) {
         for (i = 0; i < ana_rect_list_count(&redraw_rects); i++) {
+            bb_debug_tile_redraw_world_rects++;
             ana_tile_layer_redraw_world_rect(
                 &bb_playfield_layer,
                 ana_rect_list_rect(&redraw_rects, i));
         }
     } else {
         for (i = 0; i < ana_rect_list_count(&tile_rects); i++) {
+            bb_debug_tile_redraw_world_rects++;
             ana_tile_layer_redraw_world_rect(
                 &bb_playfield_layer,
                 ana_rect_list_rect(&tile_rects, i));
         }
         for (i = 0; i < ana_rect_list_count(&restore_rects); i++) {
+            bb_debug_tile_restore_world_rects++;
             ana_tile_layer_restore_world_rect(
                 &bb_playfield_layer,
                 ana_rect_list_rect(&restore_rects, i));
@@ -1118,6 +1128,7 @@ static void bb_draw_player(void)
     sx = rect.x;
     sy = rect.y;
     anim_frame = bb_player_anim_frame();
+    bb_debug_player_draws++;
 
     if (bb_player.facing < 0) {
         anim_frame += BB_PLAYER_LEFT_FRAME_OFFSET;
@@ -1243,6 +1254,13 @@ void bb_render_reset(void)
     for (i = 0; i < BB_RENDER_SLOTS; i++) {
         bb_prev_actor_valid[i] = 0;
     }
+    bb_debug_bitmap_enemy_draws = 0L;
+    bb_debug_full_redraws = 0L;
+    bb_debug_tile_layer_draws = 0L;
+    bb_debug_tile_redraw_world_rects = 0L;
+    bb_debug_tile_restore_world_rects = 0L;
+    bb_debug_actor_redraw_passes = 0L;
+    bb_debug_player_draws = 0L;
     bb_clear_tile_dirty_rects();
 #ifdef ANA_TARGET_AMIGA
     bb_hw_enemy_hide_from(0);
@@ -1318,6 +1336,8 @@ void bb_render_draw(void)
             ana_fill_rect(0, 0, 0, BB_SCREEN_W, BB_SCREEN_H);
         }
         ana_tile_layer_invalidate(&bb_playfield_layer);
+        bb_debug_full_redraws++;
+        bb_debug_tile_layer_draws++;
         ana_tile_layer_draw(&bb_playfield_layer);
         slot = bb_render_slot();
         ana_layer_mark_dirty(&bb_hud_layer);
@@ -1336,9 +1356,9 @@ void bb_render_draw(void)
 
     bb_hw_enemy_update(0);
 
-    if (hardware_scroll_available ||
-            bb_camera.x != bb_prev_camera_x ||
+    if (bb_camera.x != bb_prev_camera_x ||
             bb_camera.y != bb_prev_camera_y) {
+        bb_debug_tile_layer_draws++;
         ana_tile_layer_draw(&bb_playfield_layer);
     }
     slot = bb_render_slot();
@@ -1356,21 +1376,56 @@ void bb_render_draw(void)
     bb_commit_state(slot);
 }
 
+BB_RenderStats bb_render_stats(void)
+{
+    BB_RenderStats stats;
+
+    stats.bitmap_enemy_draws = bb_debug_bitmap_enemy_draws;
+    stats.full_redraws = bb_debug_full_redraws;
+    stats.tile_layer_draws = bb_debug_tile_layer_draws;
+    stats.tile_redraw_world_rects = bb_debug_tile_redraw_world_rects;
+    stats.tile_restore_world_rects = bb_debug_tile_restore_world_rects;
+    stats.actor_redraw_passes = bb_debug_actor_redraw_passes;
+    stats.player_draws = bb_debug_player_draws;
+#ifdef ANA_TARGET_AMIGA
+    stats.hw_enemy_update_calls = bb_hw_enemy_update_calls;
+    stats.hw_enemy_visible_moves = bb_hw_enemy_visible_moves;
+    stats.hw_enemy_ready = bb_hw_enemy_ready;
+    stats.hw_enemy_failed = bb_hw_enemy_failed;
+    stats.hw_enemy_sprite_count = bb_hw_enemy_sprite_count;
+    stats.hw_enemy_slot_count = bb_hw_enemy_slot_count;
+    stats.hw_enemy_status = bb_hw_enemy_failure_reason;
+#else
+    stats.hw_enemy_update_calls = 0L;
+    stats.hw_enemy_visible_moves = 0L;
+    stats.hw_enemy_ready = 0;
+    stats.hw_enemy_failed = 0;
+    stats.hw_enemy_sprite_count = 0;
+    stats.hw_enemy_slot_count = 0;
+    stats.hw_enemy_status = "host";
+#endif
+
+    return stats;
+}
+
 void bb_render_shutdown(void)
 {
 #ifdef ANA_TARGET_AMIGA
+    BB_RenderStats stats;
+
+    stats = bb_render_stats();
     printf(
         "Byte Brothers sprite backend: hw_calls=%ld, ready=%d, failed=%d, "
         "channels=%d, hw_slots=%d, hw_enemy_moves=%ld, "
         "bitmap_enemy_draws=%ld, status=%s\n",
-        bb_hw_enemy_update_calls,
-        bb_hw_enemy_ready,
-        bb_hw_enemy_failed,
-        bb_hw_enemy_sprite_count,
-        bb_hw_enemy_slot_count,
-        bb_hw_enemy_visible_moves,
-        bb_debug_bitmap_enemy_draws,
-        bb_hw_enemy_failure_reason);
+        stats.hw_enemy_update_calls,
+        stats.hw_enemy_ready,
+        stats.hw_enemy_failed,
+        stats.hw_enemy_sprite_count,
+        stats.hw_enemy_slot_count,
+        stats.hw_enemy_visible_moves,
+        stats.bitmap_enemy_draws,
+        stats.hw_enemy_status);
 #endif
     bb_hw_enemy_shutdown();
 }
