@@ -19,6 +19,9 @@
 
 #ifdef ANA_TARGET_AMIGA
 #define ANA_AMIGA_RAWKEY_RELEASE 0x80
+#ifndef ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL
+#define ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL 1
+#endif
 #define ANA_AMIGA_KEY_MATRIX_BYTES 16L
 #define ANA_AMIGA_KEY_MATRIX_RAW_CODES 0x80
 #define ANA_AMIGA_CIAA_FIRE0 0x40u
@@ -44,6 +47,31 @@
 
 extern struct Custom custom;
 extern struct CIA ciaa;
+
+typedef struct ANA_AmigaRawKeyMapEntry {
+    unsigned char raw_code;
+    ANA_Key key;
+} ANA_AmigaRawKeyMapEntry;
+
+static const ANA_AmigaRawKeyMapEntry ana_amiga_raw_key_map[] = {
+    {0x4f, ANA_KEY_LEFT},
+    {0x4e, ANA_KEY_RIGHT},
+    {0x4c, ANA_KEY_UP},
+    {0x4d, ANA_KEY_DOWN},
+    {0x40, ANA_KEY_SPACE},
+    {0x44, ANA_KEY_RETURN},
+    {0x45, ANA_KEY_ESCAPE},
+    {0x10, ANA_KEY_Q},
+    {0x20, ANA_KEY_A},
+    {0x22, ANA_KEY_D},
+    {0x11, ANA_KEY_W},
+    {0x21, ANA_KEY_S},
+    {0x31, ANA_KEY_Z},
+    {0x32, ANA_KEY_X},
+    {0x33, ANA_KEY_C},
+    {0x34, ANA_KEY_V},
+    {0x63, ANA_KEY_CTRL}
+};
 #endif
 
 static unsigned int ana_current_input[ANA_INPUT_DEVICES];
@@ -73,6 +101,7 @@ static struct MsgPort* ana_keyboard_port = NULL;
 static struct IOStdReq* ana_keyboard_io = NULL;
 static int ana_keyboard_open = 0;
 static int ana_keyboard_failed = 0;
+static int ana_keyboard_matrix_poll_countdown = 0;
 static unsigned char ana_keyboard_matrix[ANA_AMIGA_KEY_MATRIX_BYTES];
 static int ana_keyboard_matrix_key_state[ANA_KEY_COUNT];
 static int ana_keyboard_raw_key_state[ANA_KEY_COUNT];
@@ -287,44 +316,18 @@ static void ana_input_debug_record_event(
 
 static ANA_Key ana_amiga_key_from_raw_code(int code)
 {
-    switch (code) {
-    case 0x4f:
-        return ANA_KEY_LEFT;
-    case 0x4e:
-        return ANA_KEY_RIGHT;
-    case 0x4c:
-        return ANA_KEY_UP;
-    case 0x4d:
-        return ANA_KEY_DOWN;
-    case 0x40:
-        return ANA_KEY_SPACE;
-    case 0x44:
-        return ANA_KEY_RETURN;
-    case 0x45:
-        return ANA_KEY_ESCAPE;
-    case 0x10:
-        return ANA_KEY_Q;
-    case 0x20:
-        return ANA_KEY_A;
-    case 0x22:
-        return ANA_KEY_D;
-    case 0x11:
-        return ANA_KEY_W;
-    case 0x21:
-        return ANA_KEY_S;
-    case 0x31:
-        return ANA_KEY_Z;
-    case 0x32:
-        return ANA_KEY_X;
-    case 0x33:
-        return ANA_KEY_C;
-    case 0x34:
-        return ANA_KEY_V;
-    case 0x63:
-        return ANA_KEY_CTRL;
-    default:
-        return ANA_KEY_UNKNOWN;
+    int i;
+
+    for (i = 0;
+            i < (int)(sizeof(ana_amiga_raw_key_map) /
+                sizeof(ana_amiga_raw_key_map[0]));
+            i++) {
+        if ((int)ana_amiga_raw_key_map[i].raw_code == code) {
+            return ana_amiga_raw_key_map[i].key;
+        }
     }
+
+    return ANA_KEY_UNKNOWN;
 }
 
 static ANA_Key ana_amiga_key_from_vanilla_code(int code)
@@ -414,10 +417,23 @@ static int ana_amiga_keyboard_open(void)
 
 static int ana_amiga_poll_keyboard_matrix(void)
 {
-    int raw_code;
     int length;
     int is_down;
+    int i;
     ANA_Key key;
+    int raw_code;
+
+#if ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL <= 0
+    ana_debug_matrix_ready = 0;
+    return 0;
+#else
+    if (ana_keyboard_matrix_poll_countdown > 0) {
+        ana_keyboard_matrix_poll_countdown--;
+        return ana_debug_matrix_ready;
+    }
+    ana_keyboard_matrix_poll_countdown =
+        ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL - 1;
+#endif
 
     if (!ana_amiga_keyboard_open()) {
         ana_debug_matrix_ready = 0;
@@ -447,13 +463,12 @@ static int ana_amiga_poll_keyboard_matrix(void)
         length = (int)ANA_AMIGA_KEY_MATRIX_BYTES;
     }
 
-    for (raw_code = 0;
-            raw_code < ANA_AMIGA_KEY_MATRIX_RAW_CODES;
-            raw_code++) {
-        key = ana_amiga_key_from_raw_code(raw_code);
-        if (!ana_valid_key(key)) {
-            continue;
-        }
+    for (i = 0;
+            i < (int)(sizeof(ana_amiga_raw_key_map) /
+                sizeof(ana_amiga_raw_key_map[0]));
+            i++) {
+        raw_code = (int)ana_amiga_raw_key_map[i].raw_code;
+        key = ana_amiga_raw_key_map[i].key;
 
         is_down = ana_input_key_matrix_raw_down(
             ana_keyboard_matrix,
@@ -632,14 +647,19 @@ void ana_input_reset(void)
 
 #ifdef ANA_TARGET_AMIGA
     ana_amiga_keyboard_open();
+    ana_keyboard_matrix_poll_countdown = 0;
 #endif
 }
 
 void ana_input_update(void)
 {
-    int i;
-
     ana_input_poll_backend();
+    ana_input_advance_without_poll();
+}
+
+void ana_input_advance_without_poll(void)
+{
+    int i;
 
     for (i = 0; i < ANA_INPUT_DEVICES; i++) {
         ana_previous_input[i] = ana_current_input[i];

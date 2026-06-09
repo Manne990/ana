@@ -17,6 +17,7 @@
 /* Platforming rules, text-map loading, collision, enemies, and progression. */
 
 char bb_map[BB_MAP_H][BB_MAP_W + 1];
+static unsigned char bb_map_flags[BB_MAP_H][BB_MAP_W];
 BB_Player bb_player;
 BB_Enemy bb_enemies[BB_MAX_ENEMIES];
 int bb_enemy_count = 0;
@@ -56,13 +57,110 @@ static void bb_map_input(void)
 #endif
 
 #ifdef BB_EMULATOR_HARNESS
+#define BB_HARNESS_SCENARIO_STATIC 0
+#define BB_HARNESS_SCENARIO_SCROLL 1
 #ifndef BB_HARNESS_FRAMES
 #define BB_HARNESS_FRAMES 100
 #endif
+#ifndef BB_HARNESS_SCENARIO
+#define BB_HARNESS_SCENARIO BB_HARNESS_SCENARIO_STATIC
+#endif
 #define BB_HARNESS_RESULT_FILE "ana_byte_brothers_result.txt"
+static int bb_harness_start_player_x = 0;
+static int bb_harness_start_player_y = 0;
+static int bb_harness_start_camera_x = 0;
+static int bb_harness_start_camera_y = 0;
+static int bb_harness_last_camera_x = 0;
+static int bb_harness_last_camera_y = 0;
+static int bb_harness_scroll_frames = 0;
+static int bb_harness_frames_with_visible_enemies = 0;
+static int bb_harness_max_visible_enemies = 0;
+
+static const char* bb_harness_scenario_name(void)
+{
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL
+    return "scroll";
+#else
+    return "static";
+#endif
+}
+
+static void bb_harness_begin(void)
+{
+    bb_harness_start_player_x = bb_player.x;
+    bb_harness_start_player_y = bb_player.y;
+    bb_harness_start_camera_x = bb_camera.x;
+    bb_harness_start_camera_y = bb_camera.y;
+    bb_harness_last_camera_x = bb_camera.x;
+    bb_harness_last_camera_y = bb_camera.y;
+    bb_harness_scroll_frames = 0;
+    bb_harness_frames_with_visible_enemies = 0;
+    bb_harness_max_visible_enemies = 0;
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL
+    bb_player.invuln_ticks = BB_HARNESS_FRAMES + BB_INVULN_TICKS;
+#endif
+}
+
+static void bb_harness_apply_controls(int* move)
+{
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL
+    *move = 1;
+#else
+    *move = 0;
+#endif
+}
+
+static int bb_harness_visible_enemy_count(void)
+{
+    ANA_Rect view;
+    ANA_Rect enemy_rect;
+    int visible;
+    int i;
+
+    view = ana_camera_world_view(&bb_camera);
+    visible = 0;
+    for (i = 0; i < bb_enemy_count; i++) {
+        if (!bb_enemies[i].alive) {
+            continue;
+        }
+        enemy_rect = ana_rect_make(
+            bb_enemies[i].x,
+            bb_enemies[i].y,
+            BB_ENEMY_W,
+            BB_ENEMY_H);
+        if (ana_rect_intersects(view, enemy_rect)) {
+            visible++;
+        }
+    }
+
+    return visible;
+}
+
+static void bb_harness_update_stats(void)
+{
+    int visible;
+
+    if (bb_camera.x != bb_harness_last_camera_x ||
+            bb_camera.y != bb_harness_last_camera_y) {
+        bb_harness_scroll_frames++;
+    }
+    bb_harness_last_camera_x = bb_camera.x;
+    bb_harness_last_camera_y = bb_camera.y;
+
+    visible = bb_harness_visible_enemy_count();
+    if (visible > 0) {
+        bb_harness_frames_with_visible_enemies++;
+    }
+    if (visible > bb_harness_max_visible_enemies) {
+        bb_harness_max_visible_enemies = visible;
+    }
+}
 #endif
 
 #if defined(ANA_TARGET_AMIGA) && defined(BB_EMULATOR_HARNESS)
+static const char* bb_harness_result_phase = "shutdown";
+static int bb_harness_result_complete = 1;
+
 static void bb_harness_write_text(BPTR file, const char* text)
 {
     Write(file, (APTR)text, (LONG)strlen(text));
@@ -153,8 +251,13 @@ static void bb_harness_write_result(void)
     sprite_stats = bb_render_stats();
 
     bb_harness_write_int_line(file, "ana_byte_brothers_result", 1);
-    bb_harness_write_string_line(file, "phase", "shutdown");
+    bb_harness_write_string_line(file, "phase", bb_harness_result_phase);
     bb_harness_write_string_line(file, "version", ANA_VERSION_STRING);
+    bb_harness_write_int_line(file, "harness_scenario_id", BB_HARNESS_SCENARIO);
+    bb_harness_write_string_line(
+        file,
+        "harness_scenario",
+        bb_harness_scenario_name());
     bb_harness_write_int_line(file, "harness_frames", BB_HARNESS_FRAMES);
     bb_harness_write_int_line(file, "bb_frame", bb_frame);
     bb_harness_write_int_line(file, "level", bb_level_index + 1);
@@ -166,6 +269,50 @@ static void bb_harness_write_result(void)
     bb_harness_write_int_line(file, "player_y", bb_player.y);
     bb_harness_write_int_line(file, "camera_x", bb_camera.x);
     bb_harness_write_int_line(file, "camera_y", bb_camera.y);
+    bb_harness_write_int_line(
+        file,
+        "start_player_x",
+        bb_harness_start_player_x);
+    bb_harness_write_int_line(
+        file,
+        "start_player_y",
+        bb_harness_start_player_y);
+    bb_harness_write_int_line(
+        file,
+        "player_delta_x",
+        bb_player.x - bb_harness_start_player_x);
+    bb_harness_write_int_line(
+        file,
+        "player_delta_y",
+        bb_player.y - bb_harness_start_player_y);
+    bb_harness_write_int_line(
+        file,
+        "start_camera_x",
+        bb_harness_start_camera_x);
+    bb_harness_write_int_line(
+        file,
+        "start_camera_y",
+        bb_harness_start_camera_y);
+    bb_harness_write_int_line(
+        file,
+        "camera_delta_x",
+        bb_camera.x - bb_harness_start_camera_x);
+    bb_harness_write_int_line(
+        file,
+        "camera_delta_y",
+        bb_camera.y - bb_harness_start_camera_y);
+    bb_harness_write_int_line(
+        file,
+        "scroll_frames",
+        bb_harness_scroll_frames);
+    bb_harness_write_int_line(
+        file,
+        "frames_with_visible_enemies",
+        bb_harness_frames_with_visible_enemies);
+    bb_harness_write_int_line(
+        file,
+        "max_visible_enemies",
+        bb_harness_max_visible_enemies);
     bb_harness_write_int_line(file, "assets_loaded", bb_assets_loaded());
     bb_harness_write_long_line(file, "run_frames", run_stats.frames);
     bb_harness_write_long_line(file, "elapsed_ticks", run_stats.elapsed_ticks);
@@ -216,6 +363,14 @@ static void bb_harness_write_result(void)
         render_stats.max_converted_pixels);
     bb_harness_write_long_line(
         file,
+        "max_converted_rect_w",
+        render_stats.max_converted_rect_w);
+    bb_harness_write_long_line(
+        file,
+        "max_converted_rect_h",
+        render_stats.max_converted_rect_h);
+    bb_harness_write_long_line(
+        file,
         "planar_clear_pixels",
         render_stats.planar_clear_pixels);
     bb_harness_write_long_line(
@@ -243,6 +398,94 @@ static void bb_harness_write_result(void)
         "screen_buffer_flips",
         render_stats.screen_buffer_flips);
     bb_harness_write_long_line(file, "direct_flips", render_stats.direct_flips);
+    bb_harness_write_long_line(
+        file,
+        "full_dirty_fill_rects",
+        render_stats.full_dirty_fill_rects);
+    bb_harness_write_long_line(
+        file,
+        "full_dirty_scroll_rects",
+        render_stats.full_dirty_scroll_rects);
+    bb_harness_write_long_line(
+        file,
+        "full_dirty_image_rects",
+        render_stats.full_dirty_image_rects);
+    bb_harness_write_long_line(
+        file,
+        "full_dirty_text_rects",
+        render_stats.full_dirty_text_rects);
+    bb_harness_write_long_line(
+        file,
+        "full_dirty_mask_fill_rects",
+        render_stats.full_dirty_mask_fill_rects);
+    bb_harness_write_long_line(
+        file,
+        "full_dirty_generic_rects",
+        render_stats.full_dirty_generic_rects);
+    bb_harness_write_long_line(
+        file,
+        "dirty_fill_rects",
+        render_stats.dirty_fill_rects);
+    bb_harness_write_long_line(
+        file,
+        "dirty_fill_pixels",
+        render_stats.dirty_fill_pixels);
+    bb_harness_write_long_line(
+        file,
+        "hardware_fill_rects",
+        render_stats.hardware_fill_rects);
+    bb_harness_write_long_line(
+        file,
+        "hardware_fill_pixels",
+        render_stats.hardware_fill_pixels);
+    bb_harness_write_long_line(
+        file,
+        "hardware_restore_rects",
+        render_stats.hardware_restore_rects);
+    bb_harness_write_long_line(
+        file,
+        "hardware_restore_pixels",
+        render_stats.hardware_restore_pixels);
+    bb_harness_write_long_line(
+        file,
+        "hardware_restore_fallbacks",
+        render_stats.hardware_restore_fallbacks);
+    bb_harness_write_long_line(
+        file,
+        "hardware_redraw_rects",
+        render_stats.hardware_redraw_rects);
+    bb_harness_write_long_line(
+        file,
+        "hardware_redraw_pixels",
+        render_stats.hardware_redraw_pixels);
+    bb_harness_write_long_line(
+        file,
+        "hardware_scroll_alloc_attempts",
+        render_stats.hardware_scroll_alloc_attempts);
+    bb_harness_write_long_line(
+        file,
+        "hardware_scroll_alloc_failures",
+        render_stats.hardware_scroll_alloc_failures);
+    bb_harness_write_long_line(
+        file,
+        "hardware_scroll_alloc_width",
+        render_stats.hardware_scroll_alloc_width);
+    bb_harness_write_long_line(
+        file,
+        "hardware_scroll_alloc_failed_buffer",
+        render_stats.hardware_scroll_alloc_failed_buffer);
+    bb_harness_write_long_line(
+        file,
+        "hardware_scroll_alloc_failed_plane",
+        render_stats.hardware_scroll_alloc_failed_plane);
+    bb_harness_write_long_line(
+        file,
+        "amiga_chip_avail_before_scroll_alloc",
+        render_stats.amiga_chip_avail_before_scroll_alloc);
+    bb_harness_write_long_line(
+        file,
+        "amiga_chip_largest_before_scroll_alloc",
+        render_stats.amiga_chip_largest_before_scroll_alloc);
     bb_harness_write_long_line(
         file,
         "hw_enemy_update_calls",
@@ -278,6 +521,18 @@ static void bb_harness_write_result(void)
         sprite_stats.tile_layer_draws);
     bb_harness_write_long_line(
         file,
+        "tile_hardware_unavailable_draws",
+        sprite_stats.tile_hardware_unavailable_draws);
+    bb_harness_write_long_line(
+        file,
+        "tile_hardware_draws",
+        sprite_stats.tile_hardware_draws);
+    bb_harness_write_long_line(
+        file,
+        "tile_software_draws",
+        sprite_stats.tile_software_draws);
+    bb_harness_write_long_line(
+        file,
         "tile_redraw_world_rects",
         sprite_stats.tile_redraw_world_rects);
     bb_harness_write_long_line(
@@ -289,17 +544,64 @@ static void bb_harness_write_result(void)
         "actor_redraw_passes",
         sprite_stats.actor_redraw_passes);
     bb_harness_write_long_line(file, "player_draws", sprite_stats.player_draws);
+    bb_harness_write_long_line(
+        file,
+        "bb_tile_perf_ticks",
+        sprite_stats.tile_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "bb_hud_perf_ticks",
+        sprite_stats.hud_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "bb_actor_perf_ticks",
+        sprite_stats.actor_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "bb_hw_player_perf_ticks",
+        sprite_stats.hw_player_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "bb_hw_enemy_perf_ticks",
+        sprite_stats.hw_enemy_perf_ticks);
+    bb_harness_write_long_line(
+        file,
+        "hw_player_update_calls",
+        sprite_stats.hw_player_update_calls);
+    bb_harness_write_long_line(
+        file,
+        "hw_player_visible_moves",
+        sprite_stats.hw_player_visible_moves);
+    bb_harness_write_int_line(
+        file,
+        "hw_player_ready",
+        sprite_stats.hw_player_ready);
+    bb_harness_write_int_line(
+        file,
+        "hw_player_failed",
+        sprite_stats.hw_player_failed);
+    bb_harness_write_int_line(
+        file,
+        "hw_player_sprite_count",
+        sprite_stats.hw_player_sprite_count);
+    bb_harness_write_string_line(
+        file,
+        "hw_player_status",
+        sprite_stats.hw_player_status != NULL ?
+            sprite_stats.hw_player_status :
+            "unknown");
     bb_harness_write_string_line(
         file,
         "hw_enemy_status",
         sprite_stats.hw_enemy_status != NULL ?
             sprite_stats.hw_enemy_status :
             "unknown");
-    bb_harness_write_int_line(file, "result_complete", 1);
+    bb_harness_write_int_line(file, "result_complete", bb_harness_result_complete);
 
     Close(file);
     printf("Byte Brothers wrote harness result to %s.\n", paths[i]);
 }
+
 #elif defined(BB_EMULATOR_HARNESS)
 static void bb_harness_write_result(void)
 {
@@ -335,30 +637,7 @@ static void bb_reset_camera(void)
     ana_camera_set_position(&bb_camera, 0, 0);
 }
 
-char bb_tile_at(int tx, int ty)
-{
-    if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
-        return BB_TILE_SOLID;
-    }
-
-    return bb_map[ty][tx];
-}
-
-void bb_set_tile(int tx, int ty, char value)
-{
-    if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
-        return;
-    }
-
-    if (bb_map[ty][tx] == value) {
-        return;
-    }
-
-    bb_map[ty][tx] = value;
-    bb_render_tile_changed(tx, ty);
-}
-
-static unsigned char bb_tile_flags(char tile)
+static unsigned char bb_tile_flags_for_char(char tile)
 {
     switch (tile) {
     case BB_TILE_SOLID:
@@ -382,29 +661,62 @@ static unsigned char bb_tile_flags(char tile)
     }
 }
 
+static unsigned char bb_tile_flags_at(int tx, int ty)
+{
+    if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
+        return BB_TILE_FLAG_SOLID;
+    }
+
+    return bb_map_flags[ty][tx];
+}
+
+char bb_tile_at(int tx, int ty)
+{
+    if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
+        return BB_TILE_SOLID;
+    }
+
+    return bb_map[ty][tx];
+}
+
+void bb_set_tile(int tx, int ty, char value)
+{
+    if (tx < 0 || tx >= BB_MAP_W || ty < 0 || ty >= BB_MAP_H) {
+        return;
+    }
+
+    if (bb_map[ty][tx] == value) {
+        return;
+    }
+
+    bb_map[ty][tx] = value;
+    bb_map_flags[ty][tx] = bb_tile_flags_for_char(value);
+    bb_render_tile_changed(tx, ty);
+}
+
 int bb_tile_is_solid(char tile)
 {
-    return (bb_tile_flags(tile) & BB_TILE_FLAG_SOLID) != 0u;
+    return (bb_tile_flags_for_char(tile) & BB_TILE_FLAG_SOLID) != 0u;
 }
 
 int bb_tile_is_platform(char tile)
 {
-    return (bb_tile_flags(tile) & BB_TILE_FLAG_PLATFORM) != 0u;
+    return (bb_tile_flags_for_char(tile) & BB_TILE_FLAG_PLATFORM) != 0u;
 }
 
 int bb_tile_is_hazard(char tile)
 {
-    return (bb_tile_flags(tile) & BB_TILE_FLAG_HAZARD) != 0u;
+    return (bb_tile_flags_for_char(tile) & BB_TILE_FLAG_HAZARD) != 0u;
 }
 
 int bb_tile_is_collectible(char tile)
 {
-    return (bb_tile_flags(tile) & BB_TILE_FLAG_COLLECTIBLE) != 0u;
+    return (bb_tile_flags_for_char(tile) & BB_TILE_FLAG_COLLECTIBLE) != 0u;
 }
 
 int bb_tile_is_goal(char tile)
 {
-    return (bb_tile_flags(tile) & BB_TILE_FLAG_GOAL) != 0u;
+    return (bb_tile_flags_for_char(tile) & BB_TILE_FLAG_GOAL) != 0u;
 }
 
 static void bb_set_palette(void)
@@ -444,7 +756,7 @@ static int bb_rect_hits_solid(int x, int y, int w, int h)
     ANA_Rect tiles;
     int tx;
     int ty;
-    char tile;
+    unsigned char flags;
 
     tiles = bb_tiles_for_rect(x, y, w, h);
 
@@ -453,27 +765,8 @@ static int bb_rect_hits_solid(int x, int y, int w, int h)
             continue;
         }
         for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
-            tile = bb_tile_at(tx, ty);
-            if (bb_tile_is_solid(tile)) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
-}
-
-static int bb_rect_hits_hazard(int x, int y, int w, int h)
-{
-    ANA_Rect tiles;
-    int tx;
-    int ty;
-
-    tiles = bb_tiles_for_rect(x, y, w, h);
-
-    for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
-        for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
-            if (bb_tile_is_hazard(bb_tile_at(tx, ty))) {
+            flags = bb_tile_flags_at(tx, ty);
+            if ((flags & BB_TILE_FLAG_SOLID) != 0u) {
                 return 1;
             }
         }
@@ -487,13 +780,13 @@ static int bb_has_floor_at(int x, int y)
     ANA_Rect tile_rect;
     int tx;
     int ty;
-    char tile;
+    unsigned char flags;
 
     tile_rect = bb_tiles_for_rect(x, y, 1, 1);
     tx = tile_rect.x;
     ty = tile_rect.y;
-    tile = bb_tile_at(tx, ty);
-    return bb_tile_is_solid(tile) || bb_tile_is_platform(tile);
+    flags = bb_tile_flags_at(tx, ty);
+    return (flags & (BB_TILE_FLAG_SOLID | BB_TILE_FLAG_PLATFORM)) != 0u;
 }
 
 static int bb_hits_platform_on_descent(int x, int old_y, int new_y, int w, int h)
@@ -524,7 +817,7 @@ static int bb_hits_platform_on_descent(int x, int old_y, int new_y, int w, int h
     }
 
     for (tx = tx0; tx <= tx1; tx++) {
-        if (bb_tile_is_platform(bb_tile_at(tx, ty))) {
+        if ((bb_tile_flags_at(tx, ty) & BB_TILE_FLAG_PLATFORM) != 0u) {
             return platform_top;
         }
     }
@@ -557,6 +850,47 @@ static int bb_bump_head_tiles(int head_y)
     }
 
     return bumped;
+}
+
+static int bb_find_solid_in_column(int tx, int y0, int y1)
+{
+    int ty0;
+    int ty1;
+    int ty;
+
+    ty0 = y0 / BB_TILE;
+    ty1 = y1 / BB_TILE;
+    for (ty = ty0; ty <= ty1; ty++) {
+        if (ty < 0) {
+            continue;
+        }
+        if ((bb_tile_flags_at(tx, ty) & BB_TILE_FLAG_SOLID) != 0u) {
+            return ty;
+        }
+    }
+
+    return -1;
+}
+
+static int bb_find_solid_in_row(int x0, int x1, int ty)
+{
+    int tx0;
+    int tx1;
+    int tx;
+
+    if (ty < 0) {
+        return -1;
+    }
+
+    tx0 = x0 / BB_TILE;
+    tx1 = x1 / BB_TILE;
+    for (tx = tx0; tx <= tx1; tx++) {
+        if ((bb_tile_flags_at(tx, ty) & BB_TILE_FLAG_SOLID) != 0u) {
+            return tx;
+        }
+    }
+
+    return -1;
 }
 
 static void bb_reset_player(void)
@@ -598,57 +932,63 @@ static void bb_player_hit(void)
 
 static void bb_move_player_h(int dx)
 {
-    int step;
-    int count;
+    int new_x;
+    int tx;
+    int hit_ty;
 
     if (dx == 0) {
         return;
     }
 
-    step = dx > 0 ? 1 : -1;
-    count = dx > 0 ? dx : -dx;
-
-    while (count > 0) {
-        if (!bb_rect_hits_solid(
-                bb_player.x + step,
-                bb_player.y,
-                BB_PLAYER_W,
-                BB_PLAYER_H)) {
-            bb_player.x += step;
-        } else {
+    new_x = bb_player.x + dx;
+    if (dx > 0) {
+        tx = (new_x + BB_PLAYER_W - 1) / BB_TILE;
+        hit_ty = bb_find_solid_in_column(
+            tx,
+            bb_player.y,
+            bb_player.y + BB_PLAYER_H - 1);
+        if (hit_ty >= 0) {
+            bb_player.x = tx * BB_TILE - BB_PLAYER_W;
             bb_player.vx = 0;
             return;
         }
-
-        count--;
+    } else {
+        tx = new_x / BB_TILE;
+        hit_ty = bb_find_solid_in_column(
+            tx,
+            bb_player.y,
+            bb_player.y + BB_PLAYER_H - 1);
+        if (hit_ty >= 0) {
+            bb_player.x = (tx + 1) * BB_TILE;
+            bb_player.vx = 0;
+            return;
+        }
     }
+
+    bb_player.x = new_x;
 }
 
 static void bb_move_player_v(int dy)
 {
-    int step;
-    int count;
+    int new_y;
     int platform_top;
+    int ty;
+    int hit_tx;
 
     if (dy == 0) {
         return;
     }
 
-    step = dy > 0 ? 1 : -1;
-    count = dy > 0 ? dy : -dy;
+    new_y = bb_player.y + dy;
     bb_player.on_ground = 0;
 
-    while (count > 0) {
-        platform_top = 0;
-        if (step > 0) {
-            platform_top = bb_hits_platform_on_descent(
-                bb_player.x,
-                bb_player.y,
-                bb_player.y + step,
-                BB_PLAYER_W,
-                BB_PLAYER_H);
-        }
-
+    if (dy > 0) {
+        platform_top = bb_hits_platform_on_descent(
+            bb_player.x,
+            bb_player.y,
+            new_y,
+            BB_PLAYER_W,
+            BB_PLAYER_H);
         if (platform_top != 0) {
             bb_player.y = platform_top - BB_PLAYER_H;
             bb_player.vy = 0;
@@ -656,29 +996,39 @@ static void bb_move_player_v(int dy)
             return;
         }
 
-        if (step < 0 && bb_bump_head_tiles(bb_player.y + step)) {
+        ty = (new_y + BB_PLAYER_H - 1) / BB_TILE;
+        hit_tx = bb_find_solid_in_row(
+            bb_player.x,
+            bb_player.x + BB_PLAYER_W - 1,
+            ty);
+        if (hit_tx >= 0) {
+            bb_player.y = ty * BB_TILE - BB_PLAYER_H;
+            bb_player.vy = 0;
+            bb_player.on_ground = 1;
+            return;
+        }
+    } else {
+        if (bb_bump_head_tiles(new_y)) {
             bb_player.vy = 0;
             return;
         }
 
-        if (!bb_rect_hits_solid(
+        if (new_y >= 0) {
+            ty = new_y / BB_TILE;
+            hit_tx = bb_find_solid_in_row(
                 bb_player.x,
-                bb_player.y + step,
-                BB_PLAYER_W,
-                BB_PLAYER_H)) {
-            bb_player.y += step;
-        } else {
-            if (step < 0) {
-                bb_bump_head_tiles(bb_player.y + step);
-            } else {
-                bb_player.on_ground = 1;
+                bb_player.x + BB_PLAYER_W - 1,
+                ty);
+            if (hit_tx >= 0) {
+                bb_bump_head_tiles(new_y);
+                bb_player.y = (ty + 1) * BB_TILE;
+                bb_player.vy = 0;
+                return;
             }
-            bb_player.vy = 0;
-            return;
         }
-
-        count--;
     }
+
+    bb_player.y = new_y;
 }
 
 static void bb_clamp_player_to_world(void)
@@ -689,12 +1039,20 @@ static void bb_clamp_player_to_world(void)
     }
 }
 
-static void bb_collect_at_player(void)
+static void bb_scan_player_tiles(int* hit_hazard, int* reached_goal)
 {
     ANA_Rect tiles;
     int tx;
     int ty;
     char tile;
+    unsigned char flags;
+
+    if (hit_hazard != 0) {
+        *hit_hazard = 0;
+    }
+    if (reached_goal != 0) {
+        *reached_goal = 0;
+    }
 
     tiles = bb_tiles_for_rect(
         bb_player.x,
@@ -704,48 +1062,36 @@ static void bb_collect_at_player(void)
 
     for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
         for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
-            tile = bb_tile_at(tx, ty);
-            if (tile == BB_TILE_FRAGMENT) {
-                bb_score += 10;
-                bb_fragments_left--;
-                bb_set_tile(tx, ty, BB_TILE_EMPTY);
-                bb_assets_play_collect();
-            } else if (tile == BB_TILE_RARE_FRAGMENT) {
-                bb_score += 100;
-                bb_fragments_left--;
-                bb_set_tile(tx, ty, BB_TILE_EMPTY);
-                bb_assets_play_power();
-            } else if (tile == BB_TILE_CODE_FRAGMENT) {
-                bb_score += 50;
-                bb_fragments_left--;
-                bb_set_tile(tx, ty, BB_TILE_EMPTY);
-                bb_assets_play_power();
+            flags = bb_tile_flags_at(tx, ty);
+            if ((flags & BB_TILE_FLAG_COLLECTIBLE) != 0u) {
+                tile = bb_tile_at(tx, ty);
+                if (tile == BB_TILE_FRAGMENT) {
+                    bb_score += 10;
+                    bb_fragments_left--;
+                    bb_set_tile(tx, ty, BB_TILE_EMPTY);
+                    bb_assets_play_collect();
+                } else if (tile == BB_TILE_RARE_FRAGMENT) {
+                    bb_score += 100;
+                    bb_fragments_left--;
+                    bb_set_tile(tx, ty, BB_TILE_EMPTY);
+                    bb_assets_play_power();
+                } else if (tile == BB_TILE_CODE_FRAGMENT) {
+                    bb_score += 50;
+                    bb_fragments_left--;
+                    bb_set_tile(tx, ty, BB_TILE_EMPTY);
+                    bb_assets_play_power();
+                }
+            }
+            if (hit_hazard != 0 &&
+                    (flags & BB_TILE_FLAG_HAZARD) != 0u) {
+                *hit_hazard = 1;
+            }
+            if (reached_goal != 0 &&
+                    (flags & BB_TILE_FLAG_GOAL) != 0u) {
+                *reached_goal = 1;
             }
         }
     }
-}
-
-static int bb_player_on_goal(void)
-{
-    ANA_Rect tiles;
-    int tx;
-    int ty;
-
-    tiles = bb_tiles_for_rect(
-        bb_player.x,
-        bb_player.y,
-        BB_PLAYER_W,
-        BB_PLAYER_H);
-
-    for (ty = tiles.y; ty < tiles.y + tiles.h; ty++) {
-        for (tx = tiles.x; tx < tiles.x + tiles.w; tx++) {
-            if (bb_tile_is_goal(bb_tile_at(tx, ty))) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
 }
 
 static void bb_update_camera(void)
@@ -816,7 +1162,8 @@ static void bb_load_level(int level)
     bb_reset_camera();
 
     for (y = 0; y < BB_MAP_H; y++) {
-        memcpy(bb_map[y], bb_levels[level][y], BB_MAP_W + 1);
+        memcpy(bb_map[y], bb_levels[level][y], BB_MAP_W);
+        bb_map[y][BB_MAP_W] = '\0';
         for (x = 0; x < BB_MAP_W; x++) {
             tile = bb_map[y][x];
             if (tile == BB_TILE_PLAYER_START) {
@@ -837,6 +1184,7 @@ static void bb_load_level(int level)
             } else if (bb_tile_is_collectible(tile)) {
                 bb_fragments_left++;
             }
+            bb_map_flags[y][x] = bb_tile_flags_for_char(bb_map[y][x]);
         }
     }
 
@@ -864,12 +1212,17 @@ void byte_brothers_load(void)
     bb_lives = 3;
     bb_frame = 0;
     bb_load_level(bb_level_index);
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_begin();
+#endif
 }
 
 void byte_brothers_update(ANA_Time time)
 {
     int move;
     int dash_pressed;
+    int hit_hazard;
+    int reached_goal;
     int jump_pressed;
     int jump_down;
 
@@ -889,6 +1242,9 @@ void byte_brothers_update(ANA_Time time)
     if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
         move++;
     }
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_apply_controls(&move);
+#endif
 
     if (move < 0) {
         bb_player.facing = -1;
@@ -945,18 +1301,14 @@ void byte_brothers_update(ANA_Time time)
         bb_player.invuln_ticks--;
     }
 
-    bb_collect_at_player();
-    if (bb_rect_hits_hazard(
-            bb_player.x,
-            bb_player.y,
-            BB_PLAYER_W,
-            BB_PLAYER_H)) {
+    bb_scan_player_tiles(&hit_hazard, &reached_goal);
+    if (hit_hazard) {
         bb_player_hit();
     }
 
     bb_update_enemies();
 
-    if (bb_player_on_goal()) {
+    if (reached_goal) {
         bb_assets_play_goal();
         bb_level_index++;
         if (bb_level_index >= BB_LEVEL_COUNT) {
@@ -966,9 +1318,12 @@ void byte_brothers_update(ANA_Time time)
     }
 
     bb_update_camera();
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_update_stats();
+#endif
 
 #ifdef BB_EMULATOR_HARNESS
-    if (bb_frame >= BB_HARNESS_FRAMES) {
+    if (ana_render_stats().frames >= BB_HARNESS_FRAMES) {
         ana_quit();
     }
 #endif

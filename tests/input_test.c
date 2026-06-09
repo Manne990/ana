@@ -235,6 +235,25 @@ static void test_quit_request(void)
     assert(!ana_quit_requested());
 }
 
+static void test_advance_without_poll(void)
+{
+    ana_input_reset();
+
+    ana_input_set_pending_state(ANA_INPUT_DEVICE_0, ANA_ACTION_1_MASK);
+    ana_input_advance_without_poll();
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+
+    ana_input_advance_without_poll();
+    assert(ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(!ana_input_action_pressed(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+
+    ana_input_set_pending_state(ANA_INPUT_DEVICE_0, 0u);
+    ana_input_advance_without_poll();
+    assert(!ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+    assert(ana_input_action_released(ANA_INPUT_DEVICE_0, ANA_ACTION_1));
+}
+
 int main(void)
 {
     test_direction_transitions();
@@ -247,6 +266,7 @@ int main(void)
     test_action_quit_mapping();
     test_invalid_inputs_are_safe();
     test_quit_request();
+    test_advance_without_poll();
 
     return 0;
 }

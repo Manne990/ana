@@ -26,6 +26,8 @@ typedef struct ANA_RenderStats {
     long chunky_clear_pixels;
     long max_dirty_rects;
     long max_converted_pixels;
+    long max_converted_rect_w;
+    long max_converted_rect_h;
     long max_planar_clear_pixels;
     long max_chunky_clear_pixels;
     long present_total_perf_ticks;
@@ -34,6 +36,28 @@ typedef struct ANA_RenderStats {
     long present_flip_perf_ticks;
     long screen_buffer_flips;
     long direct_flips;
+    long full_dirty_fill_rects;
+    long full_dirty_scroll_rects;
+    long full_dirty_image_rects;
+    long full_dirty_text_rects;
+    long full_dirty_mask_fill_rects;
+    long full_dirty_generic_rects;
+    long dirty_fill_rects;
+    long dirty_fill_pixels;
+    long hardware_fill_rects;
+    long hardware_fill_pixels;
+    long hardware_restore_rects;
+    long hardware_restore_pixels;
+    long hardware_restore_fallbacks;
+    long hardware_redraw_rects;
+    long hardware_redraw_pixels;
+    long hardware_scroll_alloc_attempts;
+    long hardware_scroll_alloc_failures;
+    long hardware_scroll_alloc_width;
+    long hardware_scroll_alloc_failed_buffer;
+    long hardware_scroll_alloc_failed_plane;
+    long amiga_chip_avail_before_scroll_alloc;
+    long amiga_chip_largest_before_scroll_alloc;
 } ANA_RenderStats;
 
 typedef void (*ANA_RedrawCallback)(ANA_Rect rect, void* user_data);
@@ -276,6 +300,7 @@ int ana_tile_layer_native_scroll_active(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_available(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_active(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_frame_slot(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_hardware_scroll_update_view(ANA_TileLayer* tile_layer);
 void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer);
 void ana_tile_layer_draw(ANA_TileLayer* tile_layer);
 void ana_tile_layer_redraw_world_rect(

@@ -14,10 +14,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FS_UAE = Path("/Applications/FS-UAE.app/Contents/MacOS/fs-uae")
 RESULT_NAME = "ana_byte_brothers_result.txt"
+PHASE_NAME = "ana_byte_brothers_phase.txt"
+GFX_PHASE_NAME = "ana_gfx_phase.txt"
 RESULT_ROOT = ROOT / "build" / "emulator-results" / "byte-brothers"
 BB_BIN_PATH = ROOT / "build" / "amiga-harness" / "examples" / "byte_brothers" / "byte_brothers"
 ASSET_DIR = ROOT / "build" / "assets" / "byte_brothers" / "assets"
 LOG_PATH = Path.home() / "Documents" / "FS-UAE" / "Cache" / "Logs" / "fs-uae.log.txt"
+
+SCENARIOS = {
+    "static": {"id": 0, "frames": 120},
+    "scroll": {"id": 1, "frames": 360},
+}
 
 MACHINE_CONFIGS = {
     "a1200": Path.home() / "Documents" / "FS-UAE" / "Configurations" / "A1200.fs-uae",
@@ -60,6 +67,18 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(MACHINE_CONFIGS),
         default="a1200",
         help="FS-UAE machine profile to derive Kickstart and base settings from.",
+    )
+    parser.add_argument(
+        "--scenario",
+        choices=sorted(SCENARIOS),
+        default="static",
+        help="Deterministic Byte Brothers harness scenario to run.",
+    )
+    parser.add_argument(
+        "--frames",
+        type=int,
+        default=None,
+        help="Override the scenario's harness frame count.",
     )
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--no-build", action="store_true")
@@ -130,9 +149,15 @@ def write_config(machine: str, result_dir: Path, options: dict[str, str]) -> Pat
     return path
 
 
-def build_byte_brothers() -> None:
+def build_byte_brothers(scenario_id: int, frames: int) -> None:
     subprocess.run(
-        ["make", "-B", "amiga-byte-brothers-harness"],
+        [
+            "make",
+            "-B",
+            "amiga-byte-brothers-harness",
+            f"BB_HARNESS_SCENARIO_ID={scenario_id}",
+            f"BB_HARNESS_FRAMES={frames}",
+        ],
         cwd=ROOT,
         check=True,
     )
@@ -160,6 +185,12 @@ def clean_result(result_dir: Path) -> None:
     result = result_dir / RESULT_NAME
     if result.exists():
         result.unlink()
+    phase = result_dir / PHASE_NAME
+    if phase.exists():
+        phase.unlink()
+    gfx_phase = result_dir / GFX_PHASE_NAME
+    if gfx_phase.exists():
+        gfx_phase.unlink()
 
 
 def result_path(result_dir: Path) -> Path | None:
@@ -169,6 +200,28 @@ def result_path(result_dir: Path) -> Path | None:
 
     for path in result_dir.iterdir():
         if path.name.lower() == RESULT_NAME:
+            return path
+    return None
+
+
+def phase_path(result_dir: Path) -> Path | None:
+    direct = result_dir / PHASE_NAME
+    if direct.exists():
+        return direct
+
+    for path in result_dir.iterdir():
+        if path.name.lower() == PHASE_NAME:
+            return path
+    return None
+
+
+def named_result_path(result_dir: Path, name: str) -> Path | None:
+    direct = result_dir / name
+    if direct.exists():
+        return direct
+
+    for path in result_dir.iterdir():
+        if path.name.lower() == name:
             return path
     return None
 
@@ -226,7 +279,11 @@ def cli_option(key: str, value: str) -> str:
 
 def main() -> int:
     args = parse_args()
-    result_dir = RESULT_ROOT / args.machine
+    scenario_id = int(SCENARIOS[args.scenario]["id"])
+    frames = args.frames
+    if frames is None:
+        frames = int(SCENARIOS[args.scenario]["frames"])
+    result_dir = RESULT_ROOT / args.machine / args.scenario
     result_dir.mkdir(parents=True, exist_ok=True)
     (result_dir / "fs-uae-base").mkdir(parents=True, exist_ok=True)
     (result_dir / "logs").mkdir(parents=True, exist_ok=True)
@@ -237,7 +294,7 @@ def main() -> int:
         return 2
 
     if not args.no_build:
-        build_byte_brothers()
+        build_byte_brothers(scenario_id, frames)
 
     if not BB_BIN_PATH.exists():
         print(f"Byte Brothers harness binary not found: {BB_BIN_PATH}", file=sys.stderr)
@@ -287,10 +344,29 @@ def main() -> int:
 
     if found is None:
         print("No Byte Brothers result file was produced.", file=sys.stderr)
+        phase = phase_path(result_dir)
+        if phase is not None:
+            print(f"\n--- phase marker: {phase} ---")
+            print(phase.read_text(errors="replace"))
+        gfx_phase = named_result_path(result_dir, GFX_PHASE_NAME)
+        if gfx_phase is not None:
+            print(f"\n--- gfx phase marker: {gfx_phase} ---")
+            print(gfx_phase.read_text(errors="replace"))
         if last_seen is not None:
             print(f"\n--- partial result: {last_seen} ---")
             print(last_seen.read_text(errors="replace"))
         print_recent_log(result_dir)
+        return 1
+
+    actual_scenario_id = result_value(found, "harness_scenario_id")
+    actual_frames = result_value(found, "harness_frames")
+    if actual_scenario_id != str(scenario_id) or actual_frames != str(frames):
+        print(
+            "Byte Brothers result did not match requested harness build "
+            f"(scenario={actual_scenario_id}, frames={actual_frames}).",
+            file=sys.stderr,
+        )
+        print(found.read_text(errors="replace"))
         return 1
 
     print(f"Result file: {found}")

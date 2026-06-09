@@ -23,6 +23,7 @@ void* ana_gfx_native_window(void);
 
 void ana_input_reset(void);
 void ana_input_shutdown(void);
+void ana_input_advance_without_poll(void);
 unsigned int ana_input_state_from_amiga_joydat(
     unsigned short joydat,
     int fire_down,
