@@ -51,6 +51,7 @@ static int bb_prev_enemy_x[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
 static int bb_prev_enemy_y[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
 static int bb_prev_enemy_alive[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
 static int bb_prev_enemy_visible[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
+static int bb_prev_enemy_hardware[BB_RENDER_SLOTS][BB_MAX_ENEMIES];
 static int bb_prev_enemy_count[BB_RENDER_SLOTS];
 static int bb_prev_score = -1;
 static int bb_prev_lives = -1;
@@ -750,15 +751,20 @@ static int bb_hw_player_color_code(int color)
     }
 }
 
-static void bb_hw_player_set_sprite_colors(struct ViewPort* viewport)
+static void bb_hw_player_set_sprite_colors(
+    struct ViewPort* viewport,
+    int channel)
 {
+    int base;
+
     if (viewport == 0) {
         return;
     }
 
-    SetRGB4(viewport, 17, 4, 4, 5);
-    SetRGB4(viewport, 18, 3, 12, 15);
-    SetRGB4(viewport, 19, 15, 14, 0);
+    base = 17 + ((channel >> 1) * 4);
+    SetRGB4(viewport, (LONG)base, 4, 4, 5);
+    SetRGB4(viewport, (LONG)(base + 1), 3, 12, 15);
+    SetRGB4(viewport, (LONG)(base + 2), 15, 14, 0);
 }
 
 static UWORD* bb_hw_player_frame_data(int sprite_index, int frame)
@@ -910,12 +916,48 @@ static void bb_hw_player_fail(const char* reason)
     }
 }
 
+static int bb_hw_player_try_sprite_pair(int first_channel)
+{
+    int sprite_index;
+    int channel;
+
+    if (first_channel < 0 || first_channel + 1 >= 8) {
+        return 0;
+    }
+
+    for (sprite_index = 0; sprite_index < BB_HW_PLAYER_SPRITES; sprite_index++) {
+        channel = GetSprite(
+            &bb_hw_player_sprites[sprite_index].sprite,
+            (LONG)(first_channel + sprite_index));
+        if (channel < 0) {
+            while (sprite_index > 0) {
+                sprite_index--;
+                if (bb_hw_player_sprites[sprite_index].ready) {
+                    FreeSprite(
+                        (LONG)bb_hw_player_sprites[sprite_index].channel);
+                }
+                bb_hw_player_sprites[sprite_index].channel = -1;
+                bb_hw_player_sprites[sprite_index].ready = 0;
+            }
+            bb_hw_player_sprite_count = 0;
+            return 0;
+        }
+
+        bb_hw_player_sprites[sprite_index].channel = channel;
+        bb_hw_player_sprites[sprite_index].ready = 1;
+        bb_hw_player_sprite_count++;
+    }
+
+    return 1;
+}
+
 static int bb_hw_player_init(void)
 {
     struct ViewPort* viewport;
+    static const int preferred_pairs[] = {0, 6, 4, 2};
     int sprite_index;
     int frame;
-    int channel;
+    int pair_index;
     UWORD* frame_data;
 
     if (bb_hw_player_ready) {
@@ -980,17 +1022,26 @@ static int bb_hw_player_init(void)
         bb_hw_player_sprites[sprite_index].sprite.x = 0;
         bb_hw_player_sprites[sprite_index].sprite.y = 0;
         bb_hw_player_sprites[sprite_index].sprite.num = 0;
-        channel = GetSprite(
-            &bb_hw_player_sprites[sprite_index].sprite,
-            (LONG)sprite_index);
-        if (channel < 0) {
-            bb_hw_player_fail("player sprite channel");
-            return 0;
-        }
+    }
 
-        bb_hw_player_sprites[sprite_index].channel = channel;
-        bb_hw_player_sprites[sprite_index].ready = 1;
-        bb_hw_player_sprite_count++;
+    for (pair_index = 0;
+            pair_index <
+                (int)(sizeof(preferred_pairs) / sizeof(preferred_pairs[0]));
+            pair_index++) {
+        if (bb_hw_player_try_sprite_pair(preferred_pairs[pair_index])) {
+            break;
+        }
+    }
+    if (bb_hw_player_sprite_count != BB_HW_PLAYER_SPRITES) {
+        bb_hw_player_fail("player sprite channel");
+        return 0;
+    }
+
+    bb_hw_player_set_sprite_colors(
+        viewport,
+        bb_hw_player_sprites[0].channel);
+    for (sprite_index = 0; sprite_index < BB_HW_PLAYER_SPRITES; sprite_index++) {
+        frame_data = bb_hw_player_frame_data(sprite_index, 0);
         ChangeSprite(
             viewport,
             &bb_hw_player_sprites[sprite_index].sprite,
@@ -1012,7 +1063,6 @@ static int bb_hw_player_init(void)
         }
     }
 
-    bb_hw_player_set_sprite_colors(viewport);
     bb_hw_player_ready = 1;
     bb_hw_player_failure_reason = "ready";
     return 1;
@@ -1642,12 +1692,17 @@ static void bb_draw_actors_in_world_rects(
     }
 }
 
-static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
+static void bb_redraw_previous_and_current_actors(
+    int slot,
+    int all_slots,
+    int force_bitmap_actor_redraw)
 {
     int i;
     int player_changed;
     int player_anim_frame;
     int enemy_changed;
+    int current_enemy_hardware;
+    int previous_enemy_hardware;
     int enemy_visible;
     int previous_enemy_visible;
     ANA_Rect rect;
@@ -1693,6 +1748,8 @@ static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
         bb_prev_player_anim_frame[slot] != player_anim_frame;
     if (bb_hw_player_is_hardware()) {
         player_changed = 0;
+    } else if (force_bitmap_actor_redraw) {
+        player_changed = 1;
     }
 
     if (player_changed && bb_prev_actor_valid[slot]) {
@@ -1727,22 +1784,37 @@ static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
     }
 
     for (i = 0; i < bb_enemy_count; i++) {
-        if (bb_hw_enemy_is_hardware(i)) {
+        current_enemy_hardware = bb_hw_enemy_is_hardware(i);
+        previous_enemy_hardware =
+            bb_prev_actor_valid[slot] && i < bb_prev_enemy_count[slot] ?
+                bb_prev_enemy_hardware[slot][i] :
+                0;
+
+        if (current_enemy_hardware && previous_enemy_hardware) {
             continue;
         }
+
         enemy_visible = bb_enemy_visible(&bb_enemies[i]);
-        previous_enemy_visible = bb_prev_actor_valid[slot] ?
-            bb_prev_enemy_visible[slot][i] :
-            0;
+        previous_enemy_visible =
+            bb_prev_actor_valid[slot] && i < bb_prev_enemy_count[slot] ?
+                bb_prev_enemy_visible[slot][i] :
+                0;
         enemy_changed = !bb_prev_actor_valid[slot] ||
             bb_prev_enemy_x[slot][i] != bb_enemies[i].x ||
             bb_prev_enemy_y[slot][i] != bb_enemies[i].y ||
             bb_prev_enemy_alive[slot][i] != bb_enemies[i].alive ||
             previous_enemy_visible != enemy_visible;
+        if (!enemy_changed &&
+                force_bitmap_actor_redraw &&
+                ((enemy_visible && !current_enemy_hardware) ||
+                    (previous_enemy_visible && !previous_enemy_hardware))) {
+            enemy_changed = 1;
+        }
 
         if (enemy_changed &&
                 bb_prev_actor_valid[slot] &&
-                previous_enemy_visible) {
+                previous_enemy_visible &&
+                !previous_enemy_hardware) {
             rect = bb_world_rect(
                 bb_prev_enemy_x[slot][i],
                 bb_prev_enemy_y[slot][i],
@@ -1757,7 +1829,7 @@ static void bb_redraw_previous_and_current_actors(int slot, int all_slots)
                 rect,
                 BB_ACTOR_REDRAW_PADDING);
         }
-        if (enemy_changed && enemy_visible) {
+        if (enemy_changed && enemy_visible && !current_enemy_hardware) {
             rect = bb_enemy_rect(&bb_enemies[i]);
             ana_rect_list_add_padded(
                 &restore_rects,
@@ -1888,6 +1960,7 @@ static void bb_commit_state(int slot)
         bb_prev_enemy_y[slot][i] = bb_enemies[i].y;
         bb_prev_enemy_alive[slot][i] = bb_enemies[i].alive;
         bb_prev_enemy_visible[slot][i] = bb_enemy_visible(&bb_enemies[i]);
+        bb_prev_enemy_hardware[slot][i] = bb_hw_enemy_is_hardware(i);
     }
     bb_prev_enemy_count[slot] = bb_enemy_count;
     bb_prev_actor_valid[slot] = 1;
@@ -1958,14 +2031,20 @@ static void bb_draw_actors_profiled(void)
 #endif
 }
 
-static void bb_redraw_actors_profiled(int slot, int all_slots)
+static void bb_redraw_actors_profiled(
+    int slot,
+    int all_slots,
+    int force_bitmap_actor_redraw)
 {
 #if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
     unsigned long start_ticks;
 
     start_ticks = ana_platform_perf_ticks();
 #endif
-    bb_redraw_previous_and_current_actors(slot, all_slots);
+    bb_redraw_previous_and_current_actors(
+        slot,
+        all_slots,
+        force_bitmap_actor_redraw);
 #if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
     bb_record_perf_ticks(&bb_debug_actor_perf_ticks, start_ticks);
 #endif
@@ -2092,6 +2171,7 @@ void bb_render_draw(void)
     int hud_dirty;
     int hardware_scroll_available;
     int hardware_scroll_active;
+    int scroll_bitmap_redrawn;
     int slot;
 
     hud_dirty = bb_score != bb_prev_score ||
@@ -2135,11 +2215,13 @@ void bb_render_draw(void)
         return;
     }
 
+    scroll_bitmap_redrawn = 0;
     if (bb_camera.x != bb_prev_camera_x ||
             bb_camera.y != bb_prev_camera_y) {
         if (!hardware_scroll_available ||
                 !ana_tile_layer_hardware_scroll_update_view(
                     &bb_playfield_layer)) {
+            scroll_bitmap_redrawn = 1;
             bb_debug_tile_layer_draws++;
             if (!hardware_scroll_available) {
                 bb_debug_tile_hardware_unavailable_draws++;
@@ -2156,7 +2238,10 @@ void bb_render_draw(void)
         ana_tile_layer_hardware_scroll_active(&bb_playfield_layer);
     slot = bb_render_slot();
     if (!bb_can_skip_actor_redraw(slot)) {
-        bb_redraw_actors_profiled(slot, !hardware_scroll_active);
+        bb_redraw_actors_profiled(
+            slot,
+            !hardware_scroll_active,
+            scroll_bitmap_redrawn);
     }
 
     if (hud_dirty) {

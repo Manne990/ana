@@ -24,6 +24,12 @@ void* ana_gfx_native_window(void);
 void ana_input_reset(void);
 void ana_input_shutdown(void);
 void ana_input_advance_without_poll(void);
+int ana_input_poll_count(void);
+ANA_Key ana_input_key_from_amiga_raw_code(int code);
+ANA_Key ana_input_key_from_amiga_vanilla_code(int code);
+ANA_Key ana_input_handle_amiga_raw_key_event(int raw_code, int is_down);
+ANA_Key ana_input_handle_amiga_vanilla_key_event(int code);
+void ana_input_pulse_key_event(ANA_Key key);
 unsigned int ana_input_state_from_amiga_joydat(
     unsigned short joydat,
     int fire_down,

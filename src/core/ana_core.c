@@ -417,11 +417,7 @@ int ana_run(const ANA_Game* game)
 #if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             perf_start = ana_platform_perf_ticks();
 #endif
-            if (updates_this_frame == 0) {
-                ana_input_update();
-            } else {
-                ana_input_advance_without_poll();
-            }
+            ana_input_update();
 #if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             ana_runtime_record_perf_ticks(
                 &ana_runtime_last_stats.input_perf_ticks,

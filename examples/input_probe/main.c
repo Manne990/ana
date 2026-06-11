@@ -1,5 +1,9 @@
 #include "ana.h"
 
+#ifdef PROBE_SYNTHETIC_INPUT
+#include "ana_internal.h"
+#endif
+
 #include <stdio.h>
 
 #ifdef ANA_TARGET_AMIGA
@@ -39,12 +43,18 @@ static int probe_seen_q;
 static int probe_seen_escape;
 static int probe_seen_space;
 static int probe_seen_x;
+static int probe_seen_left;
+static int probe_seen_right;
+static int probe_seen_up;
+static int probe_seen_down;
 static int probe_seen_raw;
 static int probe_seen_vanilla;
 static int probe_seen_backend0;
 static int probe_seen_backend1;
 static int probe_last_event_count;
 static int probe_wrote_final;
+static int probe_synthetic_ok;
+static int probe_synthetic_step;
 
 #ifdef ANA_TARGET_AMIGA
 static void probe_write_text(BPTR file, const char* text)
@@ -140,6 +150,7 @@ static void probe_write_result(const char* phase, const char* result_name)
     probe_write_int_line(file, "last_code", probe_debug.last_code);
     probe_write_int_line(file, "last_key", probe_debug.last_key);
     probe_write_int_line(file, "last_is_down", probe_debug.last_is_down);
+    probe_write_uint_line(file, "seen_key_bits", probe_debug.seen_key_bits);
     probe_write_uint_line(file, "current0", probe_debug.current_state[0]);
     probe_write_uint_line(file, "backend0", probe_debug.backend_state[0]);
     probe_write_uint_line(file, "current1", probe_debug.current_state[1]);
@@ -155,10 +166,23 @@ static void probe_write_result(const char* phase, const char* result_name)
     probe_write_int_line(file, "seen_escape", probe_seen_escape);
     probe_write_int_line(file, "seen_space", probe_seen_space);
     probe_write_int_line(file, "seen_x", probe_seen_x);
+    probe_write_int_line(file, "seen_left", probe_seen_left);
+    probe_write_int_line(file, "seen_right", probe_seen_right);
+    probe_write_int_line(file, "seen_up", probe_seen_up);
+    probe_write_int_line(file, "seen_down", probe_seen_down);
     probe_write_int_line(file, "seen_raw", probe_seen_raw);
     probe_write_int_line(file, "seen_vanilla", probe_seen_vanilla);
     probe_write_int_line(file, "seen_backend0", probe_seen_backend0);
     probe_write_int_line(file, "seen_backend1", probe_seen_backend1);
+    probe_write_int_line(file, "synthetic_input",
+#ifdef PROBE_SYNTHETIC_INPUT
+        1
+#else
+        0
+#endif
+    );
+    probe_write_int_line(file, "synthetic_ok", probe_synthetic_ok);
+    probe_write_int_line(file, "write_complete", 1);
 
     Close(file);
     printf("ANA input probe wrote result to %s.\n", paths[i]);
@@ -457,19 +481,254 @@ static void probe_init(void)
     probe_seen_escape = 0;
     probe_seen_space = 0;
     probe_seen_x = 0;
+    probe_seen_left = 0;
+    probe_seen_right = 0;
+    probe_seen_up = 0;
+    probe_seen_down = 0;
     probe_seen_raw = 0;
     probe_seen_vanilla = 0;
     probe_seen_backend0 = 0;
     probe_seen_backend1 = 0;
     probe_last_event_count = 0;
     probe_wrote_final = 0;
+    probe_synthetic_ok = 1;
+    probe_synthetic_step = 0;
     probe_update_count = 0;
 }
+
+#ifdef PROBE_SYNTHETIC_INPUT
+static void probe_expect_down(
+    ANA_InputDevice device,
+    ANA_InputAction action,
+    ANA_Key key)
+{
+    ANA_InputDebug debug;
+
+    ana_input_debug_snapshot(&debug);
+    if (!ana_input_action(device, action)) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_C && !debug.key_c_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_Q && !debug.key_q_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_ESCAPE && !debug.key_escape_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_SPACE && !debug.key_space_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_X && !debug.key_x_down) {
+        probe_synthetic_ok = 0;
+    }
+}
+
+static void probe_expect_clear(
+    ANA_InputDevice device,
+    ANA_InputAction action,
+    ANA_Key key)
+{
+    ANA_InputDebug debug;
+
+    ana_input_debug_snapshot(&debug);
+    if (ana_input_action(device, action)) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_C && debug.key_c_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_Q && debug.key_q_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_ESCAPE && debug.key_escape_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_SPACE && debug.key_space_down) {
+        probe_synthetic_ok = 0;
+    }
+    if (key == ANA_KEY_X && debug.key_x_down) {
+        probe_synthetic_ok = 0;
+    }
+}
+
+static void probe_synthetic_update(void)
+{
+    switch (probe_update_count) {
+    case 2:
+        if (ana_input_key_from_amiga_raw_code(0x40) != ANA_KEY_SPACE) {
+            probe_synthetic_ok = 0;
+        }
+        ana_input_handle_amiga_raw_key_event(0x40, 1);
+        probe_synthetic_step++;
+        break;
+    case 3:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_1,
+            ANA_KEY_SPACE);
+        probe_synthetic_step++;
+        break;
+    case 4:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_1,
+            ANA_KEY_SPACE);
+        ana_input_handle_amiga_raw_key_event(0x40, 0);
+        probe_synthetic_step++;
+        break;
+    case 5:
+        probe_expect_clear(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_1,
+            ANA_KEY_UNKNOWN);
+        if (ana_input_key_from_amiga_raw_code(0x32) != ANA_KEY_X) {
+            probe_synthetic_ok = 0;
+        }
+        ana_input_handle_amiga_raw_key_event(0x32, 1);
+        probe_synthetic_step++;
+        break;
+    case 6:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_2,
+            ANA_KEY_X);
+        probe_synthetic_step++;
+        break;
+    case 7:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_2,
+            ANA_KEY_X);
+        ana_input_handle_amiga_raw_key_event(0x32, 0);
+        probe_synthetic_step++;
+        break;
+    case 8:
+        probe_expect_clear(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_2,
+            ANA_KEY_UNKNOWN);
+        if (ana_input_key_from_amiga_raw_code(0x33) != ANA_KEY_C) {
+            probe_synthetic_ok = 0;
+        }
+        ana_input_handle_amiga_raw_key_event(0x33, 1);
+        probe_synthetic_step++;
+        break;
+    case 9:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_4,
+            ANA_KEY_C);
+        probe_synthetic_step++;
+        break;
+    case 10:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_4,
+            ANA_KEY_C);
+        ana_input_handle_amiga_raw_key_event(0x33, 0);
+        probe_synthetic_step++;
+        break;
+    case 11:
+        probe_expect_clear(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_4,
+            ANA_KEY_UNKNOWN);
+        if (ana_input_key_from_amiga_raw_code(0x10) != ANA_KEY_Q) {
+            probe_synthetic_ok = 0;
+        }
+        ana_input_handle_amiga_raw_key_event(0x10, 1);
+        probe_synthetic_step++;
+        break;
+    case 12:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_3,
+            ANA_KEY_Q);
+        probe_synthetic_step++;
+        break;
+    case 13:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_3,
+            ANA_KEY_Q);
+        ana_input_handle_amiga_raw_key_event(0x10, 0);
+        probe_synthetic_step++;
+        break;
+    case 14:
+        if (ana_input_key_from_amiga_raw_code(0x45) != ANA_KEY_ESCAPE) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_vanilla_code(0x1b) !=
+                ANA_KEY_ESCAPE) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_vanilla_code('q') != ANA_KEY_Q) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_vanilla_code('C') != ANA_KEY_C) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_vanilla_code('X') != ANA_KEY_X) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_vanilla_code(' ') != ANA_KEY_SPACE) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_handle_amiga_vanilla_key_event('X') != ANA_KEY_X) {
+            probe_synthetic_ok = 0;
+        }
+        probe_synthetic_step++;
+        break;
+    case 15:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_2,
+            ANA_KEY_UNKNOWN);
+        probe_synthetic_step++;
+        break;
+    case 16:
+        probe_expect_down(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_2,
+            ANA_KEY_UNKNOWN);
+        probe_synthetic_step++;
+        break;
+    case 17:
+        probe_expect_clear(
+            ANA_INPUT_DEVICE_0,
+            ANA_ACTION_2,
+            ANA_KEY_UNKNOWN);
+        if (ana_input_key_from_amiga_raw_code(0x4f) != ANA_KEY_LEFT) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_raw_code(0x4e) != ANA_KEY_RIGHT) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_raw_code(0x4c) != ANA_KEY_UP) {
+            probe_synthetic_ok = 0;
+        }
+        if (ana_input_key_from_amiga_raw_code(0x4d) != ANA_KEY_DOWN) {
+            probe_synthetic_ok = 0;
+        }
+        probe_synthetic_step++;
+        break;
+    default:
+        break;
+    }
+}
+#endif
 
 static void probe_update(ANA_Time time)
 {
     probe_tick = time.tick;
     probe_update_count++;
+
+#ifdef PROBE_SYNTHETIC_INPUT
+    probe_synthetic_update();
+#endif
+
     ana_input_debug_snapshot(&probe_debug);
 
     if (probe_debug.raw_count > 0) {
@@ -497,7 +756,64 @@ static void probe_update(ANA_Time time)
             probe_seen_space = 1;
         } else if (probe_debug.last_key == ANA_KEY_X) {
             probe_seen_x = 1;
+        } else if (probe_debug.last_key == ANA_KEY_LEFT ||
+                probe_debug.last_key == ANA_KEY_A) {
+            probe_seen_left = 1;
+        } else if (probe_debug.last_key == ANA_KEY_RIGHT ||
+                probe_debug.last_key == ANA_KEY_D) {
+            probe_seen_right = 1;
+        } else if (probe_debug.last_key == ANA_KEY_UP ||
+                probe_debug.last_key == ANA_KEY_W) {
+            probe_seen_up = 1;
+        } else if (probe_debug.last_key == ANA_KEY_DOWN ||
+                probe_debug.last_key == ANA_KEY_S) {
+            probe_seen_down = 1;
         }
+    }
+
+    if ((probe_debug.seen_key_bits & (1u << ANA_KEY_C)) != 0u) {
+        probe_seen_c = 1;
+    }
+    if ((probe_debug.seen_key_bits & (1u << ANA_KEY_Q)) != 0u) {
+        probe_seen_q = 1;
+    }
+    if ((probe_debug.seen_key_bits & (1u << ANA_KEY_ESCAPE)) != 0u) {
+        probe_seen_escape = 1;
+    }
+    if ((probe_debug.seen_key_bits & (1u << ANA_KEY_SPACE)) != 0u) {
+        probe_seen_space = 1;
+    }
+    if ((probe_debug.seen_key_bits & (1u << ANA_KEY_X)) != 0u) {
+        probe_seen_x = 1;
+    }
+    if ((probe_debug.seen_key_bits &
+            ((1u << ANA_KEY_LEFT) | (1u << ANA_KEY_A))) != 0u) {
+        probe_seen_left = 1;
+    }
+    if ((probe_debug.seen_key_bits &
+            ((1u << ANA_KEY_RIGHT) | (1u << ANA_KEY_D))) != 0u) {
+        probe_seen_right = 1;
+    }
+    if ((probe_debug.seen_key_bits &
+            ((1u << ANA_KEY_UP) | (1u << ANA_KEY_W))) != 0u) {
+        probe_seen_up = 1;
+    }
+    if ((probe_debug.seen_key_bits &
+            ((1u << ANA_KEY_DOWN) | (1u << ANA_KEY_S))) != 0u) {
+        probe_seen_down = 1;
+    }
+
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_LEFT)) {
+        probe_seen_left = 1;
+    }
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
+        probe_seen_right = 1;
+    }
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_UP)) {
+        probe_seen_up = 1;
+    }
+    if (ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_DOWN)) {
+        probe_seen_down = 1;
     }
 
     if (ana_input_action(ANA_INPUT_DEVICE_0, ANA_ACTION_1)) {
@@ -514,6 +830,9 @@ static void probe_update(ANA_Time time)
     }
 
     if (probe_update_count >= PROBE_RUNTIME_TICKS) {
+        if (probe_synthetic_step < 16) {
+            probe_synthetic_ok = 0;
+        }
         probe_write_result("pre_quit", "ANA_OK");
         probe_wrote_final = 1;
         ana_quit();
@@ -550,6 +869,13 @@ static void probe_draw_seen_state(int y)
     probe_draw_bool("E", probe_seen_escape, 128, y);
     probe_draw_bool("SP", probe_seen_space, 168, y);
     probe_draw_bool("X", probe_seen_x, 224, y);
+
+    y += PROBE_CHAR_H;
+    probe_draw_text("DIR", 8, y, PROBE_COLOR_TEXT);
+    probe_draw_bool("L", probe_seen_left, 48, y);
+    probe_draw_bool("R", probe_seen_right, 88, y);
+    probe_draw_bool("U", probe_seen_up, 128, y);
+    probe_draw_bool("D", probe_seen_down, 168, y);
 }
 
 static void probe_draw_seen_sources(int y)
@@ -623,8 +949,8 @@ static void probe_draw(void)
     probe_draw_input_state(88);
     probe_draw_key_state(112);
     probe_draw_seen_state(136);
-    probe_draw_seen_sources(160);
-    probe_draw_registers(176);
+    probe_draw_seen_sources(172);
+    probe_draw_registers(188);
 }
 
 int main(void)

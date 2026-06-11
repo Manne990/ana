@@ -5,6 +5,10 @@
 #include "byte_brothers_levels.h"
 #include "byte_brothers_render.h"
 
+#ifdef BB_EMULATOR_HARNESS
+#include "ana_internal.h"
+#endif
+
 #include <stdio.h>
 #include <string.h>
 
@@ -33,6 +37,8 @@ static int bb_start_y = 0;
 static int bb_jump_latched = 0;
 
 static void bb_load_level(int level);
+static int bb_player_tile_y(int tile_y);
+static int bb_enemy_tile_y(int tile_y);
 
 static void bb_map_input(void)
 {
@@ -59,6 +65,8 @@ static void bb_map_input(void)
 #ifdef BB_EMULATOR_HARNESS
 #define BB_HARNESS_SCENARIO_STATIC 0
 #define BB_HARNESS_SCENARIO_SCROLL 1
+#define BB_HARNESS_SCENARIO_INPUT 2
+#define BB_HARNESS_SCENARIO_ENEMY_OVERFLOW 3
 #ifndef BB_HARNESS_FRAMES
 #define BB_HARNESS_FRAMES 100
 #endif
@@ -75,18 +83,57 @@ static int bb_harness_last_camera_y = 0;
 static int bb_harness_scroll_frames = 0;
 static int bb_harness_frames_with_visible_enemies = 0;
 static int bb_harness_max_visible_enemies = 0;
+static int bb_harness_input_jump_seen = 0;
+static int bb_harness_input_dash_seen = 0;
+static int bb_harness_input_move_seen = 0;
+static int bb_harness_input_right_sent = 0;
+static int bb_harness_input_right_down_seen = 0;
+static int bb_harness_input_right_start_x = 0;
+static int bb_harness_input_right_vx = 0;
+static int bb_harness_input_quit_scheduled = 0;
+static int bb_harness_input_quit_frame = 0;
 
 static const char* bb_harness_scenario_name(void)
 {
 #if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL
     return "scroll";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_INPUT
+    return "input";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
+    return "enemy-overflow";
 #else
     return "static";
 #endif
 }
 
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
+static void bb_harness_setup_enemy_overflow(void)
+{
+    int i;
+
+    bb_player.x = 360;
+    bb_player.y = bb_player_tile_y(10);
+    bb_player.vx = 0;
+    bb_player.vy = 0;
+    bb_player.on_ground = 1;
+    bb_player.facing = 1;
+    ana_camera_set_position(&bb_camera, bb_player.x - BB_CAMERA_TARGET_X, 0);
+
+    bb_enemy_count = 4;
+    for (i = 0; i < bb_enemy_count; i++) {
+        bb_enemies[i].x = bb_player.x + 48 + (i * 38);
+        bb_enemies[i].y = bb_enemy_tile_y(14);
+        bb_enemies[i].vx = (i & 1) ? -1 : 1;
+        bb_enemies[i].alive = 1;
+    }
+}
+#endif
+
 static void bb_harness_begin(void)
 {
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
+    bb_harness_setup_enemy_overflow();
+#endif
     bb_harness_start_player_x = bb_player.x;
     bb_harness_start_player_y = bb_player.y;
     bb_harness_start_camera_x = bb_camera.x;
@@ -96,17 +143,61 @@ static void bb_harness_begin(void)
     bb_harness_scroll_frames = 0;
     bb_harness_frames_with_visible_enemies = 0;
     bb_harness_max_visible_enemies = 0;
-#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL
-    bb_player.invuln_ticks = BB_HARNESS_FRAMES + BB_INVULN_TICKS;
+    bb_harness_input_jump_seen = 0;
+    bb_harness_input_dash_seen = 0;
+    bb_harness_input_move_seen = 0;
+    bb_harness_input_right_sent = 0;
+    bb_harness_input_right_down_seen = 0;
+    bb_harness_input_right_start_x = bb_player.x;
+    bb_harness_input_right_vx = 0;
+    bb_harness_input_quit_scheduled = 0;
+    bb_harness_input_quit_frame = 0;
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL || \
+        BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_INPUT || \
+        BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
+    bb_player.invuln_ticks = (BB_HARNESS_FRAMES * 4) + BB_INVULN_TICKS;
 #endif
 }
 
 static void bb_harness_apply_controls(int* move)
 {
-#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL || \
+        BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
     *move = 1;
-#else
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STATIC
     *move = 0;
+#else
+    (void)move;
+#endif
+}
+
+static void bb_harness_schedule_input(void)
+{
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_INPUT
+    if (!bb_harness_input_move_seen && bb_frame < 25) {
+        if (!bb_harness_input_right_sent) {
+            bb_harness_input_right_sent = 1;
+            bb_harness_input_right_start_x = bb_player.x;
+        }
+        ana_input_pulse_key_event(ANA_KEY_RIGHT);
+    } else if (bb_harness_input_move_seen &&
+            !bb_harness_input_jump_seen &&
+            bb_frame < 55) {
+        ana_input_pulse_key_event(ANA_KEY_SPACE);
+    } else if (bb_harness_input_move_seen &&
+            bb_harness_input_jump_seen &&
+            !bb_harness_input_dash_seen &&
+            bb_frame < 75) {
+        ana_input_pulse_key_event(ANA_KEY_X);
+    } else if (bb_frame >= 20 &&
+            !bb_harness_input_quit_scheduled &&
+            bb_harness_input_move_seen &&
+            bb_harness_input_jump_seen &&
+            bb_harness_input_dash_seen) {
+        bb_harness_input_quit_scheduled = 1;
+        bb_harness_input_quit_frame = bb_frame;
+        ana_input_pulse_key_event(ANA_KEY_C);
+    }
 #endif
 }
 
@@ -154,6 +245,26 @@ static void bb_harness_update_stats(void)
     if (visible > bb_harness_max_visible_enemies) {
         bb_harness_max_visible_enemies = visible;
     }
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_INPUT
+    if (bb_player.y < bb_harness_start_player_y ||
+            bb_player.vy < 0) {
+        bb_harness_input_jump_seen = 1;
+    }
+    if (bb_player.dash_ticks > 0 ||
+            bb_player.vx >= BB_DASH_SPEED) {
+        bb_harness_input_dash_seen = 1;
+    }
+    if (bb_harness_input_right_sent &&
+            ana_input_direction(ANA_INPUT_DEVICE_0, ANA_INPUT_RIGHT)) {
+        bb_harness_input_right_down_seen = 1;
+        bb_harness_input_right_vx = bb_player.vx;
+        if (bb_player.vx == BB_PLAYER_SPEED ||
+                bb_player.x > bb_harness_input_right_start_x) {
+            bb_harness_input_move_seen = 1;
+        }
+    }
+#endif
 }
 #endif
 
@@ -313,6 +424,42 @@ static void bb_harness_write_result(void)
         file,
         "max_visible_enemies",
         bb_harness_max_visible_enemies);
+    bb_harness_write_int_line(
+        file,
+        "input_jump_seen",
+        bb_harness_input_jump_seen);
+    bb_harness_write_int_line(
+        file,
+        "input_dash_seen",
+        bb_harness_input_dash_seen);
+    bb_harness_write_int_line(
+        file,
+        "input_move_seen",
+        bb_harness_input_move_seen);
+    bb_harness_write_int_line(
+        file,
+        "input_right_sent",
+        bb_harness_input_right_sent);
+    bb_harness_write_int_line(
+        file,
+        "input_right_down_seen",
+        bb_harness_input_right_down_seen);
+    bb_harness_write_int_line(
+        file,
+        "input_right_start_x",
+        bb_harness_input_right_start_x);
+    bb_harness_write_int_line(
+        file,
+        "input_right_vx",
+        bb_harness_input_right_vx);
+    bb_harness_write_int_line(
+        file,
+        "input_quit_scheduled",
+        bb_harness_input_quit_scheduled);
+    bb_harness_write_int_line(
+        file,
+        "input_quit_frame",
+        bb_harness_input_quit_frame);
     bb_harness_write_int_line(file, "assets_loaded", bb_assets_loaded());
     bb_harness_write_long_line(file, "run_frames", run_stats.frames);
     bb_harness_write_long_line(file, "elapsed_ticks", run_stats.elapsed_ticks);
@@ -1320,6 +1467,7 @@ void byte_brothers_update(ANA_Time time)
     bb_update_camera();
 #ifdef BB_EMULATOR_HARNESS
     bb_harness_update_stats();
+    bb_harness_schedule_input();
 #endif
 
 #ifdef BB_EMULATOR_HARNESS

@@ -132,23 +132,59 @@ CIAA PRA bit 7) och `ANA_INPUT_DEVICE_1` mappar till den andra porten
 host-tangentbordets pilar till joystick-porten fungerar utan att spelet
 behover skilja pa joystick och tangentbord.
 
-FS-UAE kan antingen leverera host-tangenter som riktiga Amiga-tangenter eller
-som joystick-hardware. ANA ska stodja bada vagen. For tangentbord som joystick
-kan port 1 vara `Keyboard`, med pilar/A-D/W-S/Space/X mappade till
-joystick-riktningar och knappar. Tangenter som ska vara riktiga
-Amiga-tangenter, exempelvis Esc/C/Q for quit, ska mappas som `action_key_*` sa
-att de syns i keyboard-matrix.
+FS-UAE kan leverera host-tangenter som riktiga Amiga-tangenter eller som
+joystick-hardware. ANA stodjer bada vagen, men tangentbordsstyrning ska i
+forsta hand mappas som `action_key_*` och inte samtidigt anvanda samma
+host-tangentbord som `Keyboard`-joystick. Det gor tangenterna event-queue:ade
+via Intuition/keyboard.device och undviker att korta tryck missas nar spelet
+har en tung render frame. Anvand en riktig joystick/gamepad for joystickporten
+nar du vill testa joystick, eller en separat emulatorprofil for
+keyboard-as-joystick.
 
-Om en emulatorprofil inte levererar vissa host-tangenter stabilt som riktiga
-Amiga-key-events kan spelet i stallet mappa en joystick/gamepad-action till
-quit. Byte Brothers anvander `ANA_ACTION_3` for detta, och FS-UAE kan till
-exempel mappa C/Q/Esc till `action_joy_1_3rd_button`.
+En rekommenderad FS-UAE-keyboardprofil mappar host-pilar till samma Amiga-
+tangenter som WASD (`left=A`, `right=D`, `up=W`, `down=S`) och mappar aven
+A/D/W/S direkt till sina Amiga-tangenter. Space/Ctrl/Return mappas till
+`action_key_space`/`action_key_ctrl`/`action_key_return`, X/Z/C/V till
+`action_key_x`/`action_key_z`/`action_key_c`/`action_key_v`, och Esc/Q till
+`action_key_esc`/`action_key_q`. ANA stodjer fortfarande riktiga Amiga
+cursor-key-events, men FS-UAE:s `action_key_cursor_*` har varit mindre stabila
+i manuella Launcher-profiler. Joystick actions som
+`action_joy_1_fire_button` och `action_joy_1_2nd_button` passar for riktiga
+joystick/gamepad-signaler. De kan fortfarande mappas till ANA-actions, men bor
+inte vara forstahandsvalet for tangentbordstryck som ska fungera stabilt vid
+lag FPS.
+
+`tools/emulator/configure_fsuae_keyboard.py` kan patcha lokala FS-UAE-profiler
+med denna mapping och tar backup innan den skriver om filerna.
+`make byte-brothers-a1200-debug-fsuae-config` skriver dessutom en reproducerbar
+launch-konfig till `build/fs-uae/byte-brothers-a1200-debug.fs-uae`. Den konfigen
+ar avsedd for manuell test nar FS-UAE Launchers sparade profiler riskerar att
+aterstalla joystick- eller keyboard-mapping.
+
+`tools/emulator/run_input_probe.py` ar strikt nar den far skicka host-tangenter:
+om macOS stoppar key injection, eller om proben inte ser de skickade
+tangenterna, returnerar kommandot fel. Den automatiska macOS-sendern klickar
+forst i FS-UAE-fonstret innan den skickar CoreGraphics-key events; FS-UAE kan
+annars vara frontmost utan att SDL/input-grab faktiskt tar emot syntetiska
+tangenttryck. `--no-send-keys` verifierar bara boot, runtime och att
+keyboard-matrix kan pollas.
+`make emulator-input-probe-synthetic` kor dessutom ett Amiga-side selftest som
+inte skickar host-tangenter alls, utan verifierar rawkey/vanillakey-mappning,
+rawkey down/up-hantering, vanillakey-pulser och ANA-actions inne i
+m68k-programmet.
+`make emulator-byte-brothers-input` kor ett spelharness som pulsar ANA-keys for
+Right, Space, X och C och verifierar att Byte Brothers reagerar med gang,
+hopp, dash och quit.
 
 ## Prestanda och beteende
 
 - Input-state ska uppdateras innan varje simulation update.
 - `pressed` ska bara vara sann for overgangen upp -> ner.
 - `released` ska bara vara sann for overgangen ner -> upp.
+- Event-only tangenttryck halles kvar i en kort grace period internt sa att
+  korta `IDCMP_RAWKEY`/`IDCMP_VANILLAKEY`-pulser inte tappas under catch-up
+  updates eller tunga render frames. `pressed` ar fortfarande bara sann for
+  forsta simulation update dar pulsen syns.
 - Lasning av input ska inte allokera minne.
 
 ## Inte i 0.1

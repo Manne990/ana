@@ -24,6 +24,8 @@ LOG_PATH = Path.home() / "Documents" / "FS-UAE" / "Cache" / "Logs" / "fs-uae.log
 SCENARIOS = {
     "static": {"id": 0, "frames": 120},
     "scroll": {"id": 1, "frames": 360},
+    "input": {"id": 2, "frames": 80},
+    "enemy-overflow": {"id": 3, "frames": 360},
 }
 
 MACHINE_CONFIGS = {
@@ -54,6 +56,24 @@ OVERRIDE_KEYS = {
     "joystick_port_1",
     "joystick_port_1_mode",
     "keyboard_input_grab",
+    "keyboard_key_a",
+    "keyboard_key_c",
+    "keyboard_key_ctrl",
+    "keyboard_key_d",
+    "keyboard_key_down",
+    "keyboard_key_esc",
+    "keyboard_key_escape",
+    "keyboard_key_left",
+    "keyboard_key_q",
+    "keyboard_key_return",
+    "keyboard_key_right",
+    "keyboard_key_s",
+    "keyboard_key_space",
+    "keyboard_key_up",
+    "keyboard_key_w",
+    "keyboard_key_x",
+    "keyboard_key_z",
+    "keyboard_key_v",
     "logs_dir",
     "save_states_dir",
     "zorro_iii_memory",
@@ -126,6 +146,24 @@ def harness_options(machine: str, result_dir: Path) -> dict[str, str]:
         "joystick_port_1": "Keyboard",
         "joystick_port_1_mode": "joystick",
         "keyboard_input_grab": "0",
+        "keyboard_key_a": "action_key_a",
+        "keyboard_key_c": "action_key_c",
+        "keyboard_key_ctrl": "action_key_ctrl",
+        "keyboard_key_d": "action_key_d",
+        "keyboard_key_down": "action_key_s",
+        "keyboard_key_esc": "action_key_esc",
+        "keyboard_key_escape": "action_key_esc",
+        "keyboard_key_left": "action_key_a",
+        "keyboard_key_q": "action_key_q",
+        "keyboard_key_return": "action_key_return",
+        "keyboard_key_right": "action_key_d",
+        "keyboard_key_s": "action_key_s",
+        "keyboard_key_space": "action_key_space",
+        "keyboard_key_up": "action_key_w",
+        "keyboard_key_w": "action_key_w",
+        "keyboard_key_x": "action_key_x",
+        "keyboard_key_z": "action_key_z",
+        "keyboard_key_v": "action_key_v",
         "logs_dir": str(result_dir / "logs"),
         "save_states_dir": str(result_dir / "save-states"),
         "zorro_iii_memory": "0",
@@ -235,6 +273,16 @@ def result_value(path: Path, key: str) -> str | None:
     except OSError:
         return None
     return None
+
+
+def result_int(path: Path, key: str) -> int | None:
+    value = result_value(path, key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 def is_final_result(path: Path) -> bool:
@@ -371,6 +419,28 @@ def main() -> int:
 
     print(f"Result file: {found}")
     print(found.read_text(errors="replace"))
+    if args.scenario == "input":
+        missing = []
+        for field in (
+            "input_jump_seen",
+            "input_dash_seen",
+            "input_move_seen",
+            "input_quit_scheduled",
+        ):
+            if result_value(found, field) != "1":
+                missing.append(field)
+        bb_frame = result_int(found, "bb_frame")
+        quit_frame = result_int(found, "input_quit_frame")
+        if quit_frame is None or quit_frame <= 0:
+            missing.append("input_quit_frame")
+        if bb_frame is None or quit_frame is None or bb_frame > quit_frame + 3:
+            missing.append("input_quit_latency")
+        if missing:
+            print(
+                "Byte Brothers input harness failed: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 

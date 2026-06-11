@@ -17,10 +17,13 @@ ROOT = Path(__file__).resolve().parents[2]
 FS_UAE = Path("/Applications/FS-UAE.app/Contents/MacOS/fs-uae")
 RESULT_NAME = "ana_input_probe_result.txt"
 RESULT_DIR = ROOT / "build" / "emulator-results" / "input-probe"
-CONFIG_PATH = RESULT_DIR / "input-probe.fs-uae"
 ADF_PATH = ROOT / "build" / "adf" / "input-probe-harness.adf"
 PROBE_BIN_PATH = ROOT / "build" / "amiga-harness" / "examples" / "input_probe" / "input_probe"
+SYNTHETIC_PROBE_BIN_PATH = (
+    ROOT / "build" / "amiga-harness" / "examples" / "input_probe_synthetic" / "input_probe"
+)
 LOG_PATH = Path.home() / "Documents" / "FS-UAE" / "Cache" / "Logs" / "fs-uae.log.txt"
+KEY_SENDER_PATH = ROOT / "tools" / "emulator" / "send_macos_keys.py"
 
 MACHINE_CONFIGS = {
     "a1200": Path.home() / "Documents" / "FS-UAE" / "Configurations" / "A1200.fs-uae",
@@ -32,10 +35,19 @@ MACHINE_CONFIGS = {
 }
 
 KEY_CODES = {
+    "a": 0,
+    "s": 1,
+    "d": 2,
+    "z": 6,
+    "v": 9,
+    "w": 13,
     "space": 49,
     "x": 7,
     "c": 8,
     "q": 12,
+    "return": 36,
+    "ctrl": 59,
+    "control": 59,
     "escape": 53,
     "esc": 53,
     "left": 123,
@@ -63,12 +75,14 @@ OVERRIDE_KEYS = {
     "keyboard_input_grab",
     "keyboard_key_a",
     "keyboard_key_c",
+    "keyboard_key_ctrl",
     "keyboard_key_d",
     "keyboard_key_down",
     "keyboard_key_esc",
     "keyboard_key_escape",
     "keyboard_key_left",
     "keyboard_key_q",
+    "keyboard_key_return",
     "keyboard_key_right",
     "keyboard_key_s",
     "keyboard_key_space",
@@ -76,6 +90,7 @@ OVERRIDE_KEYS = {
     "keyboard_key_w",
     "keyboard_key_x",
     "keyboard_key_z",
+    "keyboard_key_v",
     "logs_dir",
     "save_states_dir",
 }
@@ -92,7 +107,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=90.0)
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--no-send-keys", action="store_true")
-    parser.add_argument("--key-delay", type=float, default=5.0)
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Run the Amiga-side synthetic input self-test instead of host key injection.",
+    )
+    parser.add_argument("--key-delay", type=float, default=0.5)
     parser.add_argument(
         "--keys",
         default="space,x,c,q,escape",
@@ -140,24 +160,27 @@ def harness_options(machine: str, result_dir: Path) -> dict[str, str]:
         "hard_drive_0_priority": "5",
         "initial_input_grab": "1",
         "joystick_port_0": "Mouse",
-        "joystick_port_1": "Keyboard",
-        "joystick_port_1_mode": "joystick",
+        "joystick_port_1": "none",
+        "joystick_port_1_mode": "none",
         "keyboard_input_grab": "1",
-        "keyboard_key_a": "action_joy_1_left",
-        "keyboard_key_c": "action_joy_1_3rd_button",
-        "keyboard_key_d": "action_joy_1_right",
-        "keyboard_key_down": "action_joy_1_down",
-        "keyboard_key_esc": "action_joy_1_3rd_button",
-        "keyboard_key_escape": "action_joy_1_3rd_button",
-        "keyboard_key_left": "action_joy_1_left",
-        "keyboard_key_q": "action_joy_1_3rd_button",
-        "keyboard_key_right": "action_joy_1_right",
-        "keyboard_key_s": "action_joy_1_down",
-        "keyboard_key_space": "action_joy_1_fire_button",
-        "keyboard_key_up": "action_joy_1_up",
-        "keyboard_key_w": "action_joy_1_up",
-        "keyboard_key_x": "action_joy_1_2nd_button",
-        "keyboard_key_z": "action_joy_1_2nd_button",
+        "keyboard_key_a": "action_key_a",
+        "keyboard_key_c": "action_key_c",
+        "keyboard_key_ctrl": "action_key_ctrl",
+        "keyboard_key_d": "action_key_d",
+        "keyboard_key_down": "action_key_s",
+        "keyboard_key_esc": "action_key_esc",
+        "keyboard_key_escape": "action_key_esc",
+        "keyboard_key_left": "action_key_a",
+        "keyboard_key_q": "action_key_q",
+        "keyboard_key_return": "action_key_return",
+        "keyboard_key_right": "action_key_d",
+        "keyboard_key_s": "action_key_s",
+        "keyboard_key_space": "action_key_space",
+        "keyboard_key_up": "action_key_w",
+        "keyboard_key_w": "action_key_w",
+        "keyboard_key_x": "action_key_x",
+        "keyboard_key_z": "action_key_z",
+        "keyboard_key_v": "action_key_v",
         "logs_dir": str(result_dir / "logs"),
         "save_states_dir": str(result_dir / "save-states"),
     }
@@ -169,7 +192,7 @@ def harness_options(machine: str, result_dir: Path) -> dict[str, str]:
     return options
 
 
-def write_config(machine: str, result_dir: Path) -> dict[str, str]:
+def write_config(machine: str, result_dir: Path) -> tuple[dict[str, str], Path]:
     base_lines = read_base_config(machine)
     kept_lines = []
 
@@ -191,22 +214,28 @@ def write_config(machine: str, result_dir: Path) -> dict[str, str]:
         if key in OVERRIDE_KEYS or (machine == "a500" and key == "chip_memory"):
             config_text += f"{key} = {options[key]}\n"
 
-    CONFIG_PATH.write_text(config_text, encoding="utf-8")
-    return options
+    config_path = result_dir / "input-probe.fs-uae"
+    config_path.write_text(config_text, encoding="utf-8")
+    return options, config_path
 
 
-def build_probe() -> None:
+def build_probe(synthetic: bool) -> None:
+    target = (
+        "amiga-input-probe-synthetic-harness"
+        if synthetic
+        else "amiga-input-probe-harness"
+    )
     subprocess.run(
-        ["make", "-B", "amiga-input-probe-harness"],
+        ["make", "-B", target],
         cwd=ROOT,
         check=True,
     )
 
 
-def setup_boot_drive(result_dir: Path) -> None:
+def setup_boot_drive(result_dir: Path, probe_bin_path: Path) -> None:
     s_dir = result_dir / "S"
     s_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(PROBE_BIN_PATH, result_dir / "input_probe")
+    shutil.copy2(probe_bin_path, result_dir / "input_probe")
     (s_dir / "startup-sequence").write_text(
         "SYS:input_probe\n"
         "endcli\n",
@@ -233,6 +262,44 @@ def result_path(result_dir: Path) -> Path | None:
     return None
 
 
+KEY_RESULT_FIELDS = {
+    "space": "seen_space",
+    "x": "seen_x",
+    "c": "seen_c",
+    "q": "seen_q",
+    "escape": "seen_escape",
+    "esc": "seen_escape",
+    "left": "seen_left",
+    "right": "seen_right",
+    "up": "seen_up",
+    "down": "seen_down",
+}
+
+
+def parse_result(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text(errors="replace").splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def validate_sent_keys(path: Path, keys: list[str]) -> list[str]:
+    values = parse_result(path)
+    missing: list[str] = []
+
+    for key in keys:
+        field = KEY_RESULT_FIELDS.get(key)
+        if field is None:
+            continue
+        if values.get(field) != "1":
+            missing.append(key)
+
+    return missing
+
+
 def result_phase(path: Path) -> str | None:
     try:
         for line in path.read_text(errors="replace").splitlines():
@@ -244,29 +311,29 @@ def result_phase(path: Path) -> str | None:
 
 
 def is_final_result(path: Path) -> bool:
-    phase = result_phase(path)
-    return phase in ("pre_quit", "post_run")
+    values = parse_result(path)
+    return (
+        values.get("phase") in ("pre_quit", "post_run")
+        and values.get("write_complete") == "1"
+    )
 
 
 def send_keys_after_delay(keys: list[str], delay: float) -> subprocess.Popen | None:
-    script_lines = [
-        f"delay {delay}",
-        'tell application "FS-UAE" to activate',
-        "delay 0.5",
-        'tell application "System Events"',
-    ]
-    for key in keys:
-        key_code = KEY_CODES.get(key)
-        if key_code is None:
-            print(f"Skipping unknown key: {key}", file=sys.stderr)
-            continue
-        script_lines.append(f"    key code {key_code}")
-        script_lines.append("    delay 0.25")
-    script_lines.append("end tell")
-
-    args = ["osascript"]
-    for line in script_lines:
-        args.extend(["-e", line])
+    args = [
+        sys.executable,
+        str(KEY_SENDER_PATH),
+        "--delay",
+        str(delay),
+        "--key-delay",
+        "0.35",
+        "--press-delay",
+        "0.08",
+        "--settle-delay",
+        "0.75",
+        "--repeat",
+        "2",
+        "--click",
+    ] + keys
 
     try:
         return subprocess.Popen(
@@ -292,10 +359,10 @@ def terminate(process: subprocess.Popen) -> None:
         process.wait(timeout=5)
 
 
-def print_recent_log() -> None:
+def print_recent_log(machine: str, result_dir: Path) -> None:
     paths = [
-        RESULT_DIR / "a1200" / "logs" / "fs-uae.log.txt",
-        RESULT_DIR / "a500" / "logs" / "fs-uae.log.txt",
+        result_dir / "logs" / "fs-uae.log.txt",
+        RESULT_DIR / machine / "logs" / "fs-uae.log.txt",
         LOG_PATH,
     ]
     log_path = None
@@ -317,7 +384,11 @@ def cli_option(key: str, value: str) -> str:
 
 def main() -> int:
     args = parse_args()
-    result_dir = RESULT_DIR / args.machine
+    result_name = args.machine
+    if args.synthetic:
+        result_name += "-synthetic"
+    result_dir = RESULT_DIR / result_name
+    probe_bin_path = SYNTHETIC_PROBE_BIN_PATH if args.synthetic else PROBE_BIN_PATH
     result_dir.mkdir(parents=True, exist_ok=True)
     (result_dir / "fs-uae-base").mkdir(parents=True, exist_ok=True)
     (result_dir / "logs").mkdir(parents=True, exist_ok=True)
@@ -328,18 +399,18 @@ def main() -> int:
         return 2
 
     if not args.no_build:
-        build_probe()
+        build_probe(args.synthetic)
 
-    if not PROBE_BIN_PATH.exists():
-        print(f"Input probe binary not found: {PROBE_BIN_PATH}", file=sys.stderr)
+    if not probe_bin_path.exists():
+        print(f"Input probe binary not found: {probe_bin_path}", file=sys.stderr)
         return 2
 
     clean_result(result_dir)
-    setup_boot_drive(result_dir)
-    options = write_config(args.machine, result_dir)
+    setup_boot_drive(result_dir, probe_bin_path)
+    options, config_path = write_config(args.machine, result_dir)
 
     if args.show_config:
-        print(CONFIG_PATH.read_text(encoding="utf-8"))
+        print(config_path.read_text(encoding="utf-8"))
 
     process = subprocess.Popen(
         [str(FS_UAE)] + [cli_option(key, value) for key, value in sorted(options.items())],
@@ -348,9 +419,9 @@ def main() -> int:
         stderr=subprocess.DEVNULL,
     )
     key_sender = None
+    keys: list[str] = []
     if not args.no_send_keys:
         keys = [part.strip().lower() for part in args.keys.split(",") if part.strip()]
-        key_sender = send_keys_after_delay(keys, args.key_delay)
 
     deadline = time.monotonic() + args.timeout
     found = None
@@ -358,6 +429,13 @@ def main() -> int:
     try:
         while time.monotonic() < deadline:
             found = result_path(result_dir)
+            if (
+                not args.no_send_keys
+                and key_sender is None
+                and found is not None
+                and result_phase(found) == "main_start"
+            ):
+                key_sender = send_keys_after_delay(keys, args.key_delay)
             if found is not None and is_final_result(found):
                 time.sleep(0.75)
                 break
@@ -370,13 +448,26 @@ def main() -> int:
     finally:
         terminate(process)
 
+    key_sender_failed = False
+    key_sender_stdout = ""
     if key_sender is not None:
         try:
-            _, stderr = key_sender.communicate(timeout=2)
+            stdout, stderr = key_sender.communicate(timeout=2)
+            if stdout.strip():
+                key_sender_stdout = stdout.strip()
             if stderr.strip():
                 print(f"osascript stderr: {stderr.strip()}", file=sys.stderr)
+                if "not allowed to send keystrokes" in stderr:
+                    print(
+                        "Grant Accessibility permission to Codex/Terminal to "
+                        "enable automated keypress verification.",
+                        file=sys.stderr,
+                    )
+            if key_sender.returncode not in (0, None):
+                key_sender_failed = True
         except subprocess.TimeoutExpired:
             key_sender.send_signal(signal.SIGTERM)
+            key_sender_failed = True
 
     if found is None:
         found = result_path(result_dir)
@@ -389,11 +480,34 @@ def main() -> int:
         if last_seen is not None:
             print(f"\n--- partial result: {last_seen} ---")
             print(last_seen.read_text(errors="replace"))
-        print_recent_log()
+        print_recent_log(args.machine, result_dir)
         return 1
 
     print(f"Result file: {found}")
     print(found.read_text(errors="replace"))
+    if args.synthetic:
+        values = parse_result(found)
+        if values.get("synthetic_input") != "1" or values.get("synthetic_ok") != "1":
+            print("Synthetic input probe failed.", file=sys.stderr)
+            return 1
+    if not args.no_send_keys:
+        missing = validate_sent_keys(found, keys)
+        if key_sender is None:
+            print("Input probe key sender never started.", file=sys.stderr)
+            return 1
+        if key_sender_failed:
+            if key_sender_stdout:
+                print(f"key sender stdout: {key_sender_stdout}", file=sys.stderr)
+            print("Input probe key sender failed.", file=sys.stderr)
+            return 1
+        if missing:
+            if key_sender_stdout:
+                print(f"key sender stdout: {key_sender_stdout}", file=sys.stderr)
+            print(
+                "Input probe did not observe sent keys: " + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 

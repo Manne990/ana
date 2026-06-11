@@ -9,6 +9,24 @@ static int update_count = 0;
 static int draw_count = 0;
 static int shutdown_count = 0;
 static int first_tick_fps = 0;
+static int slow_update_enabled = 0;
+
+static void burn_runtime_ticks(long ticks)
+{
+    long start;
+    volatile long sink;
+
+    if (ticks <= 0) {
+        ticks = 1;
+    }
+
+    start = ana_platform_time_ticks();
+    sink = 0;
+    while (ana_platform_time_ticks() - start < ticks) {
+        sink++;
+    }
+    (void)sink;
+}
 
 static void runtime_init(void)
 {
@@ -22,9 +40,17 @@ static void runtime_load(void)
 
 static void runtime_update(ANA_Time time)
 {
+    long frame_ticks;
+
     if (update_count == 0) {
         assert(time.tick == 0);
         first_tick_fps = time.fps;
+
+        if (slow_update_enabled) {
+            frame_ticks = ana_platform_time_ticks_per_second() /
+                ANA_DEFAULT_FPS;
+            burn_runtime_ticks(frame_ticks * 3L);
+        }
     }
 
     update_count++;
@@ -53,6 +79,7 @@ static void reset_counts(void)
     draw_count = 0;
     shutdown_count = 0;
     first_tick_fps = 0;
+    slow_update_enabled = 0;
 }
 
 static ANA_Game make_game(void)
@@ -172,6 +199,20 @@ static void test_runtime_uses_default_profile_values(void)
     assert(first_tick_fps == ANA_DEFAULT_FPS);
 }
 
+static void test_runtime_polls_input_for_each_catchup_update(void)
+{
+    ANA_Game game;
+
+    reset_counts();
+    slow_update_enabled = 1;
+    game = make_game();
+
+    assert(ana_run(&game) == ANA_OK);
+    assert(update_count == 3);
+    assert(draw_count < update_count);
+    assert(ana_input_poll_count() == update_count);
+}
+
 int main(void)
 {
     test_runtime_loop();
@@ -179,6 +220,7 @@ int main(void)
     test_runtime_warmup_frame_is_not_counted();
     test_runtime_rejects_bad_render_mode();
     test_runtime_uses_default_profile_values();
+    test_runtime_polls_input_for_each_catchup_update();
     assert(ana_run(0) == ANA_ERROR_INVALID_ARGUMENT);
 
     return 0;

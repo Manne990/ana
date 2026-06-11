@@ -41,6 +41,9 @@
 #define ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT 1
 #define ANA_AMIGA_HARDWARE_SCROLL_BACKGROUND_CACHE 0
 #define ANA_AMIGA_HARDWARE_SCROLL_HUD_CACHE 0
+#ifndef ANA_AMIGA_HARDWARE_SCROLL_SYNC
+#define ANA_AMIGA_HARDWARE_SCROLL_SYNC 1
+#endif
 #define ANA_AMIGA_HARDWARE_SCROLL_CPU_FILL_MAX_AREA 65535
 #define ANA_AMIGA_COOKIE_CUT_MINTERM 0xe2u
 #define ANA_AMIGA_IMAGE_BLITTER_MIN_AREA 4096
@@ -2399,6 +2402,11 @@ static void ana_amiga_hardware_scroll_commit_view_offset(void)
 
     ana_amiga_hardware_scroll_wait_hud_cache_blit();
     ana_amiga_hardware_scroll_wait_blit();
+#if ANA_AMIGA_HARDWARE_SCROLL_SYNC
+#ifndef ANA_AMIGA_DIRECT_PRESENT_SYNC
+    WaitTOF();
+#endif
+#endif
     old_visible_index = ana_amiga_hardware_scroll.visible_index;
     ana_amiga_visible_bitmap = draw_bitmap;
     ana_amiga_screen->RastPort.BitMap = draw_bitmap;
