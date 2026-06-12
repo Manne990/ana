@@ -59,7 +59,12 @@ static void bb_map_input(void)
 #define BB_TILE_FLAG_GOAL 0x10u
 
 #ifndef BB_MAX_ACTIVE_ENEMIES
+#ifdef ANA_TARGET_AMIGA
+/* Keep the stock Amiga path inside the current hardware sprite budget. */
+#define BB_MAX_ACTIVE_ENEMIES 6
+#else
 #define BB_MAX_ACTIVE_ENEMIES BB_MAX_ENEMIES
+#endif
 #endif
 
 #ifdef BB_EMULATOR_HARNESS
