@@ -20,7 +20,6 @@
 #include <exec/types.h>
 #include <graphics/sprite.h>
 #include <graphics/view.h>
-#include <hardware/custom.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #endif
@@ -100,23 +99,13 @@ static void bb_draw_input_debug_overlay(void);
 #ifndef BB_HW_DIRECT_SPRITE_POS
 #define BB_HW_DIRECT_SPRITE_POS 1
 #endif
-#ifndef BB_HW_DIRECT_SECOND_HALF_POS
-#define BB_HW_DIRECT_SECOND_HALF_POS 0
-#endif
 #ifndef BB_HW_SYNC_SPRITE_TOF
 #define BB_HW_SYNC_SPRITE_TOF 0
 #endif
 #ifndef BB_HW_RASTER_TRACE
 #define BB_HW_RASTER_TRACE 0
 #endif
-#ifndef BB_HW_RASTER_SAFE_WAIT
-#define BB_HW_RASTER_SAFE_WAIT 1
-#endif
 #define BB_HW_SPRITE_WIDTH 16
-#define BB_HW_VISIBLE_START_X 128
-#define BB_HW_VISIBLE_START_LINE 44
-#define BB_HW_VISIBLE_END_LINE (44 + BB_SCREEN_H)
-#define BB_HW_SAFE_TOP_END_LINE 32
 #define BB_HW_PLAYER_SPRITES 1
 #define BB_HW_PLAYER_MAX_FRAMES 8
 #define BB_HW_PLAYER_SPRITE_WORDS ((BB_PLAYER_H * 2) + 4)
@@ -186,176 +175,12 @@ static int bb_hw_enemy_pending_valid = 0;
 static long bb_hw_enemy_update_calls = 0L;
 static long bb_hw_enemy_visible_moves = 0L;
 static const char* bb_hw_enemy_failure_reason = "not attempted";
-static long bb_hw_sprite_position_checks = 0L;
-static long bb_hw_sprite_position_mismatches = 0L;
-static long bb_hw_sprite_zero_control_words = 0L;
-static long bb_hw_sprite_raster_checks = 0L;
-static long bb_hw_sprite_visible_raster_writes = 0L;
-static long bb_hw_sprite_safe_wait_calls = 0L;
-static long bb_hw_sprite_safe_top_hits = 0L;
-static long bb_hw_sprite_safe_bottom_hits = 0L;
-static long bb_hw_sprite_safe_visible_waits = 0L;
-static long bb_hw_sprite_safe_write_waits = 0L;
-static long bb_hw_sprite_span_checks = 0L;
-static long bb_hw_sprite_span_waits = 0L;
-static long bb_hw_sprite_unsafe_span_writes = 0L;
-static int bb_hw_sprite_min_raster_line = 9999;
-static int bb_hw_sprite_max_raster_line = -1;
-static int bb_hw_sprite_last_raster_line = -1;
-
-extern struct Custom custom;
+static ANA_AmigaSpriteUpdateStats bb_hw_sprite_stats;
 
 #if BB_HW_SYNC_SPRITE_TOF
 static void bb_hw_wait_for_sprite_update(void)
 {
     WaitTOF();
-}
-#endif
-
-static int bb_hw_raster_line(void)
-{
-    UWORD vpos;
-    UWORD vhpos;
-
-    vpos = custom.vposr;
-    vhpos = custom.vhposr;
-    return (int)(((vpos & 0x0001u) << 8) | ((vhpos >> 8) & 0x00ffu));
-}
-
-static int bb_hw_sprite_line_overlaps_y(int line, int y, int height)
-{
-    int start;
-    int end;
-
-    start = y + BB_HW_VISIBLE_START_LINE;
-    end = start + height;
-    return line >= start - 1 && line < end + 1;
-}
-
-static int bb_hw_sprite_current_y(const struct SimpleSprite* sprite)
-{
-    if (sprite == 0) {
-        return -1000;
-    }
-
-    return (int)sprite->y;
-}
-
-static int bb_hw_sprite_line_unsafe(
-    const struct SimpleSprite* sprite,
-    int new_y,
-    int height,
-    int line)
-{
-    int old_y;
-
-    old_y = bb_hw_sprite_current_y(sprite);
-    return bb_hw_sprite_line_overlaps_y(line, old_y, height) ||
-        bb_hw_sprite_line_overlaps_y(line, new_y, height);
-}
-
-static void bb_hw_wait_for_safe_sprite_write(
-    const struct SimpleSprite* sprite,
-    int y,
-    int height)
-{
-#if BB_HW_RASTER_SAFE_WAIT
-    int line;
-
-    line = bb_hw_raster_line();
-    bb_hw_sprite_safe_wait_calls++;
-    bb_hw_sprite_span_checks++;
-    if (!bb_hw_sprite_line_unsafe(sprite, y, height, line)) {
-        if (line < BB_HW_SAFE_TOP_END_LINE) {
-            bb_hw_sprite_safe_top_hits++;
-        } else if (line >= BB_HW_VISIBLE_END_LINE) {
-            bb_hw_sprite_safe_bottom_hits++;
-        }
-        return;
-    }
-
-    bb_hw_sprite_safe_write_waits++;
-    bb_hw_sprite_span_waits++;
-    if (line >= BB_HW_SAFE_TOP_END_LINE &&
-            line < BB_HW_VISIBLE_END_LINE) {
-        bb_hw_sprite_safe_visible_waits++;
-    }
-    while (bb_hw_sprite_line_unsafe(sprite, y, height, line)) {
-        line = bb_hw_raster_line();
-    }
-#endif
-}
-
-static void bb_hw_record_sprite_write_raster(
-    const struct SimpleSprite* sprite,
-    int y,
-    int height)
-{
-#if BB_HW_RASTER_TRACE
-    int line;
-
-    line = bb_hw_raster_line();
-    bb_hw_sprite_raster_checks++;
-    bb_hw_sprite_last_raster_line = line;
-    if (line < bb_hw_sprite_min_raster_line) {
-        bb_hw_sprite_min_raster_line = line;
-    }
-    if (line > bb_hw_sprite_max_raster_line) {
-        bb_hw_sprite_max_raster_line = line;
-    }
-    if (line >= BB_HW_VISIBLE_START_LINE &&
-            line < BB_HW_VISIBLE_END_LINE) {
-        bb_hw_sprite_visible_raster_writes++;
-    }
-    if (bb_hw_sprite_line_unsafe(sprite, y, height, line)) {
-        bb_hw_sprite_unsafe_span_writes++;
-    }
-#else
-    (void)sprite;
-    (void)y;
-    (void)height;
-#endif
-}
-
-#if BB_HW_DIRECT_SPRITE_POS || BB_HW_DIRECT_SECOND_HALF_POS
-static void bb_hw_sprite_write_pos(
-    struct SimpleSprite* sprite,
-    int x,
-    int y,
-    int height)
-{
-    int hstart;
-    int vstart;
-    int vstop;
-    UWORD* data;
-
-    if (sprite == 0 || sprite->posctldata == 0 || height <= 0) {
-        return;
-    }
-
-    bb_hw_wait_for_safe_sprite_write(sprite, y, height);
-    bb_hw_record_sprite_write_raster(sprite, y, height);
-    hstart = x + BB_HW_VISIBLE_START_X;
-    vstart = y + 44;
-    vstop = vstart + height;
-    if (hstart < 0) {
-        hstart = 0;
-    }
-    if (vstart < 0) {
-        vstart = 0;
-    }
-    if (vstop < 0) {
-        vstop = 0;
-    }
-
-    data = sprite->posctldata;
-    data[0] = (UWORD)(((vstart & 0xff) << 8) | ((hstart >> 1) & 0xff));
-    data[1] = (UWORD)(((vstop & 0xff) << 8) |
-        ((vstart & 0x100) != 0 ? 0x0004 : 0x0000) |
-        ((vstop & 0x100) != 0 ? 0x0002 : 0x0000) |
-        (hstart & 1));
-    sprite->x = (WORD)x;
-    sprite->y = (WORD)y;
 }
 #endif
 
@@ -368,82 +193,27 @@ static void bb_hw_sprite_move(
 {
 #if BB_HW_DIRECT_SPRITE_POS
     (void)viewport;
-    bb_hw_sprite_write_pos(sprite, x, y, height);
+    ana_amiga_sprite_set_position_safe(
+        sprite,
+        x,
+        y,
+        height,
+        BB_HW_RASTER_TRACE,
+        &bb_hw_sprite_stats);
 #else
-    (void)height;
-    bb_hw_wait_for_safe_sprite_write(sprite, y, height);
-    bb_hw_record_sprite_write_raster(sprite, y, height);
+    ana_amiga_sprite_wait_until_safe(
+        sprite,
+        y,
+        height,
+        &bb_hw_sprite_stats);
+    ana_amiga_sprite_record_write_raster(
+        sprite,
+        y,
+        height,
+        BB_HW_RASTER_TRACE,
+        &bb_hw_sprite_stats);
     MoveSprite(viewport, sprite, x, y);
 #endif
-}
-
-static void bb_hw_sprite_copy_control_words(
-    const struct SimpleSprite* sprite,
-    UWORD* target_data)
-{
-    if (sprite == 0 || sprite->posctldata == 0 || target_data == 0) {
-        return;
-    }
-
-    target_data[0] = sprite->posctldata[0];
-    target_data[1] = sprite->posctldata[1];
-}
-
-static void bb_hw_sprite_expected_control_words(
-    int x,
-    int y,
-    int height,
-    UWORD* word0,
-    UWORD* word1)
-{
-    int hstart;
-    int vstart;
-    int vstop;
-
-    hstart = x + BB_HW_VISIBLE_START_X;
-    vstart = y + 44;
-    vstop = vstart + height;
-    if (hstart < 0) {
-        hstart = 0;
-    }
-    if (vstart < 0) {
-        vstart = 0;
-    }
-    if (vstop < 0) {
-        vstop = 0;
-    }
-
-    *word0 = (UWORD)(((vstart & 0xff) << 8) | ((hstart >> 1) & 0xff));
-    *word1 = (UWORD)(((vstop & 0xff) << 8) |
-        ((vstart & 0x100) != 0 ? 0x0004 : 0x0000) |
-        ((vstop & 0x100) != 0 ? 0x0002 : 0x0000) |
-        (hstart & 1));
-}
-
-static void bb_hw_sprite_record_control_check(
-    const struct SimpleSprite* sprite,
-    int x,
-    int y,
-    int height)
-{
-    UWORD expected0;
-    UWORD expected1;
-    const UWORD* data;
-
-    if (sprite == 0 || sprite->posctldata == 0 || height <= 0) {
-        return;
-    }
-
-    data = sprite->posctldata;
-    bb_hw_sprite_position_checks++;
-    if (data[0] == 0u && data[1] == 0u) {
-        bb_hw_sprite_zero_control_words++;
-    }
-
-    bb_hw_sprite_expected_control_words(x, y, height, &expected0, &expected1);
-    if (data[0] != expected0 || data[1] != expected1) {
-        bb_hw_sprite_position_mismatches++;
-    }
 }
 
 #endif
@@ -1315,7 +1085,7 @@ static void bb_hw_player_update(int move_sprites)
         for (i = 0; i < bb_hw_player_sprite_count; i++) {
             frame_data = bb_hw_player_frame_data(i, frame);
             if (frame_data != 0 && bb_hw_player_sprites[i].ready) {
-                bb_hw_sprite_copy_control_words(
+                ana_amiga_sprite_copy_control_words(
                     &bb_hw_player_sprites[i].sprite,
                     frame_data);
                 ChangeSprite(
@@ -1344,11 +1114,12 @@ static void bb_hw_player_update(int move_sprites)
                 sprite_x + (i * BB_HW_SPRITE_WIDTH),
                 screen_y,
                 BB_PLAYER_H);
-            bb_hw_sprite_record_control_check(
+            ana_amiga_sprite_record_control_check(
                 &bb_hw_player_sprites[i].sprite,
                 sprite_x + (i * BB_HW_SPRITE_WIDTH),
                 screen_y,
-                BB_PLAYER_H);
+                BB_PLAYER_H,
+                &bb_hw_sprite_stats);
         }
     }
     bb_hw_player_last_x = sprite_x;
@@ -1701,11 +1472,12 @@ static void bb_hw_enemy_update(int move_sprites)
                     sprite_x,
                     screen_y,
                     BB_ENEMY_H);
-                bb_hw_sprite_record_control_check(
+                ana_amiga_sprite_record_control_check(
                     &bb_hw_enemy_sprites[slot].sprite,
                     sprite_x,
                     screen_y,
-                    BB_ENEMY_H);
+                    BB_ENEMY_H,
+                    &bb_hw_sprite_stats);
             }
             bb_hw_enemy_slot_visible[slot] = 1;
             bb_hw_enemy_slot_last_x[slot] = sprite_x;
@@ -1786,17 +1558,20 @@ static void bb_hw_player_commit_pending(void)
                 i,
                 bb_hw_player_pending_frame);
             if (frame_data != 0 && bb_hw_player_sprites[i].ready) {
-                bb_hw_wait_for_safe_sprite_write(
+                ana_amiga_sprite_wait_until_safe(
                     &bb_hw_player_sprites[i].sprite,
                     bb_hw_player_pending_y,
-                    BB_PLAYER_H);
-                bb_hw_sprite_copy_control_words(
+                    BB_PLAYER_H,
+                    &bb_hw_sprite_stats);
+                ana_amiga_sprite_copy_control_words(
                     &bb_hw_player_sprites[i].sprite,
                     frame_data);
-                bb_hw_record_sprite_write_raster(
+                ana_amiga_sprite_record_write_raster(
                     &bb_hw_player_sprites[i].sprite,
                     bb_hw_player_pending_y,
-                    BB_PLAYER_H);
+                    BB_PLAYER_H,
+                    BB_HW_RASTER_TRACE,
+                    &bb_hw_sprite_stats);
                 ChangeSprite(
                     viewport,
                     &bb_hw_player_sprites[i].sprite,
@@ -1823,11 +1598,12 @@ static void bb_hw_player_commit_pending(void)
                 sprite_x + (i * BB_HW_SPRITE_WIDTH),
                 screen_y,
                 BB_PLAYER_H);
-            bb_hw_sprite_record_control_check(
+            ana_amiga_sprite_record_control_check(
                 &bb_hw_player_sprites[i].sprite,
                 sprite_x + (i * BB_HW_SPRITE_WIDTH),
                 screen_y,
-                BB_PLAYER_H);
+                BB_PLAYER_H,
+                &bb_hw_sprite_stats);
         }
     }
     bb_hw_player_visible = 1;
@@ -1898,11 +1674,12 @@ static void bb_hw_enemy_commit_pending(void)
                     sprite_x,
                     screen_y,
                     BB_ENEMY_H);
-                bb_hw_sprite_record_control_check(
+                ana_amiga_sprite_record_control_check(
                     &bb_hw_enemy_sprites[slot].sprite,
                     sprite_x,
                     screen_y,
-                    BB_ENEMY_H);
+                    BB_ENEMY_H,
+                    &bb_hw_sprite_stats);
             }
             bb_hw_enemy_slot_visible[slot] = 1;
             bb_hw_enemy_slot_last_x[slot] = sprite_x;
@@ -2452,42 +2229,12 @@ void bb_render_reset(void)
     bb_debug_hw_enemy_perf_ticks = 0L;
     bb_clear_tile_dirty_rects();
 #ifdef ANA_TARGET_AMIGA
-    bb_hw_sprite_position_checks = 0L;
-    bb_hw_sprite_position_mismatches = 0L;
-    bb_hw_sprite_zero_control_words = 0L;
-    bb_hw_sprite_raster_checks = 0L;
-    bb_hw_sprite_visible_raster_writes = 0L;
-    bb_hw_sprite_safe_wait_calls = 0L;
-    bb_hw_sprite_safe_top_hits = 0L;
-    bb_hw_sprite_safe_bottom_hits = 0L;
-    bb_hw_sprite_safe_visible_waits = 0L;
-    bb_hw_sprite_safe_write_waits = 0L;
-    bb_hw_sprite_span_checks = 0L;
-    bb_hw_sprite_span_waits = 0L;
-    bb_hw_sprite_unsafe_span_writes = 0L;
-    bb_hw_sprite_min_raster_line = 9999;
-    bb_hw_sprite_max_raster_line = -1;
-    bb_hw_sprite_last_raster_line = -1;
+    ana_amiga_sprite_update_stats_reset(&bb_hw_sprite_stats);
     bb_hw_player_hide();
     bb_hw_enemy_hide_from(0);
     bb_hw_player_update(0);
     bb_hw_enemy_update(0);
-    bb_hw_sprite_position_checks = 0L;
-    bb_hw_sprite_position_mismatches = 0L;
-    bb_hw_sprite_zero_control_words = 0L;
-    bb_hw_sprite_raster_checks = 0L;
-    bb_hw_sprite_visible_raster_writes = 0L;
-    bb_hw_sprite_safe_wait_calls = 0L;
-    bb_hw_sprite_safe_top_hits = 0L;
-    bb_hw_sprite_safe_bottom_hits = 0L;
-    bb_hw_sprite_safe_visible_waits = 0L;
-    bb_hw_sprite_safe_write_waits = 0L;
-    bb_hw_sprite_span_checks = 0L;
-    bb_hw_sprite_span_waits = 0L;
-    bb_hw_sprite_unsafe_span_writes = 0L;
-    bb_hw_sprite_min_raster_line = 9999;
-    bb_hw_sprite_max_raster_line = -1;
-    bb_hw_sprite_last_raster_line = -1;
+    ana_amiga_sprite_update_stats_reset(&bb_hw_sprite_stats);
 #endif
     ana_tile_layer_invalidate(&bb_playfield_layer);
 }
@@ -2665,29 +2412,29 @@ BB_RenderStats bb_render_stats(void)
     stats.hw_player_perf_ticks = bb_debug_hw_player_perf_ticks;
     stats.hw_enemy_perf_ticks = bb_debug_hw_enemy_perf_ticks;
 #ifdef ANA_TARGET_AMIGA
-    stats.hw_sprite_position_checks = bb_hw_sprite_position_checks;
+    stats.hw_sprite_position_checks = bb_hw_sprite_stats.position_checks;
     stats.hw_sprite_position_mismatches =
-        bb_hw_sprite_position_mismatches;
-    stats.hw_sprite_zero_control_words = bb_hw_sprite_zero_control_words;
-    stats.hw_sprite_raster_checks = bb_hw_sprite_raster_checks;
+        bb_hw_sprite_stats.position_mismatches;
+    stats.hw_sprite_zero_control_words = bb_hw_sprite_stats.zero_control_words;
+    stats.hw_sprite_raster_checks = bb_hw_sprite_stats.raster_checks;
     stats.hw_sprite_visible_raster_writes =
-        bb_hw_sprite_visible_raster_writes;
-    stats.hw_sprite_safe_wait_calls = bb_hw_sprite_safe_wait_calls;
-    stats.hw_sprite_safe_top_hits = bb_hw_sprite_safe_top_hits;
-    stats.hw_sprite_safe_bottom_hits = bb_hw_sprite_safe_bottom_hits;
+        bb_hw_sprite_stats.visible_raster_writes;
+    stats.hw_sprite_safe_wait_calls = bb_hw_sprite_stats.safe_wait_calls;
+    stats.hw_sprite_safe_top_hits = bb_hw_sprite_stats.safe_top_hits;
+    stats.hw_sprite_safe_bottom_hits = bb_hw_sprite_stats.safe_bottom_hits;
     stats.hw_sprite_safe_visible_waits =
-        bb_hw_sprite_safe_visible_waits;
-    stats.hw_sprite_safe_write_waits = bb_hw_sprite_safe_write_waits;
-    stats.hw_sprite_span_checks = bb_hw_sprite_span_checks;
-    stats.hw_sprite_span_waits = bb_hw_sprite_span_waits;
+        bb_hw_sprite_stats.safe_visible_waits;
+    stats.hw_sprite_safe_write_waits = bb_hw_sprite_stats.safe_write_waits;
+    stats.hw_sprite_span_checks = bb_hw_sprite_stats.span_checks;
+    stats.hw_sprite_span_waits = bb_hw_sprite_stats.span_waits;
     stats.hw_sprite_unsafe_span_writes =
-        bb_hw_sprite_unsafe_span_writes;
+        bb_hw_sprite_stats.unsafe_span_writes;
     stats.hw_sprite_min_raster_line =
-        bb_hw_sprite_min_raster_line == 9999 ?
+        bb_hw_sprite_stats.min_raster_line == 9999 ?
             -1 :
-            bb_hw_sprite_min_raster_line;
-    stats.hw_sprite_max_raster_line = bb_hw_sprite_max_raster_line;
-    stats.hw_sprite_last_raster_line = bb_hw_sprite_last_raster_line;
+            bb_hw_sprite_stats.min_raster_line;
+    stats.hw_sprite_max_raster_line = bb_hw_sprite_stats.max_raster_line;
+    stats.hw_sprite_last_raster_line = bb_hw_sprite_stats.last_raster_line;
     stats.hw_player_update_calls = bb_hw_player_update_calls;
     stats.hw_player_visible_moves = bb_hw_player_visible_moves;
     stats.hw_player_ready = bb_hw_player_ready;

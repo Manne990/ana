@@ -38,7 +38,7 @@ int main(void)
     game.warmup_frames = 1;
 
     printf(
-        "ANA Byte Brothers %s sprite-xbase-128 started.\n",
+        "ANA Byte Brothers %s sprite-framework-1 started.\n",
         ANA_VERSION_STRING);
     printf("Keyboard mapping: cursor/A-D movement, Space/up jump, X/down dash, Esc/C/Q quit\n");
     printf(".\n");

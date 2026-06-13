@@ -1,0 +1,58 @@
+Du behöver egentligen två saker:
+Filöverföring → FTP
+Fjärrkommandon → Telnet
+Då kan flödet bli:
+VS Code
+   ↓
+Build ANA
+   ↓
+FTP upload
+   ↓
+Telnet
+   ↓
+cd Work:Projects/Test
+run MyGame
+eller ännu bättre:
+build
+deploy
+kill gammal process
+start ny process
+helt automatiskt från din VS Code-extension.
+Det fina är att AmigaOS redan är ganska "remote friendly". Du behöver inte SSH:a in och starta en daemon som på Linux. En Telnet-session som landar i en Shell räcker långt.
+Ännu roligare vore om du utnyttjade ARexx:
+FTP upload
+   ↓
+Telnet
+   ↓
+rx BuildAndRun.rexx
+där scriptet:
+stänger gamla instansen
+rensar temporära filer
+startar nya versionen
+kanske öppnar ett loggfönster
+Sedan finns en ännu mer retro lösning som jag tror du kommer gilla:
+Seriell debug-port
+Amigan skickar loggar till Macen via serieport.
+ANA_LOG("Player died");
+ANA_LOG("Level loaded");
+ANA_LOG("Memory=%ld", AvailMem(...));
+och Macen fångar allt i ett terminalfönster.
+Det är ungefär så mycket embedded-utveckling fortfarande fungerar idag.
+Om jag känner dig rätt kommer det sluta med något i stil med:
+Cmd+Shift+R
+i VS Code som gör:
+Bygg ANA
+Skapa ADF vid behov
+FTP:a över filerna
+Telnet in
+Starta spelet
+Visa loggar i VS Code
+...och då börjar den riktiga hårdvaran kännas nästan lika bekväm som FS-UAE.
+Det som är extra kul är att din automatiska feedback-loop för emulatorn sannolikt kan återanvändas. Du byter bara ut:
+Run in FS-UAE
+mot
+Deploy to A500
+som en ny "target".
+Då får Codex välja:
+Emulator (snabbt)
+Riktig A500 (verifiering)
