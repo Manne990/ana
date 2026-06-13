@@ -3,10 +3,15 @@
 #include "byte_brothers_assets.h"
 #include "byte_brothers_game.h"
 #include "byte_brothers_internal.h"
+#include "byte_brothers_render.h"
 
 #include <stdio.h>
 
 /* Program entry point for the Byte Brothers platformer sample. */
+
+#ifndef BB_HW_SYNC_BEFORE_PRESENT
+#define BB_HW_SYNC_BEFORE_PRESENT 1
+#endif
 
 int main(void)
 {
@@ -17,6 +22,11 @@ int main(void)
     game.load = byte_brothers_load;
     game.update = byte_brothers_update;
     game.draw = byte_brothers_draw;
+#if BB_HW_SYNC_BEFORE_PRESENT
+    game.pre_present = bb_render_sync_hardware_sprites;
+#else
+    game.post_present = bb_render_sync_hardware_sprites;
+#endif
     game.shutdown = byte_brothers_shutdown;
     game.width = BB_SCREEN_W;
     game.height = BB_SCREEN_H;
@@ -28,7 +38,7 @@ int main(void)
     game.warmup_frames = 1;
 
     printf(
-        "ANA Byte Brothers %s sprite-profile-2 started.\n",
+        "ANA Byte Brothers %s sprite-xbase-128 started.\n",
         ANA_VERSION_STRING);
     printf("Keyboard mapping: cursor/A-D movement, Space/up jump, X/down dash, Esc/C/Q quit\n");
     printf(".\n");

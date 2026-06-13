@@ -7,7 +7,8 @@
 #define BB_RENDER_FINE_PROFILING 0
 #endif
 
-#if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
+#if defined(ANA_TARGET_AMIGA) || \
+    (defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING)
 #include "ana_internal.h"
 #endif
 
@@ -19,6 +20,7 @@
 #include <exec/types.h>
 #include <graphics/sprite.h>
 #include <graphics/view.h>
+#include <hardware/custom.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
 #endif
@@ -99,22 +101,33 @@ static void bb_draw_input_debug_overlay(void);
 #define BB_HW_DIRECT_SPRITE_POS 1
 #endif
 #ifndef BB_HW_DIRECT_SECOND_HALF_POS
-#define BB_HW_DIRECT_SECOND_HALF_POS 1
+#define BB_HW_DIRECT_SECOND_HALF_POS 0
 #endif
 #ifndef BB_HW_SYNC_SPRITE_TOF
 #define BB_HW_SYNC_SPRITE_TOF 0
 #endif
-#define BB_HW_PLAYER_SPRITES 2
+#ifndef BB_HW_RASTER_TRACE
+#define BB_HW_RASTER_TRACE 0
+#endif
+#ifndef BB_HW_RASTER_SAFE_WAIT
+#define BB_HW_RASTER_SAFE_WAIT 1
+#endif
+#define BB_HW_SPRITE_WIDTH 16
+#define BB_HW_VISIBLE_START_X 128
+#define BB_HW_VISIBLE_START_LINE 44
+#define BB_HW_VISIBLE_END_LINE (44 + BB_SCREEN_H)
+#define BB_HW_SAFE_TOP_END_LINE 32
+#define BB_HW_PLAYER_SPRITES 1
 #define BB_HW_PLAYER_MAX_FRAMES 8
 #define BB_HW_PLAYER_SPRITE_WORDS ((BB_PLAYER_H * 2) + 4)
 #define BB_HW_PLAYER_SPRITE_BYTES \
     (BB_HW_PLAYER_SPRITE_WORDS * (int)sizeof(UWORD))
 #define BB_HW_ENEMY_FIRST_CHANNEL 2
+#define BB_HW_ENEMY_LAST_CHANNEL 6
 #ifndef BB_HW_ENEMY_MAX
-#define BB_HW_ENEMY_MAX 6
+#define BB_HW_ENEMY_MAX 4
 #endif
 #define BB_HW_ENEMY_SPRITES BB_HW_ENEMY_MAX
-#define BB_HW_ENEMY_SOURCE_X ((BB_ENEMY_W - 16) / 2)
 #define BB_HW_ENEMY_SPRITE_WORDS ((BB_ENEMY_H * 2) + 4)
 #define BB_HW_ENEMY_SPRITE_BYTES \
     (BB_HW_ENEMY_SPRITE_WORDS * (int)sizeof(UWORD))
@@ -150,6 +163,11 @@ static int bb_hw_player_current_frame = -1;
 static int bb_hw_player_last_x = -1000;
 static int bb_hw_player_last_y = -1000;
 static int bb_hw_player_frame_count = 0;
+static int bb_hw_player_pending_valid = 0;
+static int bb_hw_player_pending_visible = 0;
+static int bb_hw_player_pending_frame = 0;
+static int bb_hw_player_pending_x = 0;
+static int bb_hw_player_pending_y = 0;
 static long bb_hw_player_update_calls = 0L;
 static long bb_hw_player_visible_moves = 0L;
 static const char* bb_hw_player_failure_reason = "not attempted";
@@ -161,14 +179,141 @@ static int bb_hw_enemy_slot_count = 0;
 static int bb_hw_enemy_slot_visible[BB_HW_ENEMY_MAX];
 static int bb_hw_enemy_slot_last_x[BB_HW_ENEMY_MAX];
 static int bb_hw_enemy_slot_last_y[BB_HW_ENEMY_MAX];
+static int bb_hw_enemy_pending_count = 0;
+static int bb_hw_enemy_pending_x[BB_HW_ENEMY_MAX];
+static int bb_hw_enemy_pending_y[BB_HW_ENEMY_MAX];
+static int bb_hw_enemy_pending_valid = 0;
 static long bb_hw_enemy_update_calls = 0L;
 static long bb_hw_enemy_visible_moves = 0L;
 static const char* bb_hw_enemy_failure_reason = "not attempted";
+static long bb_hw_sprite_position_checks = 0L;
+static long bb_hw_sprite_position_mismatches = 0L;
+static long bb_hw_sprite_zero_control_words = 0L;
+static long bb_hw_sprite_raster_checks = 0L;
+static long bb_hw_sprite_visible_raster_writes = 0L;
+static long bb_hw_sprite_safe_wait_calls = 0L;
+static long bb_hw_sprite_safe_top_hits = 0L;
+static long bb_hw_sprite_safe_bottom_hits = 0L;
+static long bb_hw_sprite_safe_visible_waits = 0L;
+static long bb_hw_sprite_safe_write_waits = 0L;
+static long bb_hw_sprite_span_checks = 0L;
+static long bb_hw_sprite_span_waits = 0L;
+static long bb_hw_sprite_unsafe_span_writes = 0L;
+static int bb_hw_sprite_min_raster_line = 9999;
+static int bb_hw_sprite_max_raster_line = -1;
+static int bb_hw_sprite_last_raster_line = -1;
 
+extern struct Custom custom;
+
+#if BB_HW_SYNC_SPRITE_TOF
 static void bb_hw_wait_for_sprite_update(void)
 {
-#if BB_HW_SYNC_SPRITE_TOF
     WaitTOF();
+}
+#endif
+
+static int bb_hw_raster_line(void)
+{
+    UWORD vpos;
+    UWORD vhpos;
+
+    vpos = custom.vposr;
+    vhpos = custom.vhposr;
+    return (int)(((vpos & 0x0001u) << 8) | ((vhpos >> 8) & 0x00ffu));
+}
+
+static int bb_hw_sprite_line_overlaps_y(int line, int y, int height)
+{
+    int start;
+    int end;
+
+    start = y + BB_HW_VISIBLE_START_LINE;
+    end = start + height;
+    return line >= start - 1 && line < end + 1;
+}
+
+static int bb_hw_sprite_current_y(const struct SimpleSprite* sprite)
+{
+    if (sprite == 0) {
+        return -1000;
+    }
+
+    return (int)sprite->y;
+}
+
+static int bb_hw_sprite_line_unsafe(
+    const struct SimpleSprite* sprite,
+    int new_y,
+    int height,
+    int line)
+{
+    int old_y;
+
+    old_y = bb_hw_sprite_current_y(sprite);
+    return bb_hw_sprite_line_overlaps_y(line, old_y, height) ||
+        bb_hw_sprite_line_overlaps_y(line, new_y, height);
+}
+
+static void bb_hw_wait_for_safe_sprite_write(
+    const struct SimpleSprite* sprite,
+    int y,
+    int height)
+{
+#if BB_HW_RASTER_SAFE_WAIT
+    int line;
+
+    line = bb_hw_raster_line();
+    bb_hw_sprite_safe_wait_calls++;
+    bb_hw_sprite_span_checks++;
+    if (!bb_hw_sprite_line_unsafe(sprite, y, height, line)) {
+        if (line < BB_HW_SAFE_TOP_END_LINE) {
+            bb_hw_sprite_safe_top_hits++;
+        } else if (line >= BB_HW_VISIBLE_END_LINE) {
+            bb_hw_sprite_safe_bottom_hits++;
+        }
+        return;
+    }
+
+    bb_hw_sprite_safe_write_waits++;
+    bb_hw_sprite_span_waits++;
+    if (line >= BB_HW_SAFE_TOP_END_LINE &&
+            line < BB_HW_VISIBLE_END_LINE) {
+        bb_hw_sprite_safe_visible_waits++;
+    }
+    while (bb_hw_sprite_line_unsafe(sprite, y, height, line)) {
+        line = bb_hw_raster_line();
+    }
+#endif
+}
+
+static void bb_hw_record_sprite_write_raster(
+    const struct SimpleSprite* sprite,
+    int y,
+    int height)
+{
+#if BB_HW_RASTER_TRACE
+    int line;
+
+    line = bb_hw_raster_line();
+    bb_hw_sprite_raster_checks++;
+    bb_hw_sprite_last_raster_line = line;
+    if (line < bb_hw_sprite_min_raster_line) {
+        bb_hw_sprite_min_raster_line = line;
+    }
+    if (line > bb_hw_sprite_max_raster_line) {
+        bb_hw_sprite_max_raster_line = line;
+    }
+    if (line >= BB_HW_VISIBLE_START_LINE &&
+            line < BB_HW_VISIBLE_END_LINE) {
+        bb_hw_sprite_visible_raster_writes++;
+    }
+    if (bb_hw_sprite_line_unsafe(sprite, y, height, line)) {
+        bb_hw_sprite_unsafe_span_writes++;
+    }
+#else
+    (void)sprite;
+    (void)y;
+    (void)height;
 #endif
 }
 
@@ -188,7 +333,9 @@ static void bb_hw_sprite_write_pos(
         return;
     }
 
-    hstart = x + 64;
+    bb_hw_wait_for_safe_sprite_write(sprite, y, height);
+    bb_hw_record_sprite_write_raster(sprite, y, height);
+    hstart = x + BB_HW_VISIBLE_START_X;
     vstart = y + 44;
     vstop = vstart + height;
     if (hstart < 0) {
@@ -224,24 +371,81 @@ static void bb_hw_sprite_move(
     bb_hw_sprite_write_pos(sprite, x, y, height);
 #else
     (void)height;
+    bb_hw_wait_for_safe_sprite_write(sprite, y, height);
+    bb_hw_record_sprite_write_raster(sprite, y, height);
     MoveSprite(viewport, sprite, x, y);
 #endif
 }
 
-static void bb_hw_sprite_move_second_half(
-    struct ViewPort* viewport,
-    struct SimpleSprite* sprite,
+static void bb_hw_sprite_copy_control_words(
+    const struct SimpleSprite* sprite,
+    UWORD* target_data)
+{
+    if (sprite == 0 || sprite->posctldata == 0 || target_data == 0) {
+        return;
+    }
+
+    target_data[0] = sprite->posctldata[0];
+    target_data[1] = sprite->posctldata[1];
+}
+
+static void bb_hw_sprite_expected_control_words(
+    int x,
+    int y,
+    int height,
+    UWORD* word0,
+    UWORD* word1)
+{
+    int hstart;
+    int vstart;
+    int vstop;
+
+    hstart = x + BB_HW_VISIBLE_START_X;
+    vstart = y + 44;
+    vstop = vstart + height;
+    if (hstart < 0) {
+        hstart = 0;
+    }
+    if (vstart < 0) {
+        vstart = 0;
+    }
+    if (vstop < 0) {
+        vstop = 0;
+    }
+
+    *word0 = (UWORD)(((vstart & 0xff) << 8) | ((hstart >> 1) & 0xff));
+    *word1 = (UWORD)(((vstop & 0xff) << 8) |
+        ((vstart & 0x100) != 0 ? 0x0004 : 0x0000) |
+        ((vstop & 0x100) != 0 ? 0x0002 : 0x0000) |
+        (hstart & 1));
+}
+
+static void bb_hw_sprite_record_control_check(
+    const struct SimpleSprite* sprite,
     int x,
     int y,
     int height)
 {
-#if BB_HW_DIRECT_SECOND_HALF_POS
-    (void)viewport;
-    bb_hw_sprite_write_pos(sprite, x, y, height);
-#else
-    bb_hw_sprite_move(viewport, sprite, x, y, height);
-#endif
+    UWORD expected0;
+    UWORD expected1;
+    const UWORD* data;
+
+    if (sprite == 0 || sprite->posctldata == 0 || height <= 0) {
+        return;
+    }
+
+    data = sprite->posctldata;
+    bb_hw_sprite_position_checks++;
+    if (data[0] == 0u && data[1] == 0u) {
+        bb_hw_sprite_zero_control_words++;
+    }
+
+    bb_hw_sprite_expected_control_words(x, y, height, &expected0, &expected1);
+    if (data[0] != expected0 || data[1] != expected1) {
+        bb_hw_sprite_position_mismatches++;
+    }
 }
+
 #endif
 
 static ANA_Rect bb_world_rect(int x, int y, int w, int h)
@@ -611,8 +815,8 @@ static void bb_draw_tile_at(char tile, int sx, int sy)
         ana_fill_rect(3, sx, sy, BB_TILE, 2);
         ana_fill_rect(14, sx, sy + BB_TILE - 2, BB_TILE, 2);
     } else if (tile == BB_TILE_PLATFORM) {
-        ana_fill_rect(3, sx, sy + 6, BB_TILE, 4);
-        ana_fill_rect(4, sx, sy + 5, BB_TILE, 1);
+        ana_fill_rect(3, sx, sy + 1, BB_TILE, 4);
+        ana_fill_rect(4, sx, sy, BB_TILE, 1);
     } else if (tile == BB_TILE_POWER) {
         ana_fill_rect(6, sx + 1, sy + 1, BB_TILE - 2, BB_TILE - 2);
         ana_fill_rect(5, sx + 6, sy + 4, 4, 4);
@@ -792,7 +996,7 @@ static UWORD* bb_hw_player_frame_data(int sprite_index, int frame)
         ((long)frame * BB_HW_PLAYER_SPRITE_WORDS);
 }
 
-static int bb_hw_player_build_data(UWORD* data, int frame, int half)
+static int bb_hw_player_build_data(UWORD* data, int frame)
 {
     int x;
     int y;
@@ -813,8 +1017,10 @@ static int bb_hw_player_build_data(UWORD* data, int frame, int half)
     for (y = 0; y < BB_PLAYER_H; y++) {
         plane0 = 0u;
         plane1 = 0u;
-        for (x = 0; x < 16; x++) {
-            source_x = (half * 16) + x;
+        for (x = 0; x < BB_HW_SPRITE_WIDTH; x++) {
+            source_x =
+                ((x * BB_PLAYER_W) + (BB_HW_SPRITE_WIDTH / 2)) /
+                BB_HW_SPRITE_WIDTH;
             if (source_x >= BB_PLAYER_W ||
                     !ana_image_pixel_visible(
                         bb_player_image,
@@ -860,21 +1066,12 @@ static void bb_hw_player_hide(void)
 
     for (i = 0; i < bb_hw_player_sprite_count; i++) {
         if (bb_hw_player_sprites[i].ready) {
-            if (i == 0) {
-                bb_hw_sprite_move(
-                    viewport,
-                    &bb_hw_player_sprites[i].sprite,
-                    -32,
-                    0,
-                    BB_PLAYER_H);
-            } else {
-                bb_hw_sprite_move_second_half(
-                    viewport,
-                    &bb_hw_player_sprites[i].sprite,
-                    -32,
-                    0,
-                    BB_PLAYER_H);
-            }
+            bb_hw_sprite_move(
+                viewport,
+                &bb_hw_player_sprites[i].sprite,
+                -32,
+                0,
+                BB_PLAYER_H);
         }
     }
     bb_hw_player_visible = 0;
@@ -927,37 +1124,25 @@ static void bb_hw_player_fail(const char* reason)
     }
 }
 
-static int bb_hw_player_try_sprite_pair(int first_channel)
+static int bb_hw_player_try_sprite_channel(int desired_channel)
 {
-    int sprite_index;
     int channel;
 
-    if (first_channel < 0 || first_channel + 1 >= 8) {
+    if (desired_channel < 0 || desired_channel >= 8) {
         return 0;
     }
 
-    for (sprite_index = 0; sprite_index < BB_HW_PLAYER_SPRITES; sprite_index++) {
-        channel = GetSprite(
-            &bb_hw_player_sprites[sprite_index].sprite,
-            (LONG)(first_channel + sprite_index));
-        if (channel < 0) {
-            while (sprite_index > 0) {
-                sprite_index--;
-                if (bb_hw_player_sprites[sprite_index].ready) {
-                    FreeSprite(
-                        (LONG)bb_hw_player_sprites[sprite_index].channel);
-                }
-                bb_hw_player_sprites[sprite_index].channel = -1;
-                bb_hw_player_sprites[sprite_index].ready = 0;
-            }
-            bb_hw_player_sprite_count = 0;
-            return 0;
-        }
-
-        bb_hw_player_sprites[sprite_index].channel = channel;
-        bb_hw_player_sprites[sprite_index].ready = 1;
-        bb_hw_player_sprite_count++;
+    channel = GetSprite(
+        &bb_hw_player_sprites[0].sprite,
+        (LONG)desired_channel);
+    if (channel < 0) {
+        bb_hw_player_sprite_count = 0;
+        return 0;
     }
+
+    bb_hw_player_sprites[0].channel = channel;
+    bb_hw_player_sprites[0].ready = 1;
+    bb_hw_player_sprite_count = 1;
 
     return 1;
 }
@@ -965,10 +1150,10 @@ static int bb_hw_player_try_sprite_pair(int first_channel)
 static int bb_hw_player_init(void)
 {
     struct ViewPort* viewport;
-    static const int preferred_pairs[] = {0, 6, 4, 2};
+    static const int preferred_channels[] = {6, 7, 0, 1};
     int sprite_index;
     int frame;
-    int pair_index;
+    int channel_index;
     UWORD* frame_data;
 
     if (bb_hw_player_ready) {
@@ -1021,7 +1206,7 @@ static int bb_hw_player_init(void)
 
         for (frame = 0; frame < bb_hw_player_frame_count; frame++) {
             frame_data = bb_hw_player_frame_data(sprite_index, frame);
-            if (!bb_hw_player_build_data(frame_data, frame, sprite_index)) {
+            if (!bb_hw_player_build_data(frame_data, frame)) {
                 bb_hw_player_fail("player sprite data build");
                 return 0;
             }
@@ -1035,11 +1220,13 @@ static int bb_hw_player_init(void)
         bb_hw_player_sprites[sprite_index].sprite.num = 0;
     }
 
-    for (pair_index = 0;
-            pair_index <
-                (int)(sizeof(preferred_pairs) / sizeof(preferred_pairs[0]));
-            pair_index++) {
-        if (bb_hw_player_try_sprite_pair(preferred_pairs[pair_index])) {
+    for (channel_index = 0;
+            channel_index <
+                (int)(sizeof(preferred_channels) /
+                    sizeof(preferred_channels[0]));
+            channel_index++) {
+        if (bb_hw_player_try_sprite_channel(
+                preferred_channels[channel_index])) {
             break;
         }
     }
@@ -1048,32 +1235,24 @@ static int bb_hw_player_init(void)
         return 0;
     }
 
-    bb_hw_player_set_sprite_colors(
-        viewport,
-        bb_hw_player_sprites[0].channel);
     for (sprite_index = 0; sprite_index < BB_HW_PLAYER_SPRITES; sprite_index++) {
+        bb_hw_player_set_sprite_colors(
+            viewport,
+            bb_hw_player_sprites[sprite_index].channel);
         frame_data = bb_hw_player_frame_data(sprite_index, 0);
         ChangeSprite(
             viewport,
             &bb_hw_player_sprites[sprite_index].sprite,
             frame_data);
-        if (sprite_index == 0) {
-            bb_hw_sprite_move(
-                viewport,
-                &bb_hw_player_sprites[sprite_index].sprite,
-                -32,
-                0,
-                BB_PLAYER_H);
-        } else {
-            bb_hw_sprite_move_second_half(
-                viewport,
-                &bb_hw_player_sprites[sprite_index].sprite,
-                -32,
-                0,
-                BB_PLAYER_H);
-        }
+        bb_hw_sprite_move(
+            viewport,
+            &bb_hw_player_sprites[sprite_index].sprite,
+            -32,
+            0,
+            BB_PLAYER_H);
     }
 
+    bb_hw_player_current_frame = 0;
     bb_hw_player_ready = 1;
     bb_hw_player_failure_reason = "ready";
     return 1;
@@ -1098,6 +1277,7 @@ static void bb_hw_player_update(int move_sprites)
     int i;
     int screen_x;
     int screen_y;
+    int sprite_x;
 
     bb_hw_player_update_calls++;
     if (!bb_hw_player_init()) {
@@ -1114,10 +1294,7 @@ static void bb_hw_player_update(int move_sprites)
         return;
     }
 
-    frame = bb_player_anim_frame();
-    if (bb_player.facing < 0) {
-        frame += BB_PLAYER_LEFT_FRAME_OFFSET;
-    }
+    frame = 0;
     if (frame < 0 || frame >= bb_hw_player_frame_count) {
         bb_hw_player_visible = 0;
         return;
@@ -1138,6 +1315,9 @@ static void bb_hw_player_update(int move_sprites)
         for (i = 0; i < bb_hw_player_sprite_count; i++) {
             frame_data = bb_hw_player_frame_data(i, frame);
             if (frame_data != 0 && bb_hw_player_sprites[i].ready) {
+                bb_hw_sprite_copy_control_words(
+                    &bb_hw_player_sprites[i].sprite,
+                    frame_data);
                 ChangeSprite(
                     viewport,
                     &bb_hw_player_sprites[i].sprite,
@@ -1149,32 +1329,29 @@ static void bb_hw_player_update(int move_sprites)
 
     screen_x = bb_world_to_screen_x(bb_player.x);
     screen_y = bb_world_to_screen_y(bb_player.y);
+    sprite_x = screen_x;
     if (!frame_changed &&
-            bb_hw_player_last_x == screen_x &&
+            bb_hw_player_last_x == sprite_x &&
             bb_hw_player_last_y == screen_y) {
         return;
     }
 
     for (i = 0; i < bb_hw_player_sprite_count; i++) {
         if (bb_hw_player_sprites[i].ready) {
-            if (i == 0) {
-                bb_hw_sprite_move(
-                    viewport,
-                    &bb_hw_player_sprites[i].sprite,
-                    screen_x,
-                    screen_y,
-                    BB_PLAYER_H);
-            } else {
-                bb_hw_sprite_move_second_half(
-                    viewport,
-                    &bb_hw_player_sprites[i].sprite,
-                    screen_x + (i * 16),
-                    screen_y,
-                    BB_PLAYER_H);
-            }
+            bb_hw_sprite_move(
+                viewport,
+                &bb_hw_player_sprites[i].sprite,
+                sprite_x + (i * BB_HW_SPRITE_WIDTH),
+                screen_y,
+                BB_PLAYER_H);
+            bb_hw_sprite_record_control_check(
+                &bb_hw_player_sprites[i].sprite,
+                sprite_x + (i * BB_HW_SPRITE_WIDTH),
+                screen_y,
+                BB_PLAYER_H);
         }
     }
-    bb_hw_player_last_x = screen_x;
+    bb_hw_player_last_x = sprite_x;
     bb_hw_player_last_y = screen_y;
     bb_hw_player_visible_moves++;
 }
@@ -1229,8 +1406,10 @@ static int bb_hw_enemy_build_data(UWORD* data)
     for (y = 0; y < BB_ENEMY_H; y++) {
         plane0 = 0u;
         plane1 = 0u;
-        for (x = 0; x < 16; x++) {
-            source_x = BB_HW_ENEMY_SOURCE_X + x;
+        for (x = 0; x < BB_HW_SPRITE_WIDTH; x++) {
+            source_x =
+                ((x * BB_ENEMY_W) + (BB_HW_SPRITE_WIDTH / 2)) /
+                BB_HW_SPRITE_WIDTH;
             if (source_x >= BB_ENEMY_W ||
                     !ana_image_pixel_visible(
                         bb_enemy_image,
@@ -1371,7 +1550,7 @@ static int bb_hw_enemy_init(void)
     }
 
     for (desired_channel = BB_HW_ENEMY_FIRST_CHANNEL;
-            desired_channel < 8 &&
+            desired_channel < BB_HW_ENEMY_LAST_CHANNEL &&
                 bb_hw_enemy_sprite_count < BB_HW_ENEMY_SPRITES;
             desired_channel++) {
         sprite_index = bb_hw_enemy_sprite_count;
@@ -1510,17 +1689,24 @@ static void bb_hw_enemy_update(int move_sprites)
 
         screen_x = bb_world_to_screen_x(bb_enemies[i].x);
         screen_y = bb_world_to_screen_y(bb_enemies[i].y);
-        sprite_x = screen_x + BB_HW_ENEMY_SOURCE_X;
+        sprite_x = screen_x;
         if (move_sprites &&
                 (!bb_hw_enemy_slot_visible[slot] ||
                     bb_hw_enemy_slot_last_x[slot] != sprite_x ||
                     bb_hw_enemy_slot_last_y[slot] != screen_y)) {
-            bb_hw_sprite_move(
-                viewport,
-                &bb_hw_enemy_sprites[slot].sprite,
-                sprite_x,
-                screen_y,
-                BB_ENEMY_H);
+            if (bb_hw_enemy_sprites[slot].ready) {
+                bb_hw_sprite_move(
+                    viewport,
+                    &bb_hw_enemy_sprites[slot].sprite,
+                    sprite_x,
+                    screen_y,
+                    BB_ENEMY_H);
+                bb_hw_sprite_record_control_check(
+                    &bb_hw_enemy_sprites[slot].sprite,
+                    sprite_x,
+                    screen_y,
+                    BB_ENEMY_H);
+            }
             bb_hw_enemy_slot_visible[slot] = 1;
             bb_hw_enemy_slot_last_x[slot] = sprite_x;
             bb_hw_enemy_slot_last_y[slot] = screen_y;
@@ -1532,6 +1718,200 @@ static void bb_hw_enemy_update(int move_sprites)
     if (move_sprites) {
         bb_hw_enemy_hide_from(slot);
     }
+}
+
+static void bb_hw_player_prepare_commit(void)
+{
+    int frame;
+    int screen_x;
+    int screen_y;
+
+    bb_hw_player_update_calls++;
+    bb_hw_player_pending_valid = 0;
+    if (!bb_hw_player_init()) {
+        return;
+    }
+
+    bb_hw_player_pending_valid = 1;
+    if (!bb_rect_visible_world(
+            bb_world_rect(bb_player.x, bb_player.y, BB_PLAYER_W, BB_PLAYER_H))) {
+        bb_hw_player_pending_visible = 0;
+        return;
+    }
+
+    frame = 0;
+    if (frame < 0 || frame >= bb_hw_player_frame_count) {
+        bb_hw_player_pending_visible = 0;
+        return;
+    }
+
+    screen_x = bb_world_to_screen_x(bb_player.x);
+    screen_y = bb_world_to_screen_y(bb_player.y);
+    bb_hw_player_pending_visible = 1;
+    bb_hw_player_pending_frame = frame;
+    bb_hw_player_pending_x = screen_x;
+    bb_hw_player_pending_y = screen_y;
+}
+
+static void bb_hw_player_commit_pending(void)
+{
+    struct ViewPort* viewport;
+    UWORD* frame_data;
+    int frame_changed;
+    int i;
+    int sprite_x;
+    int screen_y;
+
+    if (!bb_hw_player_pending_valid ||
+            !bb_hw_player_ready ||
+            bb_hw_player_failed) {
+        return;
+    }
+
+    viewport = (struct ViewPort*)ana_gfx_native_viewport();
+    if (viewport == 0) {
+        return;
+    }
+
+    if (!bb_hw_player_pending_visible) {
+        bb_hw_player_hide();
+        return;
+    }
+
+    frame_changed =
+        bb_hw_player_pending_frame != bb_hw_player_current_frame;
+    if (frame_changed) {
+        for (i = 0; i < bb_hw_player_sprite_count; i++) {
+            frame_data = bb_hw_player_frame_data(
+                i,
+                bb_hw_player_pending_frame);
+            if (frame_data != 0 && bb_hw_player_sprites[i].ready) {
+                bb_hw_wait_for_safe_sprite_write(
+                    &bb_hw_player_sprites[i].sprite,
+                    bb_hw_player_pending_y,
+                    BB_PLAYER_H);
+                bb_hw_sprite_copy_control_words(
+                    &bb_hw_player_sprites[i].sprite,
+                    frame_data);
+                bb_hw_record_sprite_write_raster(
+                    &bb_hw_player_sprites[i].sprite,
+                    bb_hw_player_pending_y,
+                    BB_PLAYER_H);
+                ChangeSprite(
+                    viewport,
+                    &bb_hw_player_sprites[i].sprite,
+                    frame_data);
+            }
+        }
+        bb_hw_player_current_frame = bb_hw_player_pending_frame;
+    }
+
+    sprite_x = bb_hw_player_pending_x;
+    screen_y = bb_hw_player_pending_y;
+    if (!frame_changed &&
+            bb_hw_player_visible &&
+            bb_hw_player_last_x == sprite_x &&
+            bb_hw_player_last_y == screen_y) {
+        return;
+    }
+
+    for (i = 0; i < bb_hw_player_sprite_count; i++) {
+        if (bb_hw_player_sprites[i].ready) {
+            bb_hw_sprite_move(
+                viewport,
+                &bb_hw_player_sprites[i].sprite,
+                sprite_x + (i * BB_HW_SPRITE_WIDTH),
+                screen_y,
+                BB_PLAYER_H);
+            bb_hw_sprite_record_control_check(
+                &bb_hw_player_sprites[i].sprite,
+                sprite_x + (i * BB_HW_SPRITE_WIDTH),
+                screen_y,
+                BB_PLAYER_H);
+        }
+    }
+    bb_hw_player_visible = 1;
+    bb_hw_player_last_x = sprite_x;
+    bb_hw_player_last_y = screen_y;
+    bb_hw_player_visible_moves++;
+}
+
+static void bb_hw_enemy_prepare_commit(void)
+{
+    int i;
+    int slot;
+    int screen_x;
+    int screen_y;
+
+    bb_hw_enemy_update_calls++;
+    bb_hw_enemy_pending_valid = 0;
+    bb_hw_enemy_pending_count = 0;
+    if (!bb_hw_enemy_init()) {
+        return;
+    }
+
+    slot = 0;
+    for (i = 0; i < bb_enemy_count && slot < bb_hw_enemy_slot_count; i++) {
+        if (!bb_enemy_visible(&bb_enemies[i])) {
+            continue;
+        }
+
+        screen_x = bb_world_to_screen_x(bb_enemies[i].x);
+        screen_y = bb_world_to_screen_y(bb_enemies[i].y);
+        bb_hw_enemy_pending_x[slot] = screen_x;
+        bb_hw_enemy_pending_y[slot] = screen_y;
+        slot++;
+    }
+
+    bb_hw_enemy_pending_count = slot;
+    bb_hw_enemy_pending_valid = 1;
+}
+
+static void bb_hw_enemy_commit_pending(void)
+{
+    struct ViewPort* viewport;
+    int slot;
+    int sprite_x;
+    int screen_y;
+
+    if (!bb_hw_enemy_pending_valid ||
+            !bb_hw_enemy_ready ||
+            bb_hw_enemy_failed) {
+        return;
+    }
+
+    viewport = (struct ViewPort*)ana_gfx_native_viewport();
+    if (viewport == 0) {
+        return;
+    }
+
+    for (slot = 0; slot < bb_hw_enemy_pending_count; slot++) {
+        sprite_x = bb_hw_enemy_pending_x[slot];
+        screen_y = bb_hw_enemy_pending_y[slot];
+        if (!bb_hw_enemy_slot_visible[slot] ||
+                bb_hw_enemy_slot_last_x[slot] != sprite_x ||
+                bb_hw_enemy_slot_last_y[slot] != screen_y) {
+            if (bb_hw_enemy_sprites[slot].ready) {
+                bb_hw_sprite_move(
+                    viewport,
+                    &bb_hw_enemy_sprites[slot].sprite,
+                    sprite_x,
+                    screen_y,
+                    BB_ENEMY_H);
+                bb_hw_sprite_record_control_check(
+                    &bb_hw_enemy_sprites[slot].sprite,
+                    sprite_x,
+                    screen_y,
+                    BB_ENEMY_H);
+            }
+            bb_hw_enemy_slot_visible[slot] = 1;
+            bb_hw_enemy_slot_last_x[slot] = sprite_x;
+            bb_hw_enemy_slot_last_y[slot] = screen_y;
+            bb_hw_enemy_visible_moves++;
+        }
+    }
+
+    bb_hw_enemy_hide_from(bb_hw_enemy_pending_count);
 }
 #else
 static int bb_hw_player_is_hardware(void)
@@ -1980,32 +2360,6 @@ static void bb_hud_draw_profiled(void)
 #endif
 }
 
-static void bb_hw_enemy_update_profiled(int move_sprites)
-{
-#if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
-    unsigned long start_ticks;
-
-    start_ticks = ana_platform_perf_ticks();
-#endif
-    bb_hw_enemy_update(move_sprites);
-#if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
-    bb_record_perf_ticks(&bb_debug_hw_enemy_perf_ticks, start_ticks);
-#endif
-}
-
-static void bb_hw_player_update_profiled(int move_sprites)
-{
-#if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
-    unsigned long start_ticks;
-
-    start_ticks = ana_platform_perf_ticks();
-#endif
-    bb_hw_player_update(move_sprites);
-#if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
-    bb_record_perf_ticks(&bb_debug_hw_player_perf_ticks, start_ticks);
-#endif
-}
-
 static void bb_draw_actors_profiled(void)
 {
 #if defined(ANA_DEBUG_STATS) && BB_RENDER_FINE_PROFILING
@@ -2098,10 +2452,42 @@ void bb_render_reset(void)
     bb_debug_hw_enemy_perf_ticks = 0L;
     bb_clear_tile_dirty_rects();
 #ifdef ANA_TARGET_AMIGA
+    bb_hw_sprite_position_checks = 0L;
+    bb_hw_sprite_position_mismatches = 0L;
+    bb_hw_sprite_zero_control_words = 0L;
+    bb_hw_sprite_raster_checks = 0L;
+    bb_hw_sprite_visible_raster_writes = 0L;
+    bb_hw_sprite_safe_wait_calls = 0L;
+    bb_hw_sprite_safe_top_hits = 0L;
+    bb_hw_sprite_safe_bottom_hits = 0L;
+    bb_hw_sprite_safe_visible_waits = 0L;
+    bb_hw_sprite_safe_write_waits = 0L;
+    bb_hw_sprite_span_checks = 0L;
+    bb_hw_sprite_span_waits = 0L;
+    bb_hw_sprite_unsafe_span_writes = 0L;
+    bb_hw_sprite_min_raster_line = 9999;
+    bb_hw_sprite_max_raster_line = -1;
+    bb_hw_sprite_last_raster_line = -1;
     bb_hw_player_hide();
     bb_hw_enemy_hide_from(0);
-    bb_hw_enemy_update(0);
     bb_hw_player_update(0);
+    bb_hw_enemy_update(0);
+    bb_hw_sprite_position_checks = 0L;
+    bb_hw_sprite_position_mismatches = 0L;
+    bb_hw_sprite_zero_control_words = 0L;
+    bb_hw_sprite_raster_checks = 0L;
+    bb_hw_sprite_visible_raster_writes = 0L;
+    bb_hw_sprite_safe_wait_calls = 0L;
+    bb_hw_sprite_safe_top_hits = 0L;
+    bb_hw_sprite_safe_bottom_hits = 0L;
+    bb_hw_sprite_safe_visible_waits = 0L;
+    bb_hw_sprite_safe_write_waits = 0L;
+    bb_hw_sprite_span_checks = 0L;
+    bb_hw_sprite_span_waits = 0L;
+    bb_hw_sprite_unsafe_span_writes = 0L;
+    bb_hw_sprite_min_raster_line = 9999;
+    bb_hw_sprite_max_raster_line = -1;
+    bb_hw_sprite_last_raster_line = -1;
 #endif
     ana_tile_layer_invalidate(&bb_playfield_layer);
 }
@@ -2199,11 +2585,6 @@ void bb_render_draw(void)
         bb_full_redraw = 0;
         bb_clear_tile_dirty_rects();
         bb_commit_state(slot);
-#ifdef ANA_TARGET_AMIGA
-        bb_hw_wait_for_sprite_update();
-#endif
-        bb_hw_enemy_update_profiled(1);
-        bb_hw_player_update_profiled(1);
         return;
     }
 
@@ -2244,13 +2625,23 @@ void bb_render_draw(void)
 #if BB_INPUT_DEBUG_OVERLAY
     bb_draw_input_debug_overlay();
 #endif
+    bb_commit_state(slot);
+}
+
+void bb_render_sync_hardware_sprites(void)
+{
 #ifdef ANA_TARGET_AMIGA
+#if BB_HW_SYNC_SPRITE_TOF
     bb_hw_wait_for_sprite_update();
 #endif
-    bb_hw_enemy_update_profiled(1);
-    bb_hw_player_update_profiled(1);
-
-    bb_commit_state(slot);
+    bb_hw_player_prepare_commit();
+    bb_hw_enemy_prepare_commit();
+    bb_hw_player_commit_pending();
+    bb_hw_enemy_commit_pending();
+#else
+    bb_hw_player_update(1);
+    bb_hw_enemy_update(1);
+#endif
 }
 
 BB_RenderStats bb_render_stats(void)
@@ -2274,6 +2665,29 @@ BB_RenderStats bb_render_stats(void)
     stats.hw_player_perf_ticks = bb_debug_hw_player_perf_ticks;
     stats.hw_enemy_perf_ticks = bb_debug_hw_enemy_perf_ticks;
 #ifdef ANA_TARGET_AMIGA
+    stats.hw_sprite_position_checks = bb_hw_sprite_position_checks;
+    stats.hw_sprite_position_mismatches =
+        bb_hw_sprite_position_mismatches;
+    stats.hw_sprite_zero_control_words = bb_hw_sprite_zero_control_words;
+    stats.hw_sprite_raster_checks = bb_hw_sprite_raster_checks;
+    stats.hw_sprite_visible_raster_writes =
+        bb_hw_sprite_visible_raster_writes;
+    stats.hw_sprite_safe_wait_calls = bb_hw_sprite_safe_wait_calls;
+    stats.hw_sprite_safe_top_hits = bb_hw_sprite_safe_top_hits;
+    stats.hw_sprite_safe_bottom_hits = bb_hw_sprite_safe_bottom_hits;
+    stats.hw_sprite_safe_visible_waits =
+        bb_hw_sprite_safe_visible_waits;
+    stats.hw_sprite_safe_write_waits = bb_hw_sprite_safe_write_waits;
+    stats.hw_sprite_span_checks = bb_hw_sprite_span_checks;
+    stats.hw_sprite_span_waits = bb_hw_sprite_span_waits;
+    stats.hw_sprite_unsafe_span_writes =
+        bb_hw_sprite_unsafe_span_writes;
+    stats.hw_sprite_min_raster_line =
+        bb_hw_sprite_min_raster_line == 9999 ?
+            -1 :
+            bb_hw_sprite_min_raster_line;
+    stats.hw_sprite_max_raster_line = bb_hw_sprite_max_raster_line;
+    stats.hw_sprite_last_raster_line = bb_hw_sprite_last_raster_line;
     stats.hw_player_update_calls = bb_hw_player_update_calls;
     stats.hw_player_visible_moves = bb_hw_player_visible_moves;
     stats.hw_player_ready = bb_hw_player_ready;
@@ -2288,6 +2702,22 @@ BB_RenderStats bb_render_stats(void)
     stats.hw_enemy_slot_count = bb_hw_enemy_slot_count;
     stats.hw_enemy_status = bb_hw_enemy_failure_reason;
 #else
+    stats.hw_sprite_position_checks = 0L;
+    stats.hw_sprite_position_mismatches = 0L;
+    stats.hw_sprite_zero_control_words = 0L;
+    stats.hw_sprite_raster_checks = 0L;
+    stats.hw_sprite_visible_raster_writes = 0L;
+    stats.hw_sprite_safe_wait_calls = 0L;
+    stats.hw_sprite_safe_top_hits = 0L;
+    stats.hw_sprite_safe_bottom_hits = 0L;
+    stats.hw_sprite_safe_visible_waits = 0L;
+    stats.hw_sprite_safe_write_waits = 0L;
+    stats.hw_sprite_span_checks = 0L;
+    stats.hw_sprite_span_waits = 0L;
+    stats.hw_sprite_unsafe_span_writes = 0L;
+    stats.hw_sprite_min_raster_line = -1;
+    stats.hw_sprite_max_raster_line = -1;
+    stats.hw_sprite_last_raster_line = -1;
     stats.hw_player_update_calls = 0L;
     stats.hw_player_visible_moves = 0L;
     stats.hw_player_ready = 0;

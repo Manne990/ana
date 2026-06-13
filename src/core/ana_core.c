@@ -395,7 +395,13 @@ int ana_run(const ANA_Game* game)
                 warmup_frame < warmup_frames;
             warmup_frame++) {
         game->draw();
+        if (game->pre_present != NULL) {
+            game->pre_present();
+        }
         ana_present();
+        if (game->post_present != NULL) {
+            game->post_present();
+        }
     }
     if (warmup_frames > 0) {
         ana_runtime_reset_stats();
@@ -476,7 +482,13 @@ int ana_run(const ANA_Game* game)
                 ana_platform_perf_ticks());
             perf_start = ana_platform_perf_ticks();
 #endif
+            if (game->pre_present != NULL) {
+                game->pre_present();
+            }
             ana_present();
+            if (game->post_present != NULL) {
+                game->post_present();
+            }
 #if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             ana_runtime_record_perf_ticks(
                 &ana_runtime_last_stats.present_perf_ticks,

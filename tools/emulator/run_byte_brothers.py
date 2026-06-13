@@ -103,6 +103,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--show-config", action="store_true")
+    parser.add_argument(
+        "--extra-cflag",
+        action="append",
+        default=[],
+        help="Additional C flag for the Byte Brothers harness build.",
+    )
     return parser.parse_args()
 
 
@@ -187,7 +193,13 @@ def write_config(machine: str, result_dir: Path, options: dict[str, str]) -> Pat
     return path
 
 
-def build_byte_brothers(scenario_id: int, frames: int) -> None:
+def build_byte_brothers(
+    scenario_id: int,
+    frames: int,
+    extra_cflags: list[str] | None = None,
+) -> None:
+    if extra_cflags is None:
+        extra_cflags = []
     subprocess.run(
         [
             "make",
@@ -195,6 +207,8 @@ def build_byte_brothers(scenario_id: int, frames: int) -> None:
             "amiga-byte-brothers-harness",
             f"BB_HARNESS_SCENARIO_ID={scenario_id}",
             f"BB_HARNESS_FRAMES={frames}",
+            "AMIGA_BYTE_BROTHERS_HARNESS_EXTRA_CFLAGS=" +
+                " ".join(extra_cflags),
         ],
         cwd=ROOT,
         check=True,
@@ -342,7 +356,7 @@ def main() -> int:
         return 2
 
     if not args.no_build:
-        build_byte_brothers(scenario_id, frames)
+        build_byte_brothers(scenario_id, frames, args.extra_cflag)
 
     if not BB_BIN_PATH.exists():
         print(f"Byte Brothers harness binary not found: {BB_BIN_PATH}", file=sys.stderr)

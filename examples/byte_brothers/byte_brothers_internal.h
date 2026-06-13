@@ -61,6 +61,8 @@ typedef struct BB_Player {
 typedef struct BB_Enemy {
     int x;
     int y;
+    int vy;
+    int on_ground;
     int vx;
     int alive;
 } BB_Enemy;

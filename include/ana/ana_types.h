@@ -22,6 +22,8 @@ typedef struct ANA_Game {
     void (*load)(void);
     void (*update)(ANA_Time time);
     void (*draw)(void);
+    void (*pre_present)(void);
+    void (*post_present)(void);
     void (*shutdown)(void);
 
     int width;

@@ -60,8 +60,8 @@ static void bb_map_input(void)
 
 #ifndef BB_MAX_ACTIVE_ENEMIES
 #ifdef ANA_TARGET_AMIGA
-/* Keep the stock Amiga path inside the current hardware sprite budget. */
-#define BB_MAX_ACTIVE_ENEMIES 6
+/* Keep the stock Amiga path inside the stable hardware sprite budget. */
+#define BB_MAX_ACTIVE_ENEMIES 4
 #else
 #define BB_MAX_ACTIVE_ENEMIES BB_MAX_ENEMIES
 #endif
@@ -79,6 +79,7 @@ static void bb_map_input(void)
 #define BB_HARNESS_SCENARIO BB_HARNESS_SCENARIO_STATIC
 #endif
 #define BB_HARNESS_RESULT_FILE "ana_byte_brothers_result.txt"
+#define BB_HARNESS_PHASE_FILE "ana_byte_brothers_phase.txt"
 static int bb_harness_start_player_x = 0;
 static int bb_harness_start_player_y = 0;
 static int bb_harness_start_camera_x = 0;
@@ -128,6 +129,8 @@ static void bb_harness_setup_enemy_overflow(void)
     for (i = 0; i < bb_enemy_count; i++) {
         bb_enemies[i].x = bb_player.x + 48 + (i * 38);
         bb_enemies[i].y = bb_enemy_tile_y(14);
+        bb_enemies[i].vy = 0;
+        bb_enemies[i].on_ground = 1;
         bb_enemies[i].vx = (i & 1) ? -1 : 1;
         bb_enemies[i].alive = 1;
     }
@@ -230,6 +233,36 @@ static int bb_harness_visible_enemy_count(void)
     }
 
     return visible;
+}
+
+static int bb_harness_grounded_enemy_count(void)
+{
+    int grounded;
+    int i;
+
+    grounded = 0;
+    for (i = 0; i < bb_enemy_count; i++) {
+        if (bb_enemies[i].alive && bb_enemies[i].on_ground) {
+            grounded++;
+        }
+    }
+
+    return grounded;
+}
+
+static int bb_harness_airborne_enemy_count(void)
+{
+    int airborne;
+    int i;
+
+    airborne = 0;
+    for (i = 0; i < bb_enemy_count; i++) {
+        if (bb_enemies[i].alive && !bb_enemies[i].on_ground) {
+            airborne++;
+        }
+    }
+
+    return airborne;
 }
 
 static void bb_harness_update_stats(void)
@@ -335,6 +368,36 @@ static void bb_harness_write_int_line(
     bb_harness_write_long_line(file, label, (long)value);
 }
 
+static void bb_harness_write_phase(const char* phase)
+{
+    static const char* paths[] = {
+        "DH0:" BB_HARNESS_PHASE_FILE,
+        "SYS:" BB_HARNESS_PHASE_FILE,
+        "PROGDIR:" BB_HARNESS_PHASE_FILE,
+        "a1200:" BB_HARNESS_PHASE_FILE,
+        "RAM:" BB_HARNESS_PHASE_FILE,
+        NULL};
+    BPTR file;
+    int i;
+
+    file = (BPTR)0;
+    for (i = 0; paths[i] != NULL; i++) {
+        file = Open((STRPTR)paths[i], MODE_NEWFILE);
+        if (file != (BPTR)0) {
+            break;
+        }
+    }
+    if (file == (BPTR)0) {
+        return;
+    }
+
+    bb_harness_write_string_line(file, "phase", phase);
+    bb_harness_write_int_line(file, "bb_frame", bb_frame);
+    bb_harness_write_int_line(file, "camera_x", bb_camera.x);
+    bb_harness_write_int_line(file, "camera_y", bb_camera.y);
+    Close(file);
+}
+
 static void bb_harness_write_result(void)
 {
     static const char* paths[] = {
@@ -381,6 +444,14 @@ static void bb_harness_write_result(void)
     bb_harness_write_int_line(file, "lives", bb_lives);
     bb_harness_write_int_line(file, "fragments_left", bb_fragments_left);
     bb_harness_write_int_line(file, "enemy_count", bb_enemy_count);
+    bb_harness_write_int_line(
+        file,
+        "grounded_enemies",
+        bb_harness_grounded_enemy_count());
+    bb_harness_write_int_line(
+        file,
+        "airborne_enemies",
+        bb_harness_airborne_enemy_count());
     bb_harness_write_int_line(file, "player_x", bb_player.x);
     bb_harness_write_int_line(file, "player_y", bb_player.y);
     bb_harness_write_int_line(file, "camera_x", bb_camera.x);
@@ -646,6 +717,70 @@ static void bb_harness_write_result(void)
         file,
         "hw_enemy_visible_moves",
         sprite_stats.hw_enemy_visible_moves);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_position_checks",
+        sprite_stats.hw_sprite_position_checks);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_position_mismatches",
+        sprite_stats.hw_sprite_position_mismatches);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_zero_control_words",
+        sprite_stats.hw_sprite_zero_control_words);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_raster_checks",
+        sprite_stats.hw_sprite_raster_checks);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_visible_raster_writes",
+        sprite_stats.hw_sprite_visible_raster_writes);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_safe_wait_calls",
+        sprite_stats.hw_sprite_safe_wait_calls);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_safe_top_hits",
+        sprite_stats.hw_sprite_safe_top_hits);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_safe_bottom_hits",
+        sprite_stats.hw_sprite_safe_bottom_hits);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_safe_visible_waits",
+        sprite_stats.hw_sprite_safe_visible_waits);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_safe_write_waits",
+        sprite_stats.hw_sprite_safe_write_waits);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_span_checks",
+        sprite_stats.hw_sprite_span_checks);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_span_waits",
+        sprite_stats.hw_sprite_span_waits);
+    bb_harness_write_long_line(
+        file,
+        "hw_sprite_unsafe_span_writes",
+        sprite_stats.hw_sprite_unsafe_span_writes);
+    bb_harness_write_int_line(
+        file,
+        "hw_sprite_min_raster_line",
+        sprite_stats.hw_sprite_min_raster_line);
+    bb_harness_write_int_line(
+        file,
+        "hw_sprite_max_raster_line",
+        sprite_stats.hw_sprite_max_raster_line);
+    bb_harness_write_int_line(
+        file,
+        "hw_sprite_last_raster_line",
+        sprite_stats.hw_sprite_last_raster_line);
     bb_harness_write_int_line(
         file,
         "hw_enemy_ready",
@@ -755,6 +890,11 @@ static void bb_harness_write_result(void)
 }
 
 #elif defined(BB_EMULATOR_HARNESS)
+static void bb_harness_write_phase(const char* phase)
+{
+    (void)phase;
+}
+
 static void bb_harness_write_result(void)
 {
 }
@@ -772,7 +912,7 @@ static int bb_player_tile_y(int tile_y)
 
 static int bb_enemy_tile_y(int tile_y)
 {
-    return (tile_y + 1) * BB_TILE - BB_ENEMY_H - 2;
+    return (tile_y + 1) * BB_TILE - BB_ENEMY_H;
 }
 
 static void bb_reset_camera(void)
@@ -1183,6 +1323,64 @@ static void bb_move_player_v(int dy)
     bb_player.y = new_y;
 }
 
+static void bb_move_enemy_v(BB_Enemy* enemy, int dy)
+{
+    int new_y;
+    int platform_top;
+    int ty;
+    int hit_tx;
+
+    if (dy == 0) {
+        return;
+    }
+
+    new_y = enemy->y + dy;
+    enemy->on_ground = 0;
+
+    if (dy > 0) {
+        platform_top = bb_hits_platform_on_descent(
+            enemy->x,
+            enemy->y,
+            new_y,
+            BB_ENEMY_W,
+            BB_ENEMY_H);
+        if (platform_top != 0) {
+            enemy->y = platform_top - BB_ENEMY_H;
+            enemy->vy = 0;
+            enemy->on_ground = 1;
+            return;
+        }
+
+        ty = (new_y + BB_ENEMY_H - 1) / BB_TILE;
+        hit_tx = bb_find_solid_in_row(
+            enemy->x,
+            enemy->x + BB_ENEMY_W - 1,
+            ty);
+        if (hit_tx >= 0) {
+            enemy->y = ty * BB_TILE - BB_ENEMY_H;
+            enemy->vy = 0;
+            enemy->on_ground = 1;
+            return;
+        }
+    } else if (new_y >= 0) {
+        ty = new_y / BB_TILE;
+        hit_tx = bb_find_solid_in_row(
+            enemy->x,
+            enemy->x + BB_ENEMY_W - 1,
+            ty);
+        if (hit_tx >= 0) {
+            enemy->y = (ty + 1) * BB_TILE;
+            enemy->vy = 0;
+            return;
+        }
+    }
+
+    enemy->y = new_y;
+    if (enemy->y > BB_WORLD_H) {
+        enemy->alive = 0;
+    }
+}
+
 static void bb_clamp_player_to_world(void)
 {
     bb_player.x = ana_clamp_int(bb_player.x, 0, BB_WORLD_W - BB_PLAYER_W);
@@ -1268,6 +1466,15 @@ static void bb_update_enemies(void)
             continue;
         }
 
+        enemy->vy += BB_GRAVITY;
+        if (enemy->vy > BB_MAX_FALL) {
+            enemy->vy = BB_MAX_FALL;
+        }
+        bb_move_enemy_v(enemy, enemy->vy);
+        if (!enemy->alive) {
+            continue;
+        }
+
         if ((bb_frame & 1) == 0) {
             next_x = enemy->x + enemy->vx;
             if (bb_rect_hits_solid(
@@ -1279,7 +1486,8 @@ static void bb_update_enemies(void)
             } else {
                 probe_x = next_x + (enemy->vx > 0 ? BB_ENEMY_W : -1);
                 probe_y = enemy->y + BB_ENEMY_H + 2;
-                if (!bb_has_floor_at(probe_x, probe_y)) {
+                if (enemy->on_ground &&
+                        !bb_has_floor_at(probe_x, probe_y)) {
                     enemy->vx = -enemy->vx;
                 } else {
                     enemy->x = next_x;
@@ -1328,6 +1536,8 @@ static void bb_load_level(int level)
                     bb_enemies[bb_enemy_count].x =
                         bb_actor_tile_x(x, BB_ENEMY_W);
                     bb_enemies[bb_enemy_count].y = bb_enemy_tile_y(y);
+                    bb_enemies[bb_enemy_count].vy = 0;
+                    bb_enemies[bb_enemy_count].on_ground = 1;
                     bb_enemies[bb_enemy_count].vx = (bb_enemy_count & 1) ? -1 : 1;
                     bb_enemies[bb_enemy_count].alive = 1;
                     bb_enemy_count++;
@@ -1352,11 +1562,17 @@ static void bb_load_level(int level)
 
 void byte_brothers_init(void)
 {
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_write_phase("init");
+#endif
     bb_map_input();
 }
 
 void byte_brothers_load(void)
 {
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_write_phase("load");
+#endif
     bb_set_palette();
     bb_assets_load();
     bb_level_index = 0;
@@ -1366,6 +1582,7 @@ void byte_brothers_load(void)
     bb_load_level(bb_level_index);
 #ifdef BB_EMULATOR_HARNESS
     bb_harness_begin();
+    bb_harness_write_phase("run");
 #endif
 }
 
@@ -1496,6 +1713,7 @@ void byte_brothers_draw(void)
 void byte_brothers_shutdown(void)
 {
 #ifdef BB_EMULATOR_HARNESS
+    bb_harness_write_phase("shutdown");
     bb_harness_write_result();
 #endif
     bb_render_shutdown();

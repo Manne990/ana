@@ -28,7 +28,8 @@ AMIGA_INPUT_PROBE_HARNESS_CFLAGS ?= $(AMIGA_CFLAGS) -DPROBE_RUNTIME_TICKS=200
 AMIGA_INPUT_PROBE_SYNTHETIC_HARNESS_CFLAGS ?= $(AMIGA_CFLAGS) -DPROBE_RUNTIME_TICKS=60 -DPROBE_SYNTHETIC_INPUT=1
 BB_HARNESS_FRAMES ?= 120
 BB_HARNESS_SCENARIO_ID ?= 0
-AMIGA_BYTE_BROTHERS_HARNESS_CFLAGS ?= $(AMIGA_A1200_DEBUG_CFLAGS) -DBB_EMULATOR_HARNESS -DBB_HARNESS_FRAMES=$(BB_HARNESS_FRAMES) -DBB_HARNESS_SCENARIO=$(BB_HARNESS_SCENARIO_ID) -DBB_INPUT_DEBUG_OVERLAY=0
+AMIGA_BYTE_BROTHERS_HARNESS_EXTRA_CFLAGS ?=
+AMIGA_BYTE_BROTHERS_HARNESS_CFLAGS ?= $(AMIGA_A1200_DEBUG_CFLAGS) -DBB_EMULATOR_HARNESS -DBB_HARNESS_FRAMES=$(BB_HARNESS_FRAMES) -DBB_HARNESS_SCENARIO=$(BB_HARNESS_SCENARIO_ID) -DBB_INPUT_DEBUG_OVERLAY=0 $(AMIGA_BYTE_BROTHERS_HARNESS_EXTRA_CFLAGS)
 AMIGA_BUFFERED_DEBUG_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_SYNC_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_AMIGA_DIRECT_PRESENT -DANA_AMIGA_DIRECT_PRESENT_SYNC -DANA_DEBUG_STATS
 AMIGA_A1200_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68020 -DANA_TARGET_AMIGA -DANA_AMIGA_A1200_BASELINE
@@ -205,7 +206,7 @@ BYTE_BROTHERS_A1200_ADF := $(ADF_DIR)/byte-brothers-a1200.adf
 BYTE_BROTHERS_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-a1200-debug.adf
 BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG := $(BUILD_DIR)/fs-uae/byte-brothers-a1200-debug.fs-uae
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug release-package clean-assets clean
 
 all: lib examples tools
 
@@ -294,6 +295,12 @@ emulator-byte-brothers-all:
 	python3 tools/emulator/run_byte_brothers.py --scenario static
 	python3 tools/emulator/run_byte_brothers.py --scenario scroll
 	python3 tools/emulator/run_byte_brothers.py --scenario input
+
+emulator-byte-brothers-sprite-check:
+	python3 tools/emulator/check_byte_brothers_sprite_backend.py
+
+emulator-byte-brothers-visual:
+	python3 tools/emulator/capture_byte_brothers_visual.py --scenario scroll
 
 amaze-a1200-adf: $(AMAZE_A1200_ADF)
 
@@ -543,70 +550,87 @@ $(AMIGA_BYTE_BROTHERS_HARNESS_BIN): $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADER
 
 $(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAHello
 
 $(ADF_DIR)/input-probe.adf: $(AMIGA_BUILD_DIR)/examples/input_probe/input_probe
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInput
 
 $(INPUT_PROBE_HARNESS_ADF): $(AMIGA_INPUT_PROBE_HARNESS_BIN)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAProbe
 
 $(INPUT_PROBE_SYNTHETIC_HARNESS_ADF): $(AMIGA_INPUT_PROBE_SYNTHETIC_HARNESS_BIN)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANASynth
 
 $(ADF_DIR)/invaders.adf: $(AMIGA_BUILD_DIR)/examples/invaders/invaders $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInvaders $(INVADERS_ASSET_DIR)
 
 $(ADF_DIR)/amaze.adf: $(AMIGA_BUILD_DIR)/examples/amaze/amaze $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAAMAze $(AMAZE_ASSET_DIR)
 
 $(ADF_DIR)/byte-brothers.adf: $(AMIGA_BUILD_DIR)/examples/byte_brothers/byte_brothers $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAByte $(BYTE_BROTHERS_ASSET_DIR)
 
 $(INVADERS_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/invaders/invaders $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInv1200 $(INVADERS_ASSET_DIR)
 
 $(AMAZE_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/amaze/amaze $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l AMAZE1200 $(AMAZE_ASSET_DIR)
 
 $(BYTE_BROTHERS_A1200_ADF): $(AMIGA_A1200_BUILD_DIR)/examples/byte_brothers/byte_brothers $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l BYTE1200 $(BYTE_BROTHERS_ASSET_DIR)
 
 $(INVADERS_DEBUG_ADF): $(AMIGA_INVADERS_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInvDbg $(INVADERS_ASSET_DIR)
 
 $(INVADERS_BUFFERED_DEBUG_ADF): $(AMIGA_INVADERS_BUFFERED_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInvBuf $(INVADERS_ASSET_DIR)
 
 $(INVADERS_SYNC_ADF): $(AMIGA_INVADERS_SYNC_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInvSync $(INVADERS_ASSET_DIR)
 
 $(INVADERS_A1200_DEBUG_ADF): $(AMIGA_INVADERS_A1200_DEBUG_BIN) $(INVADERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInv12Dbg $(INVADERS_ASSET_DIR)
 
 $(INPUT_PROBE_A1200_DEBUG_ADF): $(AMIGA_INPUT_PROBE_A1200_DEBUG_BIN)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l ANAInputDbg
 
 $(AMAZE_A1200_DEBUG_ADF): $(AMIGA_AMAZE_A1200_DEBUG_BIN) $(AMAZE_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l AMAZE12Dbg $(AMAZE_ASSET_DIR)
 
 $(BYTE_BROTHERS_A1200_DEBUG_ADF): $(AMIGA_BYTE_BROTHERS_A1200_DEBUG_BIN) $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
+	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l BYTE12Dbg $(BYTE_BROTHERS_ASSET_DIR)
 
 $(BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG): $(BYTE_BROTHERS_A1200_DEBUG_ADF) tools/emulator/write_fsuae_launch_config.py
