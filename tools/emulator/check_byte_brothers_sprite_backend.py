@@ -16,6 +16,11 @@ SCENARIOS = {
     "scroll": {"frames": 240, "min_fps_x100": 4200},
     "enemy-overflow": {"frames": 240, "min_fps_x100": 4500},
     "input": {"frames": 100, "min_fps_x100": 4500},
+    "stomp": {"frames": 80, "min_fps_x100": 4500},
+    "stomp-drop": {"frames": 80, "min_fps_x100": 4500},
+    "stomp-moving": {"frames": 100, "min_fps_x100": 4500},
+    "stomp-fall": {"frames": 80, "min_fps_x100": 4500},
+    "stomp-edge": {"frames": 80, "min_fps_x100": 4500},
 }
 
 
@@ -110,6 +115,23 @@ def validate_result(
                 "movement input was not seen")
         require(failures, as_int(result, "input_quit_scheduled") == 1,
                 "quit input was not scheduled")
+    elif name in {
+        "stomp",
+        "stomp-drop",
+        "stomp-moving",
+        "stomp-fall",
+        "stomp-edge",
+    }:
+        require(failures, as_int(result, "alive_enemies") == 0,
+                "enemy was not defeated by stomp")
+        require(failures, as_int(result, "lives") == 3,
+                "player lost a life during stomp")
+        require(failures, as_int(result, "score") >= 25,
+                "stomp did not award score")
+        require(failures, as_int(result, "stomp_count") > 0,
+                "stomp event was not recorded")
+        require(failures, as_int(result, "player_hit_count") == 0,
+                "player damage was recorded during stomp")
 
     return failures
 

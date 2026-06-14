@@ -22,7 +22,12 @@
 #define BB_PLAYER_SPEED 2
 #define BB_DASH_SPEED 5
 #define BB_DASH_TICKS 8
+#define BB_DASH_JUMP_TICKS 10
 #define BB_JUMP_SPEED -11
+#define BB_DASH_JUMP_SPEED -13
+#define BB_STOMP_BOUNCE_SPEED -7
+#define BB_STOMP_SCORE 25
+#define BB_STOMP_GRACE 6
 #define BB_GRAVITY 1
 #define BB_MAX_FALL 6
 #define BB_INVULN_TICKS 50

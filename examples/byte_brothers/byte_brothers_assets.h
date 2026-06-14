@@ -15,6 +15,7 @@ void bb_assets_play_collect(void);
 void bb_assets_play_power(void);
 void bb_assets_play_hit(void);
 void bb_assets_play_goal(void);
+void bb_assets_play_plopp(void);
 int bb_assets_loaded(void);
 
 #endif

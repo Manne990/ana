@@ -15,6 +15,7 @@ static ANA_Sound bb_collect_sound = NULL;
 static ANA_Sound bb_power_sound = NULL;
 static ANA_Sound bb_hit_sound = NULL;
 static ANA_Sound bb_goal_sound = NULL;
+static ANA_Sound bb_plopp_sound = NULL;
 static ANA_Music bb_theme_music = NULL;
 static int bb_loaded = 0;
 ANA_Image bb_player_image = NULL;
@@ -65,6 +66,7 @@ void bb_assets_load(void)
     bb_power_sound = bb_load_sound_file("power.anasnd");
     bb_hit_sound = bb_load_sound_file("hit.anasnd");
     bb_goal_sound = bb_load_sound_file("goal.anasnd");
+    bb_plopp_sound = bb_load_sound_file("plopp.anasnd");
     bb_theme_music = bb_load_music_file("theme.mod");
 
 #ifndef BB_DISABLE_MUSIC
@@ -80,6 +82,8 @@ void bb_assets_load(void)
         bb_power_sound != NULL &&
         bb_hit_sound != NULL &&
         bb_goal_sound != NULL
+        &&
+        bb_plopp_sound != NULL
 #ifndef BB_DISABLE_MUSIC
         &&
         bb_theme_music != NULL;
@@ -108,6 +112,9 @@ void bb_assets_unload(void)
     if (bb_goal_sound != NULL) {
         ana_free_sound(bb_goal_sound);
     }
+    if (bb_plopp_sound != NULL) {
+        ana_free_sound(bb_plopp_sound);
+    }
     if (bb_enemy_image != NULL) {
         ana_free_image(bb_enemy_image);
     }
@@ -123,6 +130,7 @@ void bb_assets_unload(void)
     bb_power_sound = NULL;
     bb_hit_sound = NULL;
     bb_goal_sound = NULL;
+    bb_plopp_sound = NULL;
     bb_theme_music = NULL;
     bb_player_image = NULL;
     bb_enemy_image = NULL;
@@ -160,6 +168,13 @@ void bb_assets_play_goal(void)
 {
     if (bb_goal_sound != NULL) {
         ana_play_sound(bb_goal_sound);
+    }
+}
+
+void bb_assets_play_plopp(void)
+{
+    if (bb_plopp_sound != NULL) {
+        ana_play_sound(bb_plopp_sound);
     }
 }
 

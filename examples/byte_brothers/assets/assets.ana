@@ -10,4 +10,5 @@ sound collect collect.wav --rate 8000 --volume 36 --priority 2
 sound power power.wav --rate 8000 --volume 44 --priority 4
 sound hit hit.wav --rate 8000 --volume 42 --priority 5
 sound goal goal.wav --rate 8000 --volume 24 --priority 1
+sound plopp plopp.wav --rate 8000 --volume 52 --priority 5
 music theme theme.mod

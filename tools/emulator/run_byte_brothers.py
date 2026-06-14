@@ -26,6 +26,11 @@ SCENARIOS = {
     "scroll": {"id": 1, "frames": 360},
     "input": {"id": 2, "frames": 80},
     "enemy-overflow": {"id": 3, "frames": 360},
+    "stomp": {"id": 4, "frames": 80},
+    "stomp-drop": {"id": 5, "frames": 80},
+    "stomp-moving": {"id": 6, "frames": 100},
+    "stomp-fall": {"id": 7, "frames": 80},
+    "stomp-edge": {"id": 8, "frames": 80},
 }
 
 MACHINE_CONFIGS = {

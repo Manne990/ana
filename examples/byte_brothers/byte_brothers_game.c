@@ -37,6 +37,7 @@ static int bb_start_y = 0;
 static int bb_jump_latched = 0;
 
 static void bb_load_level(int level);
+static int bb_actor_tile_x(int tile_x, int width);
 static int bb_player_tile_y(int tile_y);
 static int bb_enemy_tile_y(int tile_y);
 
@@ -58,6 +59,23 @@ static void bb_map_input(void)
 #define BB_TILE_FLAG_COLLECTIBLE 0x08u
 #define BB_TILE_FLAG_GOAL 0x10u
 
+#define BB_PLAYER_DAMAGE_X 4
+#define BB_PLAYER_DAMAGE_Y 4
+#define BB_PLAYER_DAMAGE_W (BB_PLAYER_W - (BB_PLAYER_DAMAGE_X * 2))
+#define BB_PLAYER_DAMAGE_H (BB_PLAYER_H - BB_PLAYER_DAMAGE_Y)
+#define BB_PLAYER_STOMP_X 2
+#define BB_PLAYER_STOMP_Y (BB_PLAYER_H - 6)
+#define BB_PLAYER_STOMP_W (BB_PLAYER_W - (BB_PLAYER_STOMP_X * 2))
+#define BB_PLAYER_STOMP_H 6
+#define BB_ENEMY_DAMAGE_X 6
+#define BB_ENEMY_DAMAGE_Y 16
+#define BB_ENEMY_DAMAGE_W 8
+#define BB_ENEMY_DAMAGE_H (BB_ENEMY_H - BB_ENEMY_DAMAGE_Y)
+#define BB_ENEMY_STOMP_X 0
+#define BB_ENEMY_STOMP_Y 0
+#define BB_ENEMY_STOMP_W 18
+#define BB_ENEMY_STOMP_H 18
+
 #ifndef BB_MAX_ACTIVE_ENEMIES
 #ifdef ANA_TARGET_AMIGA
 /* Keep the stock Amiga path inside the stable hardware sprite budget. */
@@ -72,6 +90,11 @@ static void bb_map_input(void)
 #define BB_HARNESS_SCENARIO_SCROLL 1
 #define BB_HARNESS_SCENARIO_INPUT 2
 #define BB_HARNESS_SCENARIO_ENEMY_OVERFLOW 3
+#define BB_HARNESS_SCENARIO_STOMP 4
+#define BB_HARNESS_SCENARIO_STOMP_DROP 5
+#define BB_HARNESS_SCENARIO_STOMP_MOVING 6
+#define BB_HARNESS_SCENARIO_STOMP_FALL 7
+#define BB_HARNESS_SCENARIO_STOMP_EDGE 8
 #ifndef BB_HARNESS_FRAMES
 #define BB_HARNESS_FRAMES 100
 #endif
@@ -98,6 +121,8 @@ static int bb_harness_input_right_start_x = 0;
 static int bb_harness_input_right_vx = 0;
 static int bb_harness_input_quit_scheduled = 0;
 static int bb_harness_input_quit_frame = 0;
+static int bb_harness_stomp_count = 0;
+static int bb_harness_player_hit_count = 0;
 
 static const char* bb_harness_scenario_name(void)
 {
@@ -107,6 +132,16 @@ static const char* bb_harness_scenario_name(void)
     return "input";
 #elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
     return "enemy-overflow";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP
+    return "stomp";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_DROP
+    return "stomp-drop";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_MOVING
+    return "stomp-moving";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_FALL
+    return "stomp-fall";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_EDGE
+    return "stomp-edge";
 #else
     return "static";
 #endif
@@ -137,10 +172,98 @@ static void bb_harness_setup_enemy_overflow(void)
 }
 #endif
 
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP || \
+        BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_DROP || \
+        BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_FALL || \
+        BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_EDGE
+static void bb_harness_setup_stomp(int starts_grounded)
+{
+    BB_Enemy* enemy;
+
+    bb_enemy_count = 1;
+    enemy = &bb_enemies[0];
+    enemy->x = bb_actor_tile_x(18, BB_ENEMY_W);
+    enemy->y = bb_enemy_tile_y(9);
+    enemy->vy = 0;
+    enemy->on_ground = 1;
+    enemy->vx = 0;
+    enemy->alive = 1;
+
+    bb_player.x = enemy->x + 2;
+    bb_player.y = enemy->y - BB_PLAYER_H + (starts_grounded ? 4 : -2);
+    bb_player.vx = 0;
+    bb_player.vy = starts_grounded ? 0 : BB_MAX_FALL;
+    bb_player.on_ground = starts_grounded;
+    bb_player.dash_ticks = 0;
+    bb_player.facing = 1;
+    bb_player.invuln_ticks = 0;
+    ana_camera_set_position(&bb_camera, 0, 0);
+}
+#endif
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_FALL
+static void bb_harness_setup_stomp_fall(void)
+{
+    bb_harness_setup_stomp(0);
+    bb_player.x = bb_enemies[0].x + ((BB_ENEMY_W - BB_PLAYER_W) / 2);
+    bb_player.y = bb_enemies[0].y - BB_PLAYER_H - 18;
+    bb_player.vy = BB_MAX_FALL;
+    bb_player.on_ground = 0;
+}
+#endif
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_EDGE
+static void bb_harness_setup_stomp_edge(void)
+{
+    bb_harness_setup_stomp(0);
+    bb_player.x = bb_enemies[0].x + 14;
+    bb_player.y = bb_enemies[0].y - BB_PLAYER_H - 12;
+    bb_player.vx = 0;
+    bb_player.vy = BB_MAX_FALL;
+    bb_player.on_ground = 0;
+}
+#endif
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_MOVING
+static void bb_harness_setup_stomp_moving(void)
+{
+    BB_Enemy* enemy;
+
+    bb_enemy_count = 1;
+    enemy = &bb_enemies[0];
+    enemy->x = bb_actor_tile_x(45, BB_ENEMY_W);
+    enemy->y = bb_enemy_tile_y(9);
+    enemy->vy = 0;
+    enemy->on_ground = 1;
+    enemy->vx = 1;
+    enemy->alive = 1;
+
+    bb_player.x = enemy->x - 4;
+    bb_player.y = enemy->y - BB_PLAYER_H - 34;
+    bb_player.vx = 0;
+    bb_player.vy = 0;
+    bb_player.on_ground = 0;
+    bb_player.dash_ticks = 0;
+    bb_player.facing = 1;
+    bb_player.invuln_ticks = 0;
+    ana_camera_set_position(&bb_camera, 0, 0);
+}
+#endif
+
 static void bb_harness_begin(void)
 {
 #if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
     bb_harness_setup_enemy_overflow();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP
+    bb_harness_setup_stomp(0);
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_DROP
+    bb_harness_setup_stomp(1);
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_MOVING
+    bb_harness_setup_stomp_moving();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_FALL
+    bb_harness_setup_stomp_fall();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_EDGE
+    bb_harness_setup_stomp_edge();
 #endif
     bb_harness_start_player_x = bb_player.x;
     bb_harness_start_player_y = bb_player.y;
@@ -160,6 +283,8 @@ static void bb_harness_begin(void)
     bb_harness_input_right_vx = 0;
     bb_harness_input_quit_scheduled = 0;
     bb_harness_input_quit_frame = 0;
+    bb_harness_stomp_count = 0;
+    bb_harness_player_hit_count = 0;
 #if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL || \
         BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_INPUT || \
         BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
@@ -263,6 +388,21 @@ static int bb_harness_airborne_enemy_count(void)
     }
 
     return airborne;
+}
+
+static int bb_harness_alive_enemy_count(void)
+{
+    int alive;
+    int i;
+
+    alive = 0;
+    for (i = 0; i < bb_enemy_count; i++) {
+        if (bb_enemies[i].alive) {
+            alive++;
+        }
+    }
+
+    return alive;
 }
 
 static void bb_harness_update_stats(void)
@@ -446,6 +586,10 @@ static void bb_harness_write_result(void)
     bb_harness_write_int_line(file, "enemy_count", bb_enemy_count);
     bb_harness_write_int_line(
         file,
+        "alive_enemies",
+        bb_harness_alive_enemy_count());
+    bb_harness_write_int_line(
+        file,
         "grounded_enemies",
         bb_harness_grounded_enemy_count());
     bb_harness_write_int_line(
@@ -536,6 +680,14 @@ static void bb_harness_write_result(void)
         file,
         "input_quit_frame",
         bb_harness_input_quit_frame);
+    bb_harness_write_int_line(
+        file,
+        "stomp_count",
+        bb_harness_stomp_count);
+    bb_harness_write_int_line(
+        file,
+        "player_hit_count",
+        bb_harness_player_hit_count);
     bb_harness_write_int_line(file, "assets_loaded", bb_assets_loaded());
     bb_harness_write_long_line(file, "run_frames", run_stats.frames);
     bb_harness_write_long_line(file, "elapsed_ticks", run_stats.elapsed_ticks);
@@ -1081,6 +1233,15 @@ static int bb_has_floor_at(int x, int y)
     return (flags & (BB_TILE_FLAG_SOLID | BB_TILE_FLAG_PLATFORM)) != 0u;
 }
 
+static int bb_enemy_has_floor(const BB_Enemy* enemy)
+{
+    int foot_y;
+
+    foot_y = enemy->y + BB_ENEMY_H + 1;
+    return bb_has_floor_at(enemy->x + 2, foot_y) ||
+        bb_has_floor_at(enemy->x + BB_ENEMY_W - 3, foot_y);
+}
+
 static int bb_hits_platform_on_descent(int x, int old_y, int new_y, int w, int h)
 {
     int tx0;
@@ -1208,6 +1369,10 @@ static void bb_player_hit(void)
     if (bb_player.invuln_ticks > 0) {
         return;
     }
+
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_player_hit_count++;
+#endif
 
     bb_lives--;
     bb_assets_play_hit();
@@ -1452,6 +1617,158 @@ static void bb_update_camera(void)
     ana_camera_set_position(&bb_camera, target, 0);
 }
 
+static ANA_Rect bb_player_damage_rect_at(int x, int y)
+{
+    return ana_rect_make(
+        x + BB_PLAYER_DAMAGE_X,
+        y + BB_PLAYER_DAMAGE_Y,
+        BB_PLAYER_DAMAGE_W,
+        BB_PLAYER_DAMAGE_H);
+}
+
+static ANA_Rect bb_player_stomp_rect_at(int x, int y)
+{
+    return ana_rect_make(
+        x + BB_PLAYER_STOMP_X,
+        y + BB_PLAYER_STOMP_Y,
+        BB_PLAYER_STOMP_W,
+        BB_PLAYER_STOMP_H);
+}
+
+static ANA_Rect bb_enemy_damage_rect(const BB_Enemy* enemy)
+{
+    return ana_rect_make(
+        enemy->x + BB_ENEMY_DAMAGE_X,
+        enemy->y + BB_ENEMY_DAMAGE_Y,
+        BB_ENEMY_DAMAGE_W,
+        BB_ENEMY_DAMAGE_H);
+}
+
+static ANA_Rect bb_enemy_stomp_rect(const BB_Enemy* enemy)
+{
+    return ana_rect_make(
+        enemy->x + BB_ENEMY_STOMP_X,
+        enemy->y + BB_ENEMY_STOMP_Y,
+        BB_ENEMY_STOMP_W,
+        BB_ENEMY_STOMP_H);
+}
+
+static int bb_player_stomps_enemy(
+    const BB_Enemy* enemy,
+    int player_old_y,
+    int player_old_vy,
+    int player_was_airborne)
+{
+    ANA_Rect old_player_rect;
+    ANA_Rect player_rect;
+    ANA_Rect enemy_rect;
+    int old_bottom;
+    int new_bottom;
+    int enemy_top;
+    int enemy_mid;
+
+    if (player_old_vy <= 0) {
+        return 0;
+    }
+
+    old_player_rect =
+        bb_player_stomp_rect_at(bb_player.x, player_old_y);
+    player_rect =
+        bb_player_stomp_rect_at(bb_player.x, bb_player.y);
+    enemy_rect = bb_enemy_stomp_rect(enemy);
+
+    if (player_rect.x + player_rect.w <= enemy_rect.x ||
+            player_rect.x >= enemy_rect.x + enemy_rect.w) {
+        return 0;
+    }
+
+    old_bottom = old_player_rect.y + old_player_rect.h;
+    new_bottom = player_rect.y + player_rect.h;
+    enemy_top = enemy_rect.y;
+    enemy_mid = enemy_rect.y + enemy_rect.h;
+
+    if (!player_was_airborne && old_bottom > enemy_top + BB_STOMP_GRACE) {
+        return 0;
+    }
+
+    if (player_was_airborne &&
+            ana_rect_intersects(player_rect, enemy_rect)) {
+        return 1;
+    }
+
+    if (old_bottom <= enemy_top + BB_STOMP_GRACE &&
+            new_bottom >= enemy_top - BB_STOMP_GRACE) {
+        return 1;
+    }
+
+    if (player_was_airborne &&
+            old_bottom <= enemy_mid + BB_STOMP_GRACE &&
+            new_bottom <= enemy_mid + BB_STOMP_GRACE) {
+        return 1;
+    }
+
+    return 0;
+}
+
+static void bb_stomp_enemy(BB_Enemy* enemy)
+{
+    enemy->alive = 0;
+    enemy->vy = 0;
+    enemy->on_ground = 0;
+    bb_player.y = bb_enemy_stomp_rect(enemy).y - BB_PLAYER_H;
+    bb_player.vy = BB_STOMP_BOUNCE_SPEED;
+    bb_player.on_ground = 0;
+    bb_player.invuln_ticks = 4;
+    bb_score += BB_STOMP_SCORE;
+#ifdef BB_EMULATOR_HARNESS
+    bb_harness_stomp_count++;
+#endif
+    bb_assets_play_plopp();
+}
+
+static int bb_player_enemy_intersects(const BB_Enemy* enemy)
+{
+    return ana_rect_intersects(
+        bb_player_damage_rect_at(bb_player.x, bb_player.y),
+        bb_enemy_damage_rect(enemy));
+}
+
+static void bb_resolve_player_enemy_contacts(
+    int player_old_y,
+    int player_old_vy,
+    int player_was_airborne)
+{
+    int i;
+    BB_Enemy* enemy;
+
+    if (bb_player.invuln_ticks > 0 || bb_enemy_count <= 0) {
+        return;
+    }
+
+    for (i = 0; i < bb_enemy_count; i++) {
+        enemy = &bb_enemies[i];
+        if (!enemy->alive) {
+            continue;
+        }
+
+        if (bb_player_stomps_enemy(
+                enemy,
+                player_old_y,
+                player_old_vy,
+                player_was_airborne)) {
+            bb_stomp_enemy(enemy);
+            continue;
+        }
+
+        if (!bb_player_enemy_intersects(enemy)) {
+            continue;
+        }
+
+        bb_player_hit();
+        return;
+    }
+}
+
 static void bb_update_enemies(void)
 {
     int i;
@@ -1494,20 +1811,6 @@ static void bb_update_enemies(void)
                 }
             }
         }
-
-        if (ana_rect_intersects(
-                ana_rect_make(
-                    bb_player.x,
-                    bb_player.y,
-                    BB_PLAYER_W,
-                    BB_PLAYER_H),
-                ana_rect_make(
-                    enemy->x,
-                    enemy->y,
-                    BB_ENEMY_W,
-                    BB_ENEMY_H))) {
-            bb_player_hit();
-        }
     }
 }
 
@@ -1537,7 +1840,7 @@ static void bb_load_level(int level)
                         bb_actor_tile_x(x, BB_ENEMY_W);
                     bb_enemies[bb_enemy_count].y = bb_enemy_tile_y(y);
                     bb_enemies[bb_enemy_count].vy = 0;
-                    bb_enemies[bb_enemy_count].on_ground = 1;
+                    bb_enemies[bb_enemy_count].on_ground = 0;
                     bb_enemies[bb_enemy_count].vx = (bb_enemy_count & 1) ? -1 : 1;
                     bb_enemies[bb_enemy_count].alive = 1;
                     bb_enemy_count++;
@@ -1551,6 +1854,9 @@ static void bb_load_level(int level)
     }
 
     bb_reset_player();
+    for (y = 0; y < bb_enemy_count; y++) {
+        bb_enemies[y].on_ground = bb_enemy_has_floor(&bb_enemies[y]);
+    }
     bb_jump_latched = 0;
     bb_render_reset();
     printf(
@@ -1594,6 +1900,10 @@ void byte_brothers_update(ANA_Time time)
     int reached_goal;
     int jump_pressed;
     int jump_down;
+    int player_old_y;
+    int player_old_vy;
+    int player_was_airborne;
+    int jump_during_dash;
 
     (void)time;
 
@@ -1638,16 +1948,20 @@ void byte_brothers_update(ANA_Time time)
         bb_jump_latched = 0;
     }
 
-    if (jump_pressed && bb_player.on_ground) {
-        bb_player.vy = BB_JUMP_SPEED;
-        bb_player.on_ground = 0;
-        bb_jump_latched = 1;
-        bb_assets_play_jump();
-    }
-
     if (dash_pressed && bb_player.dash_ticks == 0) {
         bb_player.dash_ticks = BB_DASH_TICKS;
         bb_assets_play_power();
+    }
+
+    jump_during_dash = bb_player.dash_ticks > 0;
+    if (jump_pressed && bb_player.on_ground) {
+        bb_player.vy = jump_during_dash ? BB_DASH_JUMP_SPEED : BB_JUMP_SPEED;
+        if (jump_during_dash && bb_player.dash_ticks < BB_DASH_JUMP_TICKS) {
+            bb_player.dash_ticks = BB_DASH_JUMP_TICKS;
+        }
+        bb_player.on_ground = 0;
+        bb_jump_latched = 1;
+        bb_assets_play_jump();
     }
 
     if (bb_player.dash_ticks > 0) {
@@ -1657,10 +1971,13 @@ void byte_brothers_update(ANA_Time time)
         bb_player.vx = move * BB_PLAYER_SPEED;
     }
 
+    player_was_airborne = !bb_player.on_ground;
+    player_old_y = bb_player.y;
     bb_player.vy += BB_GRAVITY;
     if (bb_player.vy > BB_MAX_FALL) {
         bb_player.vy = BB_MAX_FALL;
     }
+    player_old_vy = bb_player.vy;
 
     bb_move_player_h(bb_player.vx);
     bb_move_player_v(bb_player.vy);
@@ -1675,6 +1992,10 @@ void byte_brothers_update(ANA_Time time)
         bb_player_hit();
     }
 
+    bb_resolve_player_enemy_contacts(
+        player_old_y,
+        player_old_vy,
+        player_was_airborne);
     bb_update_enemies();
 
     if (reached_goal) {
