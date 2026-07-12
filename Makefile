@@ -28,6 +28,7 @@ AMIGA_INPUT_PROBE_HARNESS_CFLAGS ?= $(AMIGA_CFLAGS) -DPROBE_RUNTIME_TICKS=200
 AMIGA_INPUT_PROBE_SYNTHETIC_HARNESS_CFLAGS ?= $(AMIGA_CFLAGS) -DPROBE_RUNTIME_TICKS=60 -DPROBE_SYNTHETIC_INPUT=1
 BB_HARNESS_FRAMES ?= 120
 BB_HARNESS_SCENARIO_ID ?= 0
+HOST_BYTE_BROTHERS_HARNESS_CFLAGS ?= $(CFLAGS) -DBB_EMULATOR_HARNESS -DBB_HARNESS_FRAMES=$(BB_HARNESS_FRAMES) -DBB_HARNESS_SCENARIO=$(BB_HARNESS_SCENARIO_ID) -DBB_INPUT_DEBUG_OVERLAY=0
 AMIGA_BYTE_BROTHERS_HARNESS_EXTRA_CFLAGS ?=
 AMIGA_BYTE_BROTHERS_HARNESS_CFLAGS ?= $(AMIGA_A1200_DEBUG_CFLAGS) -DBB_EMULATOR_HARNESS -DBB_HARNESS_FRAMES=$(BB_HARNESS_FRAMES) -DBB_HARNESS_SCENARIO=$(BB_HARNESS_SCENARIO_ID) -DBB_INPUT_DEBUG_OVERLAY=0 $(AMIGA_BYTE_BROTHERS_HARNESS_EXTRA_CFLAGS)
 AMIGA_BUFFERED_DEBUG_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_DEBUG_STATS
@@ -63,6 +64,7 @@ ANA_SRCS := \
 	src/core/ana_platform.c \
 	src/core/ana_helpers.c \
 	src/core/ana_result.c \
+	src/gfx/ana_amiga_sprite.c \
 	src/gfx/ana_gfx.c \
 	src/input/ana_input.c \
 	src/sound/ana_sound.c
@@ -127,6 +129,7 @@ BYTE_BROTHERS_SRCS := \
 	examples/byte_brothers/main.c \
 	examples/byte_brothers/byte_brothers_game.c \
 	examples/byte_brothers/byte_brothers_levels.c \
+	examples/byte_brothers/byte_brothers_sprites.c \
 	examples/byte_brothers/byte_brothers_render.c \
 	examples/byte_brothers/byte_brothers_assets.c
 BYTE_BROTHERS_HEADERS := \
@@ -134,6 +137,7 @@ BYTE_BROTHERS_HEADERS := \
 	examples/byte_brothers/byte_brothers_game.h \
 	examples/byte_brothers/byte_brothers_internal.h \
 	examples/byte_brothers/byte_brothers_levels.h \
+	examples/byte_brothers/byte_brothers_sprites.h \
 	examples/byte_brothers/byte_brothers_render.h
 BYTE_BROTHERS_ASSET_BUILD_DIR := $(BUILD_DIR)/assets/byte_brothers
 BYTE_BROTHERS_ASSET_DIR := $(BYTE_BROTHERS_ASSET_BUILD_DIR)/assets
@@ -179,6 +183,7 @@ AMIGA_INPUT_PROBE_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/inp
 AMIGA_INPUT_PROBE_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/input_probe/input_probe
 AMIGA_INPUT_PROBE_SYNTHETIC_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/input_probe_synthetic/input_probe
 AMIGA_BYTE_BROTHERS_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/byte_brothers/byte_brothers
+HOST_BYTE_BROTHERS_HARNESS_BIN := $(BUILD_DIR)/host-harness/examples/byte_brothers/byte_brothers
 AMIGA_INVADERS_DEBUG_BIN := $(AMIGA_DEBUG_BUILD_DIR)/examples/invaders-debug/invaders
 AMIGA_INVADERS_BUFFERED_DEBUG_BIN := $(AMIGA_BUFFERED_DEBUG_BUILD_DIR)/examples/invaders-buffered-debug/invaders
 AMIGA_INVADERS_SYNC_BIN := $(AMIGA_SYNC_BUILD_DIR)/examples/invaders-sync/invaders
@@ -206,7 +211,7 @@ BYTE_BROTHERS_A1200_ADF := $(ADF_DIR)/byte-brothers-a1200.adf
 BYTE_BROTHERS_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-a1200-debug.adf
 BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG := $(BUILD_DIR)/fs-uae/byte-brothers-a1200-debug.fs-uae
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug release-package clean-assets clean
 
 all: lib examples tools
 
@@ -295,12 +300,21 @@ emulator-byte-brothers-all:
 	python3 tools/emulator/run_byte_brothers.py --scenario static
 	python3 tools/emulator/run_byte_brothers.py --scenario scroll
 	python3 tools/emulator/run_byte_brothers.py --scenario input
+	python3 tools/emulator/run_byte_brothers.py --scenario enemy-overflow
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-drop
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-moving
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-fall
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-edge
 
 emulator-byte-brothers-sprite-check:
 	python3 tools/emulator/check_byte_brothers_sprite_backend.py
 
 emulator-byte-brothers-visual:
-	python3 tools/emulator/capture_byte_brothers_visual.py --scenario scroll
+	python3 tools/emulator/capture_byte_brothers_visual.py --scenario scroll --capture-mode screen-recording --strict-raster
+
+emulator-byte-brothers-host-visual:
+	python3 tools/emulator/run_byte_brothers_host_visual.py --scenario scroll
 
 amaze-a1200-adf: $(AMAZE_A1200_ADF)
 
@@ -318,7 +332,17 @@ run-byte-brothers-a1200-debug: $(BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG)
 release-package:
 	$(RM) $(RELEASE_ROOT)
 	mkdir -p $(RELEASE_DIR)
-	cp -R $(RELEASE_FILES) $(RELEASE_DIR)/
+	tar -cf - \
+		--exclude='.DS_Store' \
+		--exclude='__pycache__' \
+		--exclude='*.pyc' \
+		--exclude='.pytest_cache' \
+		--exclude='tools/vscode-ana/.vscode-test' \
+		--exclude='tools/vscode-ana/node_modules' \
+		--exclude='tools/vscode-ana/out' \
+		--exclude='tools/vscode-ana/coverage' \
+		--exclude='tools/vscode-ana/*.vsix' \
+		$(RELEASE_FILES) | tar -xf - -C $(RELEASE_DIR)
 	tar -C $(RELEASE_ROOT) -czf $(RELEASE_ARCHIVE) $(RELEASE_NAME)
 	@echo "Wrote $(RELEASE_ARCHIVE)"
 
@@ -367,6 +391,10 @@ $(BYTE_BROTHERS_ASSET_STAMP): $(TOOL_BINS) $(BYTE_BROTHERS_ASSET_SOURCES)
 $(BUILD_DIR)/examples/byte_brothers/byte_brothers: $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADERS) $(LIBANA) $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(BYTE_BROTHERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
+
+$(HOST_BYTE_BROTHERS_HARNESS_BIN): $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADERS) $(LIBANA) $(BYTE_BROTHERS_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(CC) $(HOST_BYTE_BROTHERS_HARNESS_CFLAGS) $(BYTE_BROTHERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/tools/ana-convert/ana-convert: tools/ana-convert/main.c tools/ana-convert/vendor/stb_image.h include/ana/ana_version.h
 	mkdir -p $(@D)
@@ -642,8 +670,9 @@ $(BUILD_DIR)/tests/%: tests/%.c $(LIBANA)
 
 test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS) $(EXAMPLE_BINS)
 	set -e; for test_bin in $(TEST_BINS); do $$test_bin; done
-	set -e; for example_bin in $(EXAMPLE_BINS); do $$example_bin >/dev/null; done
+	set -e; for example_bin in $(EXAMPLE_BINS); do ANA_HOST_UNPACED=1 $$example_bin >/dev/null; done
 	ANA_CONVERT=$(BUILD_DIR)/tools/ana-convert/ana-convert ANA_CONVERT_PROBE=$(BUILD_DIR)/tests/ana_convert_image_test sh tests/ana_convert_test.sh
+	python3 tests/emulator_visual_test.py
 
 clean:
 	$(RM) $(BUILD_DIR)

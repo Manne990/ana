@@ -5,7 +5,7 @@ loading simple and avoids expensive decoding during gameplay.
 
 ## Current asset formats
 
-Implemented for 0.1:
+Implemented for 0.2:
 
 - `.anaimg` for indexed images and animation frames
 - `.anafnt` for bitmap fonts used by the Invaders example
@@ -112,6 +112,17 @@ Build a manifest:
 build/tools/ana-convert/ana-convert build assets.ana --out build/assets/game
 ```
 
+Validate the manifest and all referenced source files without creating output:
+
+```sh
+build/tools/ana-convert/ana-convert validate assets.ana
+```
+
+Validation rejects missing sources, unsafe asset names, duplicate type/name
+pairs, malformed options, and music files that are not four-channel ProTracker
+MODs. Output paths are always derived from validated asset names and remain
+inside the selected output directory.
+
 Minimal manifest:
 
 ```text
@@ -166,7 +177,7 @@ Normal games should be able to choose either model:
 
 ## Palette rules
 
-For the 0.1 baseline:
+For the 0.2 baseline:
 
 - target 16 colors
 - use one shared game palette when possible
@@ -195,8 +206,9 @@ assets/
   theme.mod
 ```
 
-When a manifest contains `music theme theme.mod`, the converter copies the
-source MOD to `theme.mod` in the output asset directory. Games load it with
+When a manifest contains `music theme theme.mod`, the converter verifies a
+four-channel ProTracker signature and copies the source MOD to `theme.mod` in
+the output asset directory. Games load it with
 `ana_load_music("assets/theme.mod")` and start it with `ana_play_music`.
 
 Build it with:

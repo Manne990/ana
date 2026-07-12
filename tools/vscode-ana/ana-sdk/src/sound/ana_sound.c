@@ -429,14 +429,6 @@ static int ana_music_signature_channels(const unsigned char* signature)
         return 4;
     }
 
-    if (signature[1] == 'C' &&
-            signature[2] == 'H' &&
-            signature[3] == 'N' &&
-            signature[0] >= '1' &&
-            signature[0] <= '9') {
-        return (int)(signature[0] - '0');
-    }
-
     return 0;
 }
 
@@ -740,17 +732,16 @@ void ana_configure_audio(const ANA_AudioConfig* config)
 {
     if (config == NULL) {
         ana_audio_current_config = ana_audio_default_config;
-        return;
+    } else {
+        ana_audio_current_config.music_channels =
+            ana_audio_sanitize_channels(config->music_channels);
+        ana_audio_current_config.sfx_channels =
+            ana_audio_sanitize_channels(config->sfx_channels);
+        ana_audio_current_config.sfx_can_steal_music =
+            config->sfx_can_steal_music != 0;
+        ana_audio_current_config.music_can_use_free_sfx_channels =
+            config->music_can_use_free_sfx_channels != 0;
     }
-
-    ana_audio_current_config.music_channels =
-        ana_audio_sanitize_channels(config->music_channels);
-    ana_audio_current_config.sfx_channels =
-        ana_audio_sanitize_channels(config->sfx_channels);
-    ana_audio_current_config.sfx_can_steal_music =
-        config->sfx_can_steal_music != 0;
-    ana_audio_current_config.music_can_use_free_sfx_channels =
-        config->music_can_use_free_sfx_channels != 0;
 
     if (ana_music_playing) {
         ana_music_channels = ana_music_choose_channels();

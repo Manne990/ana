@@ -176,9 +176,6 @@ typedef struct ANA_Label {
     int dirty;
 } ANA_Label;
 
-#ifdef ANA_TARGET_AMIGA
-struct SimpleSprite;
-
 typedef struct ANA_AmigaSpriteUpdateStats {
     long position_checks;
     long position_mismatches;
@@ -197,7 +194,6 @@ typedef struct ANA_AmigaSpriteUpdateStats {
     int max_raster_line;
     int last_raster_line;
 } ANA_AmigaSpriteUpdateStats;
-#endif
 
 void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
@@ -213,43 +209,6 @@ void ana_scroll_rect(
 void ana_present(void);
 ANA_RenderStats ana_render_stats(void);
 void* ana_gfx_native_viewport(void);
-
-#ifdef ANA_TARGET_AMIGA
-void ana_amiga_sprite_update_stats_reset(ANA_AmigaSpriteUpdateStats* stats);
-void ana_amiga_sprite_wait_until_safe(
-    const struct SimpleSprite* sprite,
-    int y,
-    int height,
-    ANA_AmigaSpriteUpdateStats* stats);
-void ana_amiga_sprite_record_write_raster(
-    const struct SimpleSprite* sprite,
-    int y,
-    int height,
-    int trace_raster,
-    ANA_AmigaSpriteUpdateStats* stats);
-void ana_amiga_sprite_copy_control_words(
-    const struct SimpleSprite* sprite,
-    unsigned short* target_data);
-void ana_amiga_sprite_expected_control_words(
-    int x,
-    int y,
-    int height,
-    unsigned short* word0,
-    unsigned short* word1);
-void ana_amiga_sprite_set_position_safe(
-    struct SimpleSprite* sprite,
-    int x,
-    int y,
-    int height,
-    int trace_raster,
-    ANA_AmigaSpriteUpdateStats* stats);
-void ana_amiga_sprite_record_control_check(
-    const struct SimpleSprite* sprite,
-    int x,
-    int y,
-    int height,
-    ANA_AmigaSpriteUpdateStats* stats);
-#endif
 
 ANA_Image ana_load_image(const char* path);
 ANA_Image ana_load_image_data(const unsigned char* bytes, long size);

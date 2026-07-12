@@ -264,6 +264,8 @@
     ]
   },
   "scripts": {
+    "sync-sdk": "node scripts/sync-bundled-sdk.mjs",
+    "precompile": "npm run sync-sdk",
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
     "lint": "eslint src test scripts",

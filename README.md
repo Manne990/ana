@@ -33,6 +33,8 @@ Implemented so far:
   scrolling/tilemap-oriented games
 - small helpers for rectangles, camera/world conversion, clamp, timers,
   retained BOBs, masked retained clear repair, and dirty labels
+- an advanced Amiga hardware-sprite batch backend with channel ownership,
+  image conversion, bitmap fallback support, and raster-safe updates
 - host-side image/font conversion to `.anaimg` and `.anafnt`
 - PNG/PPM source assets, `.anapal` palettes, `.mod` music assets, and simple
   asset manifests
@@ -100,6 +102,17 @@ make test
 ```
 
 Host tests require `python3` for small PNG fixture generation.
+
+Byte Brothers has deterministic behavior and rendering feedback loops:
+
+```sh
+make emulator-byte-brothers-all
+make emulator-byte-brothers-visual
+```
+
+The first runs gameplay, input, overflow, physics, and stomp scenarios in
+FS-UAE. The second combines Amiga sprite/raster telemetry with consecutive
+host-rendered frame analysis.
 
 Amiga examples:
 

@@ -17,6 +17,9 @@ sample games with music, sound effects, scrolling, and clearer game structure.
 - tile-layer oriented scrolling support
 - render mode/backend declarations for scrolling games
 - source release packaging through `make release-package`
+- framework-owned Amiga hardware-sprite batches with raster-safe updates
+- strict manifest/source validation and four-channel MOD validation
+- deterministic host-frame and FS-UAE behavior/raster feedback loops
 
 ## Included examples
 

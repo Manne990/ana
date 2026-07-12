@@ -415,6 +415,7 @@ int ana_run(const ANA_Game* game)
 
     while (!ana_runtime_quit_requested) {
         updates_this_frame = 0;
+        ana_input_poll();
         do {
             if (ana_runtime_quit_requested) {
                 break;
@@ -423,7 +424,7 @@ int ana_run(const ANA_Game* game)
 #if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             perf_start = ana_platform_perf_ticks();
 #endif
-            ana_input_update();
+            ana_input_advance_without_poll();
 #if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             ana_runtime_record_perf_ticks(
                 &ana_runtime_last_stats.input_perf_ticks,
@@ -451,6 +452,7 @@ int ana_run(const ANA_Game* game)
 
             time.tick++;
             updates_this_frame++;
+            ana_sound_update();
 
             if (updates_this_frame >= ANA_RUNTIME_MAX_UPDATES_PER_FRAME &&
                     ana_runtime_update_due(
@@ -502,7 +504,6 @@ int ana_run(const ANA_Game* game)
                 schedule_start_ticks,
                 (long)time.tick,
                 (long)profile.fps);
-            ana_sound_update();
         }
     }
 

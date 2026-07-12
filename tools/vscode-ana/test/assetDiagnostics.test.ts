@@ -37,7 +37,7 @@ suite("asset diagnostics", () => {
       "assets/assets.ana": [
         "ANA_ASSETS 1",
         "palette game player.ppm --colors 32",
-        "image player player.ppm --palette missing --frame-width 3 --transparent #ff00ff",
+        "image player player.ppm --palette missing --frame-width 3 --frame-height 2 --transparent #ff00ff",
         "sound missing missing.wav"
       ].join("\n")
     });
@@ -97,7 +97,7 @@ suite("asset diagnostics", () => {
       "assets/assets.ana": [
         "ANA_ASSETS 1",
         "palette game palette.ppm --colors 16",
-        "image player player.ppm --palette game --frame-width 20 --transparent #00ff00 --hardware-sprite"
+        "image player player.ppm --palette game --frame-width 20 --frame-height 1 --transparent #00ff00 --hardware-sprite"
       ].join("\n"),
       "build/adf/complete_game.adf": "adf-payload",
       "build/amiga-a1200/complete_game": "amiga-executable"

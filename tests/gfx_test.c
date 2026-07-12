@@ -131,6 +131,56 @@ static const unsigned char memory_test_unmasked2_image_bytes[] = {
     0x80, 0x80, 0x40, 0x80
 };
 
+static int sprite_test_color_map(int color, void* user_data)
+{
+    (void)user_data;
+    return color & 3;
+}
+
+static void test_amiga_sprite_encoder(void)
+{
+    ANA_Image image;
+    unsigned short data[8];
+
+    image = ana_load_image_data(
+        memory_test_mask16_image_bytes,
+        (long)sizeof(memory_test_mask16_image_bytes));
+    assert(image != 0);
+
+    assert(ana_amiga_sprite_encode_image_frame(
+        image,
+        0,
+        sprite_test_color_map,
+        0,
+        data,
+        (long)(sizeof(data) / sizeof(data[0]))));
+    assert(data[0] == 0u);
+    assert(data[1] == 0u);
+    assert(data[2] == 0xff00u);
+    assert(data[3] == 0u);
+    assert(data[4] == 0x00ffu);
+    assert(data[5] == 0u);
+    assert(data[6] == 0u);
+    assert(data[7] == 0u);
+
+    assert(!ana_amiga_sprite_encode_image_frame(
+        image,
+        1,
+        sprite_test_color_map,
+        0,
+        data,
+        8L));
+    assert(!ana_amiga_sprite_encode_image_frame(
+        image,
+        0,
+        sprite_test_color_map,
+        0,
+        data,
+        7L));
+    assert(ana_amiga_sprite_batch_create(0) == 0);
+    ana_free_image(image);
+}
+
 static const unsigned char memory_test_font_bytes[] = {
     0x41, 0x4e, 0x41, 0x46, 0x4e, 0x54, 0x30, 0x31,
     0x03, 0x00, 0x02, 0x00, 0x30, 0x03, 0x00, 0x00,
@@ -640,6 +690,7 @@ int main(void)
     test_clear_and_present();
     test_palette_accepts_supported_colors();
     test_scroll_rect();
+    test_amiga_sprite_encoder();
     test_image_loading_and_drawing();
     test_font_loading_and_drawing();
     test_retained_render_helpers();

@@ -26,6 +26,8 @@ typedef struct ANA_RenderStats {
     long chunky_clear_pixels;
     long max_dirty_rects;
     long max_converted_pixels;
+    long max_converted_rect_w;
+    long max_converted_rect_h;
     long max_planar_clear_pixels;
     long max_chunky_clear_pixels;
     long present_total_perf_ticks;
@@ -34,6 +36,28 @@ typedef struct ANA_RenderStats {
     long present_flip_perf_ticks;
     long screen_buffer_flips;
     long direct_flips;
+    long full_dirty_fill_rects;
+    long full_dirty_scroll_rects;
+    long full_dirty_image_rects;
+    long full_dirty_text_rects;
+    long full_dirty_mask_fill_rects;
+    long full_dirty_generic_rects;
+    long dirty_fill_rects;
+    long dirty_fill_pixels;
+    long hardware_fill_rects;
+    long hardware_fill_pixels;
+    long hardware_restore_rects;
+    long hardware_restore_pixels;
+    long hardware_restore_fallbacks;
+    long hardware_redraw_rects;
+    long hardware_redraw_pixels;
+    long hardware_scroll_alloc_attempts;
+    long hardware_scroll_alloc_failures;
+    long hardware_scroll_alloc_width;
+    long hardware_scroll_alloc_failed_buffer;
+    long hardware_scroll_alloc_failed_plane;
+    long amiga_chip_avail_before_scroll_alloc;
+    long amiga_chip_largest_before_scroll_alloc;
 } ANA_RenderStats;
 
 typedef void (*ANA_RedrawCallback)(ANA_Rect rect, void* user_data);
@@ -152,6 +176,25 @@ typedef struct ANA_Label {
     int dirty;
 } ANA_Label;
 
+typedef struct ANA_AmigaSpriteUpdateStats {
+    long position_checks;
+    long position_mismatches;
+    long zero_control_words;
+    long raster_checks;
+    long visible_raster_writes;
+    long safe_wait_calls;
+    long safe_top_hits;
+    long safe_bottom_hits;
+    long safe_visible_waits;
+    long safe_write_waits;
+    long span_checks;
+    long span_waits;
+    long unsafe_span_writes;
+    int min_raster_line;
+    int max_raster_line;
+    int last_raster_line;
+} ANA_AmigaSpriteUpdateStats;
+
 void ana_set_palette(const ANA_Color* colors, int count);
 void ana_clear(unsigned char color_index);
 void ana_fill_rect(unsigned char color_index, int x, int y, int width, int height);
@@ -165,6 +208,7 @@ void ana_scroll_rect(
     unsigned char clear_color);
 void ana_present(void);
 ANA_RenderStats ana_render_stats(void);
+void* ana_gfx_native_viewport(void);
 
 ANA_Image ana_load_image(const char* path);
 ANA_Image ana_load_image_data(const unsigned char* bytes, long size);
@@ -174,6 +218,8 @@ void ana_draw_image_frame(ANA_Image image, int frame, int x, int y);
 int ana_image_width(ANA_Image image);
 int ana_image_height(ANA_Image image);
 int ana_image_frame_count(ANA_Image image);
+int ana_image_pixel_index(ANA_Image image, int frame, int x, int y);
+int ana_image_pixel_visible(ANA_Image image, int frame, int x, int y);
 
 ANA_Rect ana_retained_clear_rect(
     ANA_Rect rect,
@@ -273,9 +319,13 @@ int ana_tile_layer_native_scroll_active(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_available(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_active(const ANA_TileLayer* tile_layer);
 int ana_tile_layer_hardware_scroll_frame_slot(const ANA_TileLayer* tile_layer);
+int ana_tile_layer_hardware_scroll_update_view(ANA_TileLayer* tile_layer);
 void ana_tile_layer_invalidate(ANA_TileLayer* tile_layer);
 void ana_tile_layer_draw(ANA_TileLayer* tile_layer);
 void ana_tile_layer_redraw_world_rect(
+    ANA_TileLayer* tile_layer,
+    ANA_Rect world_rect);
+void ana_tile_layer_restore_world_rect(
     ANA_TileLayer* tile_layer,
     ANA_Rect world_rect);
 

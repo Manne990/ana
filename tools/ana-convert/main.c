@@ -27,6 +27,7 @@
 #define ANA_CONVERT_MAX_DIMENSION 4096
 #define ANA_CONVERT_MAX_TOKENS 32
 #define ANA_CONVERT_MAX_MANIFEST_PALETTES 16
+#define ANA_CONVERT_MAX_MANIFEST_ASSETS 128
 #define ANA_CONVERT_IMAGE_FLAG_MASKED 0x01u
 #define ANA_CONVERT_FONT_HEADER_SIZE 16
 #define ANA_CONVERT_SOUND_HEADER_SIZE 20
@@ -128,6 +129,7 @@ static void print_usage(void)
     printf("  ana-convert sound input.anasfx|input.wav --out output.anasnd [options]\n");
     printf("  ana-convert palette palette.png --out game.anapal --colors 16\n");
     printf("  ana-convert build assets.ana --out build/assets/game\n");
+    printf("  ana-convert validate assets.ana\n");
     printf("\n");
     printf("Image options:\n");
     printf("  --palette PATH          ANA palette file or manifest palette name\n");
@@ -263,6 +265,80 @@ static char* asset_output_path(const char* output_dir, const char* name, const c
     path = path_join(output_dir, filename);
     free(filename);
     return path;
+}
+
+static int asset_name_is_safe(const char* name)
+{
+    const unsigned char* cursor;
+
+    if (name == NULL || name[0] == '\0') {
+        return 0;
+    }
+
+    cursor = (const unsigned char*)name;
+    while (*cursor != '\0') {
+        if (!isalnum(*cursor) && *cursor != '_' && *cursor != '-') {
+            return 0;
+        }
+        cursor++;
+    }
+
+    return 1;
+}
+
+static char* manifest_asset_key(const char* type, const char* name)
+{
+    char* key;
+    size_t type_length;
+    size_t name_length;
+
+    type_length = strlen(type);
+    name_length = strlen(name);
+    key = (char*)malloc(type_length + name_length + 2u);
+    if (key == NULL) {
+        return NULL;
+    }
+    memcpy(key, type, type_length);
+    key[type_length] = ':';
+    memcpy(key + type_length + 1u, name, name_length + 1u);
+    return key;
+}
+
+static int file_is_readable(const char* path)
+{
+    FILE* file;
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return 0;
+    }
+    fclose(file);
+    return 1;
+}
+
+static int mod_signature_is_supported(const unsigned char* signature)
+{
+    return signature != NULL &&
+        (memcmp(signature, "M.K.", 4u) == 0 ||
+            memcmp(signature, "M!K!", 4u) == 0 ||
+            memcmp(signature, "FLT4", 4u) == 0 ||
+            memcmp(signature, "4CHN", 4u) == 0);
+}
+
+static int mod_file_is_supported(const char* path)
+{
+    unsigned char header[1084];
+    FILE* file;
+    size_t count;
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return 0;
+    }
+    count = fread(header, 1u, sizeof(header), file);
+    fclose(file);
+    return count == sizeof(header) &&
+        mod_signature_is_supported(header + 1080);
 }
 
 static int ensure_dir(const char* path)
@@ -1363,13 +1439,14 @@ static int parse_image_flags(
     int argc,
     char** argv,
     int start_index,
-    ANA_ImageOptions* options)
+    ANA_ImageOptions* options,
+    int allow_out)
 {
     int i;
 
     i = start_index;
     while (i < argc) {
-        if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+        if (allow_out && strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
             options->output_path = argv[i + 1];
             i += 2;
         } else if (strcmp(argv[i], "--palette") == 0 && i + 1 < argc) {
@@ -1397,6 +1474,8 @@ static int parse_image_flags(
             }
             options->has_transparent = 1;
             i += 2;
+        } else if (strcmp(argv[i], "--hardware-sprite") == 0) {
+            i++;
         } else {
             return 0;
         }
@@ -1421,20 +1500,21 @@ static int parse_image_args(int argc, char** argv, ANA_ImageOptions* options)
     }
 
     image_options_init(options, argv[2], NULL);
-    return parse_image_flags(argc, argv, 3, options);
+    return parse_image_flags(argc, argv, 3, options, 1);
 }
 
 static int parse_font_flags(
     int argc,
     char** argv,
     int start_index,
-    ANA_FontOptions* options)
+    ANA_FontOptions* options,
+    int allow_out)
 {
     int i;
 
     i = start_index;
     while (i < argc) {
-        if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+        if (allow_out && strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
             options->image.output_path = argv[i + 1];
             i += 2;
         } else if (strcmp(argv[i], "--palette") == 0 && i + 1 < argc) {
@@ -1490,7 +1570,7 @@ static int parse_font_args(int argc, char** argv, ANA_FontOptions* options)
     }
 
     font_options_init(options, argv[2], NULL);
-    return parse_font_flags(argc, argv, 3, options);
+    return parse_font_flags(argc, argv, 3, options, 1);
 }
 
 static int run_image_command(int argc, char** argv)
@@ -2124,7 +2204,7 @@ static int wav_frame_sample_16(const ANA_WavSource* wav, long frame)
 
         sample = wav->data + offset + (long)channel * (long)bytes_per_sample;
         if (wav->bits_per_sample == 8) {
-            value = ((int)sample[0] - 128) << 8;
+            value = ((int)sample[0] - 128) * 256;
         } else {
             value = (int)sample[0] | ((int)sample[1] << 8);
             if (value >= 32768) {
@@ -2444,7 +2524,8 @@ static int run_manifest_palette(
     const char* output_dir,
     ANA_ManifestPalette* palettes,
     int* palette_count,
-    int line_number)
+    int line_number,
+    int validate_only)
 {
     ANA_PaletteOptions options;
     char* input_path;
@@ -2497,7 +2578,17 @@ static int run_manifest_palette(
         }
     }
 
-    result = run_palette_options(&options);
+    if (validate_only) {
+        result = file_is_readable(options.input_path) ? 0 : 1;
+        if (result != 0) {
+            fprintf(
+                stderr,
+                "ana-convert: could not read palette source at line %d\n",
+                line_number);
+        }
+    } else {
+        result = run_palette_options(&options);
+    }
     if (result != 0) {
         free(input_path);
         free(output_path);
@@ -2525,7 +2616,8 @@ static int run_manifest_image(
     const char* output_dir,
     const ANA_ManifestPalette* palettes,
     int palette_count,
-    int line_number)
+    int line_number,
+    int validate_only)
 {
     ANA_ImageOptions options;
     char* input_path;
@@ -2549,7 +2641,7 @@ static int run_manifest_image(
     }
 
     image_options_init(&options, input_path, output_path);
-    if (!parse_image_flags(token_count, tokens, 3, &options)) {
+    if (!parse_image_flags(token_count, tokens, 3, &options, 0)) {
         fprintf(stderr, "ana-convert: invalid image options at line %d\n", line_number);
         free(input_path);
         free(output_path);
@@ -2585,7 +2677,18 @@ static int run_manifest_image(
         }
     }
 
-    {
+    if (validate_only) {
+        result = file_is_readable(options.input_path) &&
+            (options.palette_path == NULL ||
+                manifest_palette_path != NULL ||
+                file_is_readable(options.palette_path)) ? 0 : 1;
+        if (result != 0) {
+            fprintf(
+                stderr,
+                "ana-convert: unreadable image source or palette at line %d\n",
+                line_number);
+        }
+    } else {
         ANA_SourceImage image;
         ANA_Palette palette;
         int ok;
@@ -2608,7 +2711,7 @@ static int run_manifest_image(
         result = ok ? 0 : 1;
     }
 
-    if (result == 0) {
+    if (result == 0 && !validate_only) {
         printf("Wrote %s from %s\n", output_path, options.input_path);
     }
     free(palette_path);
@@ -2624,7 +2727,8 @@ static int run_manifest_font(
     const char* output_dir,
     const ANA_ManifestPalette* palettes,
     int palette_count,
-    int line_number)
+    int line_number,
+    int validate_only)
 {
     ANA_FontOptions options;
     char* input_path;
@@ -2648,7 +2752,7 @@ static int run_manifest_font(
     }
 
     font_options_init(&options, input_path, output_path);
-    if (!parse_font_flags(token_count, tokens, 3, &options)) {
+    if (!parse_font_flags(token_count, tokens, 3, &options, 0)) {
         fprintf(stderr, "ana-convert: invalid font options at line %d\n", line_number);
         free(input_path);
         free(output_path);
@@ -2684,7 +2788,20 @@ static int run_manifest_font(
         }
     }
 
-    result = run_font_options(&options);
+    if (validate_only) {
+        result = file_is_readable(options.image.input_path) &&
+            (options.image.palette_path == NULL ||
+                manifest_palette_path != NULL ||
+                file_is_readable(options.image.palette_path)) ? 0 : 1;
+        if (result != 0) {
+            fprintf(
+                stderr,
+                "ana-convert: unreadable font source or palette at line %d\n",
+                line_number);
+        }
+    } else {
+        result = run_font_options(&options);
+    }
 
     free(palette_path);
     free(input_path);
@@ -2697,7 +2814,8 @@ static int run_manifest_sound(
     int token_count,
     const char* manifest_dir,
     const char* output_dir,
-    int line_number)
+    int line_number,
+    int validate_only)
 {
     ANA_SoundOptions options;
     char* input_path;
@@ -2726,7 +2844,20 @@ static int run_manifest_sound(
         return 0;
     }
 
-    result = run_sound_options(&options);
+    if (validate_only) {
+        if (has_extension(options.input_path, ".wav")) {
+            ANA_WavSource wav;
+
+            result = read_wav_source(options.input_path, &wav) ? 0 : 1;
+            if (result == 0) {
+                wav_source_free(&wav);
+            }
+        } else {
+            result = read_sound_recipe(options.input_path, &options) ? 0 : 1;
+        }
+    } else {
+        result = run_sound_options(&options);
+    }
 
     free(input_path);
     free(output_path);
@@ -2738,7 +2869,8 @@ static int run_manifest_music(
     int token_count,
     const char* manifest_dir,
     const char* output_dir,
-    int line_number)
+    int line_number,
+    int validate_only)
 {
     char* input_path;
     char* output_path;
@@ -2766,8 +2898,16 @@ static int run_manifest_music(
         return 0;
     }
 
-    ok = copy_binary_file(input_path, output_path);
-    if (ok) {
+    ok = mod_file_is_supported(input_path);
+    if (!ok) {
+        fprintf(
+            stderr,
+            "ana-convert: unsupported or unreadable four-channel MOD at line %d\n",
+            line_number);
+    } else if (!validate_only) {
+        ok = copy_binary_file(input_path, output_path);
+    }
+    if (ok && !validate_only) {
         printf("Wrote %s from %s\n", output_path, input_path);
     }
 
@@ -2776,7 +2916,7 @@ static int run_manifest_music(
     return ok;
 }
 
-static int run_build_command(int argc, char** argv)
+static int run_manifest_command(int argc, char** argv, int validate_only)
 {
     const char* manifest_path;
     const char* output_dir;
@@ -2786,6 +2926,8 @@ static int run_build_command(int argc, char** argv)
     char original_line[512];
     char* tokens[ANA_CONVERT_MAX_TOKENS];
     ANA_ManifestPalette palettes[ANA_CONVERT_MAX_MANIFEST_PALETTES];
+    char* asset_names[ANA_CONVERT_MAX_MANIFEST_ASSETS];
+    int asset_count;
     int palette_count;
     int line_number;
     int token_count;
@@ -2793,12 +2935,21 @@ static int run_build_command(int argc, char** argv)
     int ok;
     int i;
 
-    if (!parse_build_args(argc, argv, &manifest_path, &output_dir)) {
-        print_usage();
-        return 1;
+    if (validate_only) {
+        if (argc != 3) {
+            print_usage();
+            return 1;
+        }
+        manifest_path = argv[2];
+        output_dir = ".";
+    } else {
+        if (!parse_build_args(argc, argv, &manifest_path, &output_dir)) {
+            print_usage();
+            return 1;
+        }
     }
 
-    if (!ensure_dir(output_dir)) {
+    if (!validate_only && !ensure_dir(output_dir)) {
         return 1;
     }
 
@@ -2812,6 +2963,9 @@ static int run_build_command(int argc, char** argv)
         palettes[i].name = NULL;
         palettes[i].path = NULL;
     }
+    for (i = 0; i < ANA_CONVERT_MAX_MANIFEST_ASSETS; i++) {
+        asset_names[i] = NULL;
+    }
 
     file = fopen(manifest_path, "r");
     if (file == NULL) {
@@ -2821,11 +2975,20 @@ static int run_build_command(int argc, char** argv)
     }
 
     palette_count = 0;
+    asset_count = 0;
     line_number = 0;
     saw_header = 0;
     ok = 1;
     while (ok && fgets(line, (int)sizeof(line), file) != NULL) {
         line_number++;
+        if (strchr(line, '\n') == NULL && !feof(file)) {
+            fprintf(
+                stderr,
+                "ana-convert: manifest line %d is too long\n",
+                line_number);
+            ok = 0;
+            break;
+        }
         strcpy(original_line, line);
         token_count = tokenize_line(line, tokens, ANA_CONVERT_MAX_TOKENS);
         if (token_count == 0 || tokens[0][0] == '#') {
@@ -2846,6 +3009,48 @@ static int run_build_command(int argc, char** argv)
             continue;
         }
 
+        if (token_count < 2 || !asset_name_is_safe(tokens[1])) {
+            fprintf(
+                stderr,
+                "ana-convert: unsafe asset name at line %d\n",
+                line_number);
+            ok = 0;
+            continue;
+        }
+        if (asset_count >= ANA_CONVERT_MAX_MANIFEST_ASSETS) {
+            fprintf(stderr, "ana-convert: too many manifest assets\n");
+            ok = 0;
+            continue;
+        }
+        {
+            char* asset_key;
+
+            asset_key = manifest_asset_key(tokens[0], tokens[1]);
+            if (asset_key == NULL) {
+                fprintf(stderr, "ana-convert: out of memory while reading manifest\n");
+                ok = 0;
+                continue;
+            }
+            for (i = 0; i < asset_count; i++) {
+                if (strcmp(asset_names[i], asset_key) == 0) {
+                    fprintf(
+                        stderr,
+                        "ana-convert: duplicate %s asset name '%s' at line %d\n",
+                        tokens[0],
+                        tokens[1],
+                        line_number);
+                    ok = 0;
+                    break;
+                }
+            }
+            if (!ok) {
+                free(asset_key);
+                continue;
+            }
+            asset_names[asset_count] = asset_key;
+        }
+        asset_count++;
+
         if (strcmp(tokens[0], "palette") == 0) {
             ok = run_manifest_palette(
                 tokens,
@@ -2854,7 +3059,8 @@ static int run_build_command(int argc, char** argv)
                 output_dir,
                 palettes,
                 &palette_count,
-                line_number);
+                line_number,
+                validate_only);
         } else if (strcmp(tokens[0], "image") == 0) {
             ok = run_manifest_image(
                 tokens,
@@ -2863,7 +3069,8 @@ static int run_build_command(int argc, char** argv)
                 output_dir,
                 palettes,
                 palette_count,
-                line_number);
+                line_number,
+                validate_only);
         } else if (strcmp(tokens[0], "font") == 0) {
             ok = run_manifest_font(
                 tokens,
@@ -2872,21 +3079,24 @@ static int run_build_command(int argc, char** argv)
                 output_dir,
                 palettes,
                 palette_count,
-                line_number);
+                line_number,
+                validate_only);
         } else if (strcmp(tokens[0], "sound") == 0) {
             ok = run_manifest_sound(
                 tokens,
                 token_count,
                 manifest_dir,
                 output_dir,
-                line_number);
+                line_number,
+                validate_only);
         } else if (strcmp(tokens[0], "music") == 0) {
             ok = run_manifest_music(
                 tokens,
                 token_count,
                 manifest_dir,
                 output_dir,
-                line_number);
+                line_number,
+                validate_only);
         } else {
             fprintf(
                 stderr,
@@ -2907,7 +3117,13 @@ static int run_build_command(int argc, char** argv)
     }
 
     manifest_free_palettes(palettes, palette_count);
+    for (i = 0; i < asset_count; i++) {
+        free(asset_names[i]);
+    }
     free(manifest_dir);
+    if (ok && validate_only) {
+        printf("Manifest %s is valid.\n", manifest_path);
+    }
     return ok ? 0 : 1;
 }
 
@@ -2935,7 +3151,11 @@ int main(int argc, char** argv)
     }
 
     if (argc >= 2 && strcmp(argv[1], "build") == 0) {
-        return run_build_command(argc, argv);
+        return run_manifest_command(argc, argv, 0);
+    }
+
+    if (argc >= 2 && strcmp(argv[1], "validate") == 0) {
+        return run_manifest_command(argc, argv, 1);
     }
 
     print_usage();

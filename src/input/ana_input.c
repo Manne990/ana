@@ -756,9 +756,14 @@ void ana_input_reset(void)
 
 void ana_input_update(void)
 {
+    ana_input_poll();
+    ana_input_advance_without_poll();
+}
+
+void ana_input_poll(void)
+{
     ana_debug_poll_count++;
     ana_input_poll_backend();
-    ana_input_advance_without_poll();
 }
 
 void ana_input_advance_without_poll(void)

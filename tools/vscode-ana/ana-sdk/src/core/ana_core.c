@@ -5,6 +5,12 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define ANA_RUNTIME_MAX_UPDATES_PER_FRAME 16
+
+#ifndef ANA_DEBUG_PERF_TIMING
+#define ANA_DEBUG_PERF_TIMING 0
+#endif
+
 static int ana_runtime_quit_requested = 0;
 static int ana_runtime_running = 0;
 static ANA_RunStats ana_runtime_last_stats =
@@ -35,6 +41,19 @@ static ANA_RenderMode ana_game_render_mode_or_default(ANA_RenderMode mode)
     }
 
     return mode;
+}
+
+static int ana_game_warmup_frames_or_default(int frames)
+{
+    if (frames < 0) {
+        return 0;
+    }
+
+    if (frames > 3) {
+        return 3;
+    }
+
+    return frames;
 }
 
 static ANA_Profile ana_profile_from_game(const ANA_Game* game)
@@ -95,6 +114,7 @@ static void ana_runtime_record_stats(long start_ticks, long end_ticks)
 }
 
 #ifdef ANA_DEBUG_STATS
+#if ANA_DEBUG_PERF_TIMING
 static void ana_runtime_record_perf_ticks(
     long* total,
     unsigned long start_ticks,
@@ -109,6 +129,7 @@ static void ana_runtime_record_perf_ticks(
     elapsed = end_ticks - start_ticks;
     *total += (long)elapsed;
 }
+#endif
 
 static long ana_runtime_average_us(
     long total_perf_ticks,
@@ -281,14 +302,50 @@ static void ana_runtime_wait_for_next_frame(
     ana_platform_wait_until_time_tick(target_ticks);
 }
 
+static long ana_runtime_frame_offset_ticks(long frame, long fps)
+{
+    long ticks_per_second;
+
+    if (fps <= 0L) {
+        return 0L;
+    }
+
+    ticks_per_second = ana_platform_time_ticks_per_second();
+    if (ticks_per_second <= 0L) {
+        return 0L;
+    }
+
+    return (frame * ticks_per_second) / fps;
+}
+
+static int ana_runtime_update_due(long start_ticks, long frame, long fps)
+{
+    long current_ticks;
+    long target_ticks;
+
+    if (fps <= 0L) {
+        return 0;
+    }
+
+    current_ticks = ana_platform_time_ticks();
+    target_ticks = start_ticks + ana_runtime_frame_offset_ticks(frame, fps);
+
+    return current_ticks >= target_ticks;
+}
+
 int ana_run(const ANA_Game* game)
 {
     ANA_Profile profile;
     ANA_Result result;
     ANA_Time time;
     long start_ticks;
+    long schedule_start_ticks;
     long end_ticks;
-#ifdef ANA_DEBUG_STATS
+    long frame_offset_ticks;
+    int updates_this_frame;
+    int warmup_frame;
+    int warmup_frames;
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
     unsigned long perf_start;
 #endif
 
@@ -331,53 +388,110 @@ int ana_run(const ANA_Game* game)
         game->load();
     }
 
+    warmup_frames = ana_game_warmup_frames_or_default(game->warmup_frames);
+    for (warmup_frame = 0;
+            !ana_runtime_quit_requested &&
+                game->draw != NULL &&
+                warmup_frame < warmup_frames;
+            warmup_frame++) {
+        game->draw();
+        if (game->pre_present != NULL) {
+            game->pre_present();
+        }
+        ana_present();
+        if (game->post_present != NULL) {
+            game->post_present();
+        }
+    }
+    if (warmup_frames > 0) {
+        ana_runtime_reset_stats();
+        ana_gfx_reset_frame_stats();
+    }
+
     time.tick = 0;
     time.fps = profile.fps;
     start_ticks = ana_platform_time_ticks();
+    schedule_start_ticks = start_ticks;
 
     while (!ana_runtime_quit_requested) {
-#ifdef ANA_DEBUG_STATS
-        perf_start = ana_platform_perf_ticks();
-#endif
-        ana_input_update();
-#ifdef ANA_DEBUG_STATS
-        ana_runtime_record_perf_ticks(
-            &ana_runtime_last_stats.input_perf_ticks,
-            perf_start,
-            ana_platform_perf_ticks());
-#endif
+        updates_this_frame = 0;
+        ana_input_poll();
+        do {
+            if (ana_runtime_quit_requested) {
+                break;
+            }
 
-        if (ana_quit_requested()) {
-            ana_quit();
-        }
-
-        if (!ana_runtime_quit_requested && game->update != NULL) {
-#ifdef ANA_DEBUG_STATS
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             perf_start = ana_platform_perf_ticks();
 #endif
-            game->update(time);
-#ifdef ANA_DEBUG_STATS
+            ana_input_advance_without_poll();
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             ana_runtime_record_perf_ticks(
-                &ana_runtime_last_stats.update_perf_ticks,
+                &ana_runtime_last_stats.input_perf_ticks,
                 perf_start,
                 ana_platform_perf_ticks());
 #endif
-        }
+
+            if (ana_quit_requested()) {
+                ana_quit();
+                break;
+            }
+
+            if (game->update != NULL) {
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
+                perf_start = ana_platform_perf_ticks();
+#endif
+                game->update(time);
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
+                ana_runtime_record_perf_ticks(
+                    &ana_runtime_last_stats.update_perf_ticks,
+                    perf_start,
+                    ana_platform_perf_ticks());
+#endif
+            }
+
+            time.tick++;
+            updates_this_frame++;
+            ana_sound_update();
+
+            if (updates_this_frame >= ANA_RUNTIME_MAX_UPDATES_PER_FRAME &&
+                    ana_runtime_update_due(
+                        schedule_start_ticks,
+                        (long)time.tick,
+                        (long)profile.fps)) {
+                frame_offset_ticks = ana_runtime_frame_offset_ticks(
+                    (long)time.tick,
+                    (long)profile.fps);
+                schedule_start_ticks =
+                    ana_platform_time_ticks() - frame_offset_ticks;
+                break;
+            }
+        } while (!ana_runtime_quit_requested &&
+            ana_runtime_update_due(
+                schedule_start_ticks,
+                (long)time.tick,
+                (long)profile.fps));
 
         if (!ana_runtime_quit_requested && game->draw != NULL) {
-#ifdef ANA_DEBUG_STATS
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             perf_start = ana_platform_perf_ticks();
 #endif
             game->draw();
-#ifdef ANA_DEBUG_STATS
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             ana_runtime_record_perf_ticks(
                 &ana_runtime_last_stats.draw_perf_ticks,
                 perf_start,
                 ana_platform_perf_ticks());
             perf_start = ana_platform_perf_ticks();
 #endif
+            if (game->pre_present != NULL) {
+                game->pre_present();
+            }
             ana_present();
-#ifdef ANA_DEBUG_STATS
+            if (game->post_present != NULL) {
+                game->post_present();
+            }
+#if defined(ANA_DEBUG_STATS) && ANA_DEBUG_PERF_TIMING
             ana_runtime_record_perf_ticks(
                 &ana_runtime_last_stats.present_perf_ticks,
                 perf_start,
@@ -387,13 +501,10 @@ int ana_run(const ANA_Game* game)
 
         if (!ana_runtime_quit_requested) {
             ana_runtime_wait_for_next_frame(
-                start_ticks,
-                time.tick + 1L,
+                schedule_start_ticks,
+                (long)time.tick,
                 (long)profile.fps);
-            ana_sound_update();
         }
-
-        time.tick++;
     }
 
     end_ticks = ana_platform_time_ticks();
@@ -411,6 +522,7 @@ int ana_run(const ANA_Game* game)
 
     ana_runtime_quit_requested = 0;
     ana_runtime_running = 0;
+    ana_input_shutdown();
     ana_sound_close();
     ana_gfx_close();
 

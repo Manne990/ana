@@ -199,7 +199,7 @@ static void test_runtime_uses_default_profile_values(void)
     assert(first_tick_fps == ANA_DEFAULT_FPS);
 }
 
-static void test_runtime_polls_input_for_each_catchup_update(void)
+static void test_runtime_polls_input_once_for_catchup_batch(void)
 {
     ANA_Game game;
 
@@ -210,7 +210,8 @@ static void test_runtime_polls_input_for_each_catchup_update(void)
     assert(ana_run(&game) == ANA_OK);
     assert(update_count == 3);
     assert(draw_count < update_count);
-    assert(ana_input_poll_count() == update_count);
+    assert(ana_input_poll_count() == 1);
+    assert(ana_input_poll_count() < update_count);
 }
 
 int main(void)
@@ -220,7 +221,7 @@ int main(void)
     test_runtime_warmup_frame_is_not_counted();
     test_runtime_rejects_bad_render_mode();
     test_runtime_uses_default_profile_values();
-    test_runtime_polls_input_for_each_catchup_update();
+    test_runtime_polls_input_once_for_catchup_batch();
     assert(ana_run(0) == ANA_ERROR_INVALID_ARGUMENT);
 
     return 0;

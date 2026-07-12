@@ -23,6 +23,7 @@ void* ana_gfx_native_window(void);
 
 void ana_input_reset(void);
 void ana_input_shutdown(void);
+void ana_input_poll(void);
 void ana_input_advance_without_poll(void);
 int ana_input_poll_count(void);
 ANA_Key ana_input_key_from_amiga_raw_code(int code);

@@ -34,6 +34,42 @@ const OUTPUT_EXTENSIONS: Record<ManifestAssetType, string> = {
   music: ".mod"
 };
 
+const ALLOWED_OPTIONS: Record<ManifestAssetType, ReadonlySet<string>> = {
+  palette: new Set(["colors"]),
+  image: new Set([
+    "palette",
+    "colors",
+    "frame-width",
+    "frame-height",
+    "transparent",
+    "hardware-sprite"
+  ]),
+  font: new Set([
+    "palette",
+    "colors",
+    "char-width",
+    "char-height",
+    "first-char",
+    "chars",
+    "transparent"
+  ]),
+  sound: new Set(["rate", "volume", "priority"]),
+  music: new Set()
+};
+
+const POSITIVE_INTEGER_OPTIONS = new Set([
+  "colors",
+  "frame-width",
+  "frame-height",
+  "char-width",
+  "char-height",
+  "chars",
+  "rate"
+]);
+
+const INTEGER_OPTIONS = new Set(["first-char", "volume", "priority"]);
+const BOOLEAN_OPTIONS = new Set(["hardware-sprite"]);
+
 function tokenizeLine(line: string): string[] {
   const tokens: string[] = [];
   let current = "";
@@ -80,28 +116,47 @@ function tokenizeLine(line: string): string[] {
   return tokens;
 }
 
-function parseOptions(tokens: string[], startIndex: number): Record<string, string | boolean> {
-  const options: Record<string, string | boolean> = {};
+function parseOptions(
+  type: ManifestAssetType,
+  tokens: string[],
+  startIndex: number
+): { options: Record<string, string>; issue?: string } {
+  const options: Record<string, string> = {};
 
   for (let i = startIndex; i < tokens.length; i++) {
     const token = tokens[i];
 
     if (!token.startsWith("--")) {
-      continue;
+      return { options, issue: `Unexpected value '${token}'.` };
     }
 
     const key = token.slice(2);
     const next = tokens[i + 1];
 
-    if (next && !next.startsWith("--")) {
-      options[key] = next;
-      i++;
-    } else {
-      options[key] = true;
+    if (!ALLOWED_OPTIONS[type].has(key)) {
+      return { options, issue: `Unsupported ${type} option '--${key}'.` };
     }
+    if (BOOLEAN_OPTIONS.has(key)) {
+      options[key] = "true";
+      continue;
+    }
+    if (!next || next.startsWith("--")) {
+      return { options, issue: `Option '--${key}' requires a value.` };
+    }
+    if (Object.prototype.hasOwnProperty.call(options, key)) {
+      return { options, issue: `Option '--${key}' is specified more than once.` };
+    }
+    if (POSITIVE_INTEGER_OPTIONS.has(key) && (!/^\d+$/.test(next) || Number(next) <= 0)) {
+      return { options, issue: `Option '--${key}' requires a positive integer.` };
+    }
+    if (INTEGER_OPTIONS.has(key) && !/^-?\d+$/.test(next)) {
+      return { options, issue: `Option '--${key}' requires an integer.` };
+    }
+    options[key] = next;
+    i++;
   }
 
-  return options;
+  return { options };
 }
 
 function outputExtension(type: ManifestAssetType): string {
@@ -126,6 +181,40 @@ function parseAssetLine(
   const name = tokens[1];
   const source = tokens[2];
 
+  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+    return { line, message: `Unsafe asset name '${name}'. Use letters, digits, '_' or '-'.` };
+  }
+  if ((type === "palette" || type === "image" || type === "font") && tokens.length < 4) {
+    return { line, message: `${type} entry requires conversion options.` };
+  }
+  if (type === "music" && tokens.length !== 3) {
+    return { line, message: "music entry does not accept options." };
+  }
+  if (type === "music" && path.extname(source).toLowerCase() !== ".mod") {
+    return { line, message: "music source must be a .mod file." };
+  }
+
+  const parsedOptions = parseOptions(type, tokens, 3);
+
+  if (parsedOptions.issue) {
+    return { line, message: parsedOptions.issue };
+  }
+  if (type === "palette" && parsedOptions.options.colors === undefined) {
+    return { line, message: "palette entry requires '--colors'." };
+  }
+  if (type === "font") {
+    for (const key of ["char-width", "char-height", "chars"]) {
+      if (parsedOptions.options[key] === undefined) {
+        return { line, message: `font entry requires '--${key}'.` };
+      }
+    }
+  }
+  const frameWidth = parsedOptions.options["frame-width"];
+  const frameHeight = parsedOptions.options["frame-height"];
+  if ((frameWidth === undefined) !== (frameHeight === undefined)) {
+    return { line, message: "image frame width and height must be specified together." };
+  }
+
   return {
     type,
     name,
@@ -133,7 +222,7 @@ function parseAssetLine(
     sourcePath: path.resolve(manifestDir, source),
     outputName: `${name}${outputExtension(type)}`,
     outputExtension: outputExtension(type),
-    options: parseOptions(tokens, 3),
+    options: parsedOptions.options,
     line
   };
 }
@@ -142,10 +231,15 @@ export function parseAssetManifestContent(content: string, filePath: string): Pa
   const directory = path.dirname(filePath);
   const assets: ManifestAsset[] = [];
   const issues: ManifestParseIssue[] = [];
+  const names = new Set<string>();
   let sawHeader = false;
 
   for (const [index, rawLine] of content.split(/\r?\n/).entries()) {
     const line = index + 1;
+    if (rawLine.length >= 512) {
+      issues.push({ line, message: "Manifest line exceeds 511 characters." });
+      continue;
+    }
     const tokens = tokenizeLine(rawLine.trim());
 
     if (tokens.length === 0) {
@@ -166,6 +260,12 @@ export function parseAssetManifestContent(content: string, filePath: string): Pa
     if ("message" in parsed) {
       issues.push(parsed);
     } else {
+      const assetKey = `${parsed.type}:${parsed.name}`;
+      if (names.has(assetKey)) {
+        issues.push({ line, message: `Duplicate asset name '${parsed.name}'.` });
+        continue;
+      }
+      names.add(assetKey);
       assets.push(parsed);
     }
   }

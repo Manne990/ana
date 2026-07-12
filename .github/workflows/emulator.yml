@@ -1,0 +1,45 @@
+name: Amiga Emulator Regression
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ana-amiga-emulator
+  cancel-in-progress: false
+
+jobs:
+  byte-brothers:
+    name: Byte Brothers behavior and visual feedback
+    runs-on: [self-hosted, macOS, ana-emulator]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify runner dependencies
+        run: |
+          test -x /Applications/FS-UAE.app/Contents/MacOS/fs-uae
+          command -v docker
+          command -v ffmpeg
+          command -v swiftc
+
+      - name: Build and run host tests
+        run: make clean all test CC=clang
+
+      - name: Run deterministic FS-UAE scenarios
+        run: make emulator-byte-brothers-all
+
+      - name: Run visual and raster feedback loop
+        run: make emulator-byte-brothers-visual
+
+      - name: Upload feedback artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: byte-brothers-emulator-results
+          path: build/emulator-results/
+          if-no-files-found: warn

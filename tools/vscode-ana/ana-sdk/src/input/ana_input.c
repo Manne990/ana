@@ -2,18 +2,83 @@
 
 #include "ana_internal.h"
 
+#include <stddef.h>
+
 #ifdef ANA_TARGET_AMIGA
+#include <clib/alib_protos.h>
+#include <devices/keyboard.h>
+#include <exec/io.h>
+#include <exec/ports.h>
 #include <exec/types.h>
 #include <hardware/cia.h>
 #include <hardware/custom.h>
 #include <intuition/intuition.h>
 #include <proto/exec.h>
+#include <proto/intuition.h>
 #endif
 
-#ifdef ANA_TARGET_AMIGA
 #define ANA_AMIGA_RAWKEY_RELEASE 0x80
+#define ANA_AMIGA_KEY_MATRIX_RAW_CODES 0x80
+#define ANA_INPUT_EVENT_BITS 8
+
+#ifndef ANA_INPUT_EVENT_PULSE_FRAMES
+#define ANA_INPUT_EVENT_PULSE_FRAMES 2
+#endif
+
+#if ANA_INPUT_EVENT_PULSE_FRAMES < 1
+#error ANA_INPUT_EVENT_PULSE_FRAMES must be at least 1
+#endif
+
+typedef struct ANA_AmigaRawKeyMapEntry {
+    unsigned char raw_code;
+    ANA_Key key;
+} ANA_AmigaRawKeyMapEntry;
+
+static const ANA_AmigaRawKeyMapEntry ana_amiga_raw_key_map[] = {
+    {0x4f, ANA_KEY_LEFT},
+    {0x4e, ANA_KEY_RIGHT},
+    {0x4c, ANA_KEY_UP},
+    {0x4d, ANA_KEY_DOWN},
+    {0x40, ANA_KEY_SPACE},
+    {0x44, ANA_KEY_RETURN},
+    {0x45, ANA_KEY_ESCAPE},
+    {0x10, ANA_KEY_Q},
+    {0x20, ANA_KEY_A},
+    {0x22, ANA_KEY_D},
+    {0x11, ANA_KEY_W},
+    {0x21, ANA_KEY_S},
+    {0x31, ANA_KEY_Z},
+    {0x32, ANA_KEY_X},
+    {0x33, ANA_KEY_C},
+    {0x34, ANA_KEY_V},
+    {0x63, ANA_KEY_CTRL}
+};
+
+#ifdef ANA_TARGET_AMIGA
+#ifndef ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL
+#define ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL 1
+#endif
+#define ANA_AMIGA_KEY_MATRIX_BYTES 16L
 #define ANA_AMIGA_CIAA_FIRE0 0x40u
 #define ANA_AMIGA_CIAA_FIRE1 0x80u
+#define ANA_AMIGA_POTGO_DATLX 0x0100u
+#define ANA_AMIGA_POTGO_OUTLX 0x0200u
+#define ANA_AMIGA_POTGO_DATLY 0x0400u
+#define ANA_AMIGA_POTGO_OUTLY 0x0800u
+#define ANA_AMIGA_POTGO_DATRX 0x1000u
+#define ANA_AMIGA_POTGO_OUTRX 0x2000u
+#define ANA_AMIGA_POTGO_DATRY 0x4000u
+#define ANA_AMIGA_POTGO_OUTRY 0x8000u
+#define ANA_AMIGA_POTGO_BUTTONS_0 \
+    (ANA_AMIGA_POTGO_DATLX | ANA_AMIGA_POTGO_OUTLX | \
+        ANA_AMIGA_POTGO_DATLY | ANA_AMIGA_POTGO_OUTLY)
+#define ANA_AMIGA_POTGO_BUTTONS_1 \
+    (ANA_AMIGA_POTGO_DATRX | ANA_AMIGA_POTGO_OUTRX | \
+        ANA_AMIGA_POTGO_DATRY | ANA_AMIGA_POTGO_OUTRY)
+#define ANA_AMIGA_POTINP_FIRE2_0 ANA_AMIGA_POTGO_DATLY
+#define ANA_AMIGA_POTINP_FIRE2_1 ANA_AMIGA_POTGO_DATRY
+#define ANA_AMIGA_POTINP_FIRE3_0 ANA_AMIGA_POTGO_DATLX
+#define ANA_AMIGA_POTINP_FIRE3_1 ANA_AMIGA_POTGO_DATRX
 
 extern struct Custom custom;
 extern struct CIA ciaa;
@@ -23,12 +88,36 @@ static unsigned int ana_current_input[ANA_INPUT_DEVICES];
 static unsigned int ana_previous_input[ANA_INPUT_DEVICES];
 static unsigned int ana_pending_input[ANA_INPUT_DEVICES];
 static unsigned int ana_backend_input[ANA_INPUT_DEVICES];
+static unsigned char ana_event_input_frames[ANA_INPUT_DEVICES][ANA_INPUT_EVENT_BITS];
 static int ana_pending_key_state[ANA_KEY_COUNT];
 static unsigned int ana_key_direction_map[ANA_KEY_COUNT][ANA_INPUT_DEVICES];
 static unsigned int ana_key_action_map[ANA_KEY_COUNT][ANA_INPUT_DEVICES];
 static int ana_key_quit_map[ANA_KEY_COUNT];
+static unsigned int ana_action_quit_map[ANA_INPUT_DEVICES];
 static int ana_current_quit_requested = 0;
 static int ana_pending_quit_requested = 0;
+static unsigned char ana_event_quit_frames = 0;
+static int ana_debug_event_count = 0;
+static int ana_debug_raw_count = 0;
+static int ana_debug_vanilla_count = 0;
+static int ana_debug_matrix_count = 0;
+static int ana_debug_matrix_ready = 0;
+static int ana_debug_last_class = 0;
+static int ana_debug_last_code = 0;
+static int ana_debug_last_key = 0;
+static int ana_debug_last_is_down = 0;
+static unsigned int ana_debug_seen_key_bits = 0u;
+static int ana_debug_poll_count = 0;
+#ifdef ANA_TARGET_AMIGA
+static struct MsgPort* ana_keyboard_port = NULL;
+static struct IOStdReq* ana_keyboard_io = NULL;
+static int ana_keyboard_open = 0;
+static int ana_keyboard_failed = 0;
+static int ana_keyboard_matrix_poll_countdown = 0;
+static unsigned char ana_keyboard_matrix[ANA_AMIGA_KEY_MATRIX_BYTES];
+static int ana_keyboard_matrix_key_state[ANA_KEY_COUNT];
+static int ana_keyboard_raw_key_state[ANA_KEY_COUNT];
+#endif
 
 static unsigned int ana_input_direction_mask(ANA_InputDirection direction)
 {
@@ -121,6 +210,7 @@ static unsigned int ana_input_mapped_key_state(ANA_InputDevice device)
 static int ana_input_mapped_quit_requested(void)
 {
     ANA_Key key;
+    ANA_InputDevice device;
 
     for (key = ANA_KEY_UNKNOWN; key < ANA_KEY_COUNT; key++) {
         if (ana_pending_key_state[key] && ana_key_quit_map[key]) {
@@ -128,12 +218,75 @@ static int ana_input_mapped_quit_requested(void)
         }
     }
 
+    for (device = ANA_INPUT_DEVICE_0;
+            device < ANA_INPUT_DEVICES;
+            device++) {
+        if ((ana_current_input[device] & ana_action_quit_map[device]) != 0u) {
+            return 1;
+        }
+    }
+
     return 0;
+}
+
+static void ana_input_hold_event_mask(ANA_InputDevice device, unsigned int mask)
+{
+    int bit;
+
+    if (!ana_valid_device(device)) {
+        return;
+    }
+
+    for (bit = 0; bit < ANA_INPUT_EVENT_BITS; bit++) {
+        if ((mask & (1u << bit)) != 0u) {
+            ana_event_input_frames[device][bit] =
+                (unsigned char)ANA_INPUT_EVENT_PULSE_FRAMES;
+        }
+    }
+}
+
+static unsigned int ana_input_event_state(ANA_InputDevice device)
+{
+    int bit;
+    unsigned int state;
+
+    if (!ana_valid_device(device)) {
+        return 0u;
+    }
+
+    state = 0u;
+    for (bit = 0; bit < ANA_INPUT_EVENT_BITS; bit++) {
+        if (ana_event_input_frames[device][bit] > 0) {
+            state |= 1u << bit;
+        }
+    }
+
+    return state;
+}
+
+static void ana_input_decay_event_pulses(void)
+{
+    int bit;
+    int device;
+
+    for (device = 0; device < ANA_INPUT_DEVICES; device++) {
+        for (bit = 0; bit < ANA_INPUT_EVENT_BITS; bit++) {
+            if (ana_event_input_frames[device][bit] > 0) {
+                ana_event_input_frames[device][bit]--;
+            }
+        }
+    }
+
+    if (ana_event_quit_frames > 0) {
+        ana_event_quit_frames--;
+    }
 }
 
 unsigned int ana_input_state_from_amiga_joydat(
     unsigned short joydat,
-    int fire_down)
+    int fire_down,
+    int second_button_down,
+    int third_button_down)
 {
     unsigned int state;
 
@@ -159,63 +312,311 @@ unsigned int ana_input_state_from_amiga_joydat(
         state |= ANA_ACTION_1_MASK;
     }
 
+    if (second_button_down) {
+        state |= ANA_ACTION_2_MASK;
+    }
+
+    if (third_button_down) {
+        state |= ANA_ACTION_3_MASK;
+    }
+
     return state;
 }
 
+int ana_input_key_matrix_raw_down(
+    const unsigned char* matrix,
+    int length,
+    int raw_code)
+{
+    int byte_index;
+    int bit_index;
+
+    if (matrix == NULL || length <= 0 ||
+            raw_code < 0 || raw_code >= 0x80) {
+        return 0;
+    }
+
+    byte_index = raw_code >> 3;
+    bit_index = raw_code & 7;
+    if (byte_index >= length) {
+        return 0;
+    }
+
+    return (matrix[byte_index] & (unsigned char)(1u << bit_index)) != 0u;
+}
+
+void ana_input_pulse_key_event(ANA_Key key)
+{
+    ANA_InputDevice device;
+    unsigned int mask;
+
+    if (!ana_valid_key(key)) {
+        return;
+    }
+
+    for (device = ANA_INPUT_DEVICE_0;
+            device < ANA_INPUT_DEVICES;
+            device++) {
+        mask = ana_key_direction_map[key][device] |
+            ana_key_action_map[key][device];
+        ana_input_hold_event_mask(device, mask);
+    }
+
+    if (ana_key_quit_map[key]) {
+        ana_event_quit_frames = (unsigned char)ANA_INPUT_EVENT_PULSE_FRAMES;
+    }
+}
+
+ANA_Key ana_input_handle_amiga_raw_key_event(int raw_code, int is_down)
+{
+    ANA_Key key;
+
+    key = ana_input_key_from_amiga_raw_code(raw_code & 0x7f);
+    if (!ana_valid_key(key)) {
+        return key;
+    }
+
+    ana_debug_seen_key_bits |= 1u << (unsigned int)key;
 #ifdef ANA_TARGET_AMIGA
-static ANA_Key ana_amiga_key_from_raw_code(int code)
+    ana_keyboard_raw_key_state[key] = is_down != 0;
+#else
+    ana_pending_key_state[key] = is_down != 0;
+#endif
+    if (is_down) {
+        ana_input_pulse_key_event(key);
+    }
+
+    return key;
+}
+
+ANA_Key ana_input_handle_amiga_vanilla_key_event(int code)
+{
+    ANA_Key key;
+
+    key = ana_input_key_from_amiga_vanilla_code(code);
+    if (ana_valid_key(key)) {
+        ana_debug_seen_key_bits |= 1u << (unsigned int)key;
+        ana_input_pulse_key_event(key);
+    }
+
+    return key;
+}
+
+ANA_Key ana_input_key_from_amiga_raw_code(int code)
+{
+    int i;
+
+    for (i = 0;
+            i < (int)(sizeof(ana_amiga_raw_key_map) /
+                sizeof(ana_amiga_raw_key_map[0]));
+            i++) {
+        if ((int)ana_amiga_raw_key_map[i].raw_code == code) {
+            return ana_amiga_raw_key_map[i].key;
+        }
+    }
+
+    return ANA_KEY_UNKNOWN;
+}
+
+ANA_Key ana_input_key_from_amiga_vanilla_code(int code)
 {
     switch (code) {
-    case 0x4f:
-        return ANA_KEY_LEFT;
-    case 0x4e:
-        return ANA_KEY_RIGHT;
-    case 0x4c:
-        return ANA_KEY_UP;
-    case 0x4d:
-        return ANA_KEY_DOWN;
-    case 0x40:
+    case ' ':
         return ANA_KEY_SPACE;
-    case 0x44:
+    case '\r':
+    case '\n':
         return ANA_KEY_RETURN;
-    case 0x45:
+    case 0x1b:
         return ANA_KEY_ESCAPE;
-    case 0x20:
+    case 'q':
+    case 'Q':
+        return ANA_KEY_Q;
+    case 'a':
+    case 'A':
         return ANA_KEY_A;
-    case 0x22:
+    case 'd':
+    case 'D':
         return ANA_KEY_D;
-    case 0x11:
+    case 'w':
+    case 'W':
         return ANA_KEY_W;
-    case 0x21:
+    case 's':
+    case 'S':
         return ANA_KEY_S;
-    case 0x31:
+    case 'z':
+    case 'Z':
         return ANA_KEY_Z;
-    case 0x32:
+    case 'x':
+    case 'X':
         return ANA_KEY_X;
-    case 0x33:
+    case 'c':
+    case 'C':
         return ANA_KEY_C;
-    case 0x34:
+    case 'v':
+    case 'V':
         return ANA_KEY_V;
-    case 0x63:
-        return ANA_KEY_CTRL;
     default:
         return ANA_KEY_UNKNOWN;
+    }
+}
+
+#ifdef ANA_TARGET_AMIGA
+static void ana_input_debug_record_event(
+    int class_id,
+    int code,
+    ANA_Key key,
+    int is_down)
+{
+    ana_debug_event_count++;
+    ana_debug_last_class = class_id;
+    ana_debug_last_code = code;
+    ana_debug_last_key = (int)key;
+    ana_debug_last_is_down = is_down != 0;
+}
+
+static int ana_amiga_keyboard_open(void)
+{
+    if (ana_keyboard_open) {
+        return 1;
+    }
+
+    if (ana_keyboard_failed) {
+        return 0;
+    }
+
+    ana_keyboard_port = CreatePort(NULL, 0L);
+    if (ana_keyboard_port == NULL) {
+        ana_keyboard_failed = 1;
+        return 0;
+    }
+
+    ana_keyboard_io = (struct IOStdReq*)CreateExtIO(
+        ana_keyboard_port,
+        (LONG)sizeof(struct IOStdReq));
+    if (ana_keyboard_io == NULL) {
+        DeletePort(ana_keyboard_port);
+        ana_keyboard_port = NULL;
+        ana_keyboard_failed = 1;
+        return 0;
+    }
+
+    if (OpenDevice(
+            (CONST_STRPTR)"keyboard.device",
+            0L,
+            (struct IORequest*)ana_keyboard_io,
+            0L) != 0) {
+        DeleteExtIO((struct IORequest*)ana_keyboard_io);
+        DeletePort(ana_keyboard_port);
+        ana_keyboard_io = NULL;
+        ana_keyboard_port = NULL;
+        ana_keyboard_failed = 1;
+        return 0;
+    }
+
+    ana_keyboard_open = 1;
+    return 1;
+}
+
+static int ana_amiga_poll_keyboard_matrix(void)
+{
+    int length;
+    int is_down;
+    int i;
+    ANA_Key key;
+    int raw_code;
+
+#if ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL <= 0
+    ana_debug_matrix_ready = 0;
+    return 0;
+#else
+    if (ana_keyboard_matrix_poll_countdown > 0) {
+        ana_keyboard_matrix_poll_countdown--;
+        return ana_debug_matrix_ready;
+    }
+    ana_keyboard_matrix_poll_countdown =
+        ANA_AMIGA_KEYBOARD_MATRIX_POLL_INTERVAL - 1;
+#endif
+
+    if (!ana_amiga_keyboard_open()) {
+        ana_debug_matrix_ready = 0;
+        for (key = ANA_KEY_UNKNOWN; key < ANA_KEY_COUNT; key++) {
+            ana_keyboard_matrix_key_state[key] = 0;
+        }
+        return 0;
+    }
+
+    ana_keyboard_io->io_Command = KBD_READMATRIX;
+    ana_keyboard_io->io_Data = (APTR)ana_keyboard_matrix;
+    ana_keyboard_io->io_Length = ANA_AMIGA_KEY_MATRIX_BYTES;
+    ana_keyboard_io->io_Actual = 0L;
+    if (DoIO((struct IORequest*)ana_keyboard_io) != 0 ||
+            ana_keyboard_io->io_Error != 0) {
+        ana_debug_matrix_ready = 0;
+        for (key = ANA_KEY_UNKNOWN; key < ANA_KEY_COUNT; key++) {
+            ana_keyboard_matrix_key_state[key] = 0;
+        }
+        return 0;
+    }
+
+    ana_debug_matrix_count++;
+    ana_debug_matrix_ready = 1;
+    length = (int)ana_keyboard_io->io_Actual;
+    if (length <= 0 || length > (int)ANA_AMIGA_KEY_MATRIX_BYTES) {
+        length = (int)ANA_AMIGA_KEY_MATRIX_BYTES;
+    }
+
+    for (i = 0;
+            i < (int)(sizeof(ana_amiga_raw_key_map) /
+                sizeof(ana_amiga_raw_key_map[0]));
+            i++) {
+        raw_code = (int)ana_amiga_raw_key_map[i].raw_code;
+        key = ana_amiga_raw_key_map[i].key;
+
+        is_down = ana_input_key_matrix_raw_down(
+            ana_keyboard_matrix,
+            length,
+            raw_code);
+        if (is_down && !ana_keyboard_matrix_key_state[key]) {
+            ana_debug_seen_key_bits |= 1u << (unsigned int)key;
+            ana_input_pulse_key_event(key);
+        }
+        ana_keyboard_matrix_key_state[key] = is_down;
+    }
+
+    return 1;
+}
+
+static void ana_amiga_sync_keyboard_key_state(void)
+{
+    ANA_Key key;
+
+    for (key = ANA_KEY_UNKNOWN; key < ANA_KEY_COUNT; key++) {
+        ana_pending_key_state[key] =
+            ana_keyboard_matrix_key_state[key] ||
+            ana_keyboard_raw_key_state[key];
     }
 }
 
 static void ana_amiga_poll_joysticks(void)
 {
     unsigned char ciaa_port_a;
+    unsigned short potinp;
 
     ciaa_port_a = ciaa.ciapra;
+    custom.potgo = ANA_AMIGA_POTGO_BUTTONS_0 | ANA_AMIGA_POTGO_BUTTONS_1;
+    potinp = custom.potinp;
     ana_backend_input[ANA_INPUT_DEVICE_0] =
         ana_input_state_from_amiga_joydat(
             custom.joy1dat,
-            (ciaa_port_a & ANA_AMIGA_CIAA_FIRE1) == 0u);
+            (ciaa_port_a & ANA_AMIGA_CIAA_FIRE1) == 0u,
+            (potinp & ANA_AMIGA_POTINP_FIRE2_1) == 0u,
+            (potinp & ANA_AMIGA_POTINP_FIRE3_1) == 0u);
     ana_backend_input[ANA_INPUT_DEVICE_1] =
         ana_input_state_from_amiga_joydat(
             custom.joy0dat,
-            (ciaa_port_a & ANA_AMIGA_CIAA_FIRE0) == 0u);
+            (ciaa_port_a & ANA_AMIGA_CIAA_FIRE0) == 0u,
+            (potinp & ANA_AMIGA_POTINP_FIRE2_0) == 0u,
+            (potinp & ANA_AMIGA_POTINP_FIRE3_0) == 0u);
 }
 
 static void ana_input_poll_backend(void)
@@ -227,31 +628,79 @@ static void ana_input_poll_backend(void)
     int is_down;
 
     ana_amiga_poll_joysticks();
+    ana_amiga_poll_keyboard_matrix();
 
     window = (struct Window*)ana_gfx_native_window();
     if (window == NULL || window->UserPort == NULL) {
+        ana_amiga_sync_keyboard_key_state();
         return;
+    }
+
+    if ((window->Flags & WFLG_WINDOWACTIVE) == 0) {
+        if (window->WScreen != NULL) {
+            ScreenToFront(window->WScreen);
+        }
+        WindowToFront(window);
+        ActivateWindow(window);
     }
 
     while ((message = (struct IntuiMessage*)GetMsg(window->UserPort)) != NULL) {
         if (message->Class == IDCMP_RAWKEY) {
             code = (int)(message->Code & 0x7f);
             is_down = (message->Code & ANA_AMIGA_RAWKEY_RELEASE) == 0;
-            key = ana_amiga_key_from_raw_code(code);
-
-            if (ana_valid_key(key)) {
-                ana_pending_key_state[key] = is_down;
-            }
+            key = ana_input_handle_amiga_raw_key_event(code, is_down);
+            ana_debug_raw_count++;
+            ana_input_debug_record_event(
+                (int)message->Class,
+                code,
+                key,
+                is_down);
+        } else if (message->Class == IDCMP_VANILLAKEY) {
+            key = ana_input_handle_amiga_vanilla_key_event(
+                (int)message->Code);
+            ana_debug_vanilla_count++;
+            ana_input_debug_record_event(
+                (int)message->Class,
+                (int)message->Code,
+                key,
+                1);
         }
 
         ReplyMsg((struct Message*)message);
     }
+
+    ana_amiga_sync_keyboard_key_state();
 }
 #else
 static void ana_input_poll_backend(void)
 {
 }
 #endif
+
+void ana_input_shutdown(void)
+{
+#ifdef ANA_TARGET_AMIGA
+    if (ana_keyboard_io != NULL) {
+        if (ana_keyboard_open) {
+            if (!CheckIO((struct IORequest*)ana_keyboard_io)) {
+                AbortIO((struct IORequest*)ana_keyboard_io);
+                WaitIO((struct IORequest*)ana_keyboard_io);
+            }
+            CloseDevice((struct IORequest*)ana_keyboard_io);
+        }
+        DeleteExtIO((struct IORequest*)ana_keyboard_io);
+        ana_keyboard_io = NULL;
+    }
+
+    if (ana_keyboard_port != NULL) {
+        DeletePort(ana_keyboard_port);
+        ana_keyboard_port = NULL;
+    }
+
+    ana_keyboard_open = 0;
+    ana_keyboard_failed = 0;
+#endif
+}
 
 void ana_input_reset(void)
 {
@@ -262,10 +711,23 @@ void ana_input_reset(void)
         ana_previous_input[i] = 0u;
         ana_pending_input[i] = 0u;
         ana_backend_input[i] = 0u;
+        ana_action_quit_map[i] = 0u;
+    }
+
+    for (i = 0; i < ANA_INPUT_DEVICES; i++) {
+        int bit;
+
+        for (bit = 0; bit < ANA_INPUT_EVENT_BITS; bit++) {
+            ana_event_input_frames[i][bit] = 0u;
+        }
     }
 
     for (i = 0; i < ANA_KEY_COUNT; i++) {
         ana_pending_key_state[i] = 0;
+#ifdef ANA_TARGET_AMIGA
+        ana_keyboard_matrix_key_state[i] = 0;
+        ana_keyboard_raw_key_state[i] = 0;
+#endif
     }
 
     ana_input_clear_key_map();
@@ -273,23 +735,53 @@ void ana_input_reset(void)
 
     ana_current_quit_requested = 0;
     ana_pending_quit_requested = 0;
+    ana_event_quit_frames = 0;
+    ana_debug_event_count = 0;
+    ana_debug_raw_count = 0;
+    ana_debug_vanilla_count = 0;
+    ana_debug_matrix_count = 0;
+    ana_debug_matrix_ready = 0;
+    ana_debug_last_class = 0;
+    ana_debug_last_code = 0;
+    ana_debug_last_key = 0;
+    ana_debug_last_is_down = 0;
+    ana_debug_seen_key_bits = 0u;
+    ana_debug_poll_count = 0;
+
+#ifdef ANA_TARGET_AMIGA
+    ana_amiga_keyboard_open();
+    ana_keyboard_matrix_poll_countdown = 0;
+#endif
 }
 
 void ana_input_update(void)
 {
-    int i;
+    ana_input_poll();
+    ana_input_advance_without_poll();
+}
 
+void ana_input_poll(void)
+{
+    ana_debug_poll_count++;
     ana_input_poll_backend();
+}
+
+void ana_input_advance_without_poll(void)
+{
+    int i;
 
     for (i = 0; i < ANA_INPUT_DEVICES; i++) {
         ana_previous_input[i] = ana_current_input[i];
         ana_current_input[i] = ana_pending_input[i] |
             ana_backend_input[i] |
+            ana_input_event_state((ANA_InputDevice)i) |
             ana_input_mapped_key_state((ANA_InputDevice)i);
     }
 
     ana_current_quit_requested = ana_pending_quit_requested ||
+        (ana_event_quit_frames > 0) ||
         ana_input_mapped_quit_requested();
+    ana_input_decay_event_pulses();
 }
 
 int ana_input_direction(ANA_InputDevice device, ANA_InputDirection direction)
@@ -327,10 +819,49 @@ int ana_quit_requested(void)
     return ana_current_quit_requested;
 }
 
+void ana_input_debug_snapshot(ANA_InputDebug* debug)
+{
+    int i;
+
+    if (debug == NULL) {
+        return;
+    }
+
+    debug->event_count = ana_debug_event_count;
+    debug->raw_count = ana_debug_raw_count;
+    debug->vanilla_count = ana_debug_vanilla_count;
+    debug->matrix_count = ana_debug_matrix_count;
+    debug->matrix_ready = ana_debug_matrix_ready;
+    debug->last_class = ana_debug_last_class;
+    debug->last_code = ana_debug_last_code;
+    debug->last_key = ana_debug_last_key;
+    debug->last_is_down = ana_debug_last_is_down;
+    debug->seen_key_bits = ana_debug_seen_key_bits;
+    for (i = 0; i < ANA_INPUT_DEVICES; i++) {
+        debug->current_state[i] = ana_current_input[i];
+        debug->backend_state[i] = ana_backend_input[i];
+    }
+    debug->key_c_down = ana_pending_key_state[ANA_KEY_C];
+    debug->key_q_down = ana_pending_key_state[ANA_KEY_Q];
+    debug->key_escape_down = ana_pending_key_state[ANA_KEY_ESCAPE];
+    debug->key_space_down = ana_pending_key_state[ANA_KEY_SPACE];
+    debug->key_x_down = ana_pending_key_state[ANA_KEY_X];
+    debug->quit_requested = ana_current_quit_requested;
+}
+
+int ana_input_poll_count(void)
+{
+    return ana_debug_poll_count;
+}
+
 void ana_input_clear_key_map(void)
 {
     int key;
     int device;
+
+    for (device = 0; device < ANA_INPUT_DEVICES; device++) {
+        ana_action_quit_map[device] = 0u;
+    }
 
     for (key = 0; key < ANA_KEY_COUNT; key++) {
         ana_key_quit_map[key] = 0;
@@ -340,6 +871,8 @@ void ana_input_clear_key_map(void)
             ana_key_action_map[key][device] = 0u;
         }
     }
+
+    ana_key_quit_map[ANA_KEY_ESCAPE] = 1;
 }
 
 void ana_input_map_key_to_direction(
@@ -389,6 +922,33 @@ void ana_input_map_key_to_quit(ANA_Key key)
     ana_key_quit_map[key] = 1;
 }
 
+void ana_input_unmap_key_from_quit(ANA_Key key)
+{
+    if (!ana_valid_key(key)) {
+        return;
+    }
+
+    ana_key_quit_map[key] = 0;
+}
+
+void ana_input_map_action_to_quit(
+    ANA_InputDevice device,
+    ANA_InputAction action)
+{
+    unsigned int mask;
+
+    if (!ana_valid_device(device)) {
+        return;
+    }
+
+    mask = ana_input_action_mask(action);
+    if (mask == 0u) {
+        return;
+    }
+
+    ana_action_quit_map[device] |= mask;
+}
+
 void ana_input_map_default_keys(ANA_InputDevice device)
 {
     if (!ana_valid_device(device)) {
@@ -406,9 +966,11 @@ void ana_input_map_default_keys(ANA_InputDevice device)
 
     ana_input_map_key_to_action(ANA_KEY_SPACE, device, ANA_ACTION_1);
     ana_input_map_key_to_action(ANA_KEY_CTRL, device, ANA_ACTION_1);
+    ana_input_map_key_to_action(ANA_KEY_X, device, ANA_ACTION_2);
+    ana_input_map_key_to_action(ANA_KEY_Z, device, ANA_ACTION_2);
+    ana_input_map_key_to_action(ANA_KEY_C, device, ANA_ACTION_3);
+    ana_input_map_key_to_action(ANA_KEY_V, device, ANA_ACTION_3);
     ana_input_map_key_to_action(ANA_KEY_RETURN, device, ANA_ACTION_4);
-
-    ana_input_map_key_to_quit(ANA_KEY_ESCAPE);
 }
 
 void ana_input_set_pending_state(ANA_InputDevice device, unsigned int state)

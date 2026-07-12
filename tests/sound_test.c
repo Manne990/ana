@@ -241,6 +241,13 @@ static void test_music_loading_and_state(void)
     bad_bytes[1083] = '!';
     assert(ana_load_music_data(bad_bytes, (long)sizeof(bad_bytes)) == 0);
 
+    memcpy(bad_bytes, bytes, sizeof(bytes));
+    bad_bytes[1080] = '5';
+    bad_bytes[1081] = 'C';
+    bad_bytes[1082] = 'H';
+    bad_bytes[1083] = 'N';
+    assert(ana_load_music_data(bad_bytes, (long)sizeof(bad_bytes)) == 0);
+
     path = "build/tests/music_test.mod";
     write_test_music_file(path);
     file_music = ana_load_music(path);
@@ -277,6 +284,12 @@ static void test_music_loading_and_state(void)
     config.music_can_use_free_sfx_channels = 0;
     ana_configure_audio(&config);
     ana_play_music(music, ANA_MUSIC_LOOP);
+    assert(ana_music_active_channel_mask() == ANA_AUDIO_CH_0);
+
+    ana_configure_audio(0);
+    assert(ana_music_active_channel_mask() == ANA_AUDIO_ALL_CHANNELS);
+
+    ana_configure_audio(&config);
     assert(ana_music_active_channel_mask() == ANA_AUDIO_CH_0);
     ana_play_sound(sound);
     assert(ana_sound_active_channel_count() == 0);

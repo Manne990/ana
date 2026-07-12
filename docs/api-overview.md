@@ -1,6 +1,6 @@
-# ANA 0.1 API overview
+# ANA 0.2 API overview
 
-This is the public API surface for the 0.1 release. Later releases may still
+This is the public API surface for the 0.2 preview. Later releases may still
 revise names and add higher-level helpers as the framework matures.
 
 Include ANA with:
@@ -56,7 +56,7 @@ profiling signals; specialized Amiga backends are still planned work.
 
 ## Platform profile
 
-The 0.1 profile is PAL lores:
+The 0.2 profile is PAL lores:
 
 - width: `320`
 - height: `256`
@@ -181,11 +181,33 @@ Retained rendering helpers:
 Layer kinds let a game describe whether a layer is static, scrolling, sprites,
 HUD, debug, or menu. `ANA_TileLayer` is the first tilemap-owned draw helper. It
 stores viewport, camera, tile size, clear color, and tile read/draw callbacks,
-and can redraw exposed strips when the camera moves. The current Amiga
-implementation still uses ANA's chunky/software path, so native hardware
-scroll remains backend work. These helpers keep rendering intent explicit. They
+and can redraw exposed strips when the camera moves. Eligible A1200
+direct-present side-scroll layers can use the wide planar hardware backend;
+other profiles retain the portable path. These helpers keep rendering intent explicit. They
 do not replace a game's draw order, collision rules, or custom performance work
 yet.
+
+Advanced Amiga hardware sprite support is exposed separately from portable
+images and BOBs:
+
+- `ANA_AmigaSpriteBatch`
+- `ANA_AmigaSpriteBatchConfig`
+- `ana_amiga_sprite_batch_create`
+- `ana_amiga_sprite_batch_begin`
+- `ana_amiga_sprite_batch_set`
+- `ana_amiga_sprite_batch_commit`
+- `ana_amiga_sprite_batch_hide_all`
+- `ana_amiga_sprite_batch_destroy`
+- `ana_amiga_sprite_batch_slot_count`
+- `ana_amiga_sprite_batch_status`
+
+A batch owns its channels and Chip RAM for its lifetime. Call `begin`, submit
+the visible slots with `set`, and call `commit` once per rendered frame. The
+backend converts ANA image frames to two-plane, 16-pixel chipset sprites and
+schedules control-word updates outside the old and new sprite raster spans.
+Creation returns `NULL` on host builds, so games should retain a normal image
+or BOB fallback. Byte Brothers demonstrates this split in
+`byte_brothers_sprites.c`.
 
 ## Input
 
@@ -239,7 +261,7 @@ profiles where host keys are delivered as joystick buttons.
 
 ## Sound
 
-0.1 sound is focused on short sound effects plus explicit Paula channel policy:
+0.2 sound is focused on short sound effects plus explicit Paula channel policy:
 
 - `ANA_Sound`
 - `ana_load_sound`

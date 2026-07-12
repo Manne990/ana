@@ -22,15 +22,15 @@ ASSET_DIR = ROOT / "build" / "assets" / "byte_brothers" / "assets"
 LOG_PATH = Path.home() / "Documents" / "FS-UAE" / "Cache" / "Logs" / "fs-uae.log.txt"
 
 SCENARIOS = {
-    "static": {"id": 0, "frames": 120},
-    "scroll": {"id": 1, "frames": 360},
-    "input": {"id": 2, "frames": 80},
-    "enemy-overflow": {"id": 3, "frames": 360},
-    "stomp": {"id": 4, "frames": 80},
-    "stomp-drop": {"id": 5, "frames": 80},
-    "stomp-moving": {"id": 6, "frames": 100},
-    "stomp-fall": {"id": 7, "frames": 80},
-    "stomp-edge": {"id": 8, "frames": 80},
+    "static": {"id": 0, "frames": 120, "min_fps_x100": 4500},
+    "scroll": {"id": 1, "frames": 360, "min_fps_x100": 3500},
+    "input": {"id": 2, "frames": 80, "min_fps_x100": 3500},
+    "enemy-overflow": {"id": 3, "frames": 360, "min_fps_x100": 3000},
+    "stomp": {"id": 4, "frames": 80, "min_fps_x100": 3500},
+    "stomp-drop": {"id": 5, "frames": 80, "min_fps_x100": 3500},
+    "stomp-moving": {"id": 6, "frames": 100, "min_fps_x100": 3500},
+    "stomp-fall": {"id": 7, "frames": 80, "min_fps_x100": 3500},
+    "stomp-edge": {"id": 8, "frames": 80, "min_fps_x100": 3500},
 }
 
 MACHINE_CONFIGS = {
@@ -205,10 +205,10 @@ def build_byte_brothers(
 ) -> None:
     if extra_cflags is None:
         extra_cflags = []
+    BB_BIN_PATH.unlink(missing_ok=True)
     subprocess.run(
         [
             "make",
-            "-B",
             "amiga-byte-brothers-harness",
             f"BB_HARNESS_SCENARIO_ID={scenario_id}",
             f"BB_HARNESS_FRAMES={frames}",
@@ -308,6 +308,118 @@ def is_final_result(path: Path) -> bool:
     return result_value(path, "phase") == "shutdown" and (
         result_value(path, "result_complete") == "1"
     )
+
+
+def validate_result(
+    path: Path,
+    scenario: str,
+    machine: str,
+    frames: int,
+) -> list[str]:
+    failures: list[str] = []
+
+    def require_equal(key: str, expected: int) -> None:
+        actual = result_int(path, key)
+        if actual != expected:
+            failures.append(f"{key}: expected {expected}, got {actual}")
+
+    def require_at_least(key: str, minimum: int) -> None:
+        actual = result_int(path, key)
+        if actual is None or actual < minimum:
+            failures.append(f"{key}: expected >= {minimum}, got {actual}")
+
+    require_equal("assets_loaded", 1)
+    require_equal("result_complete", 1)
+    run_frames = result_int(path, "run_frames")
+    direct_flips = result_int(path, "direct_flips")
+    if run_frames != direct_flips:
+        failures.append(
+            "presentation accounting: direct_flips must equal run_frames "
+            f"({direct_flips} != {run_frames})"
+        )
+    if scenario != "input" and run_frames != frames:
+        failures.append(f"run_frames: expected {frames}, got {run_frames}")
+    require_equal("hw_sprite_position_mismatches", 0)
+    require_equal("hw_sprite_zero_control_words", 0)
+    require_equal("hw_sprite_unsafe_span_writes", 0)
+    require_equal("player_bounds_failures", 0)
+    require_equal("enemy_bounds_failures", 0)
+    require_equal("player_support_failures", 0)
+    require_equal("enemy_support_failures", 0)
+    require_equal("camera_bounds_failures", 0)
+    require_equal("hw_enemy_ready", 1)
+    require_equal("hw_enemy_failed", 0)
+    require_at_least("hw_enemy_slot_count", 1)
+
+    minimum_fps = int(SCENARIOS[scenario]["min_fps_x100"])
+    if machine == "a1200-fast":
+        minimum_fps = max(minimum_fps, 4500)
+    require_at_least("average_fps_x100", minimum_fps)
+
+    alive = result_int(path, "alive_enemies")
+    grounded = result_int(path, "grounded_enemies")
+    airborne = result_int(path, "airborne_enemies")
+    if None not in (alive, grounded, airborne) and grounded + airborne != alive:
+        failures.append(
+            "enemy state accounting: grounded + airborne must equal alive "
+            f"({grounded} + {airborne} != {alive})"
+        )
+
+    if scenario == "static":
+        require_equal("camera_delta_x", 0)
+        require_equal("camera_delta_y", 0)
+        require_equal("player_delta_x", 0)
+        require_equal("player_hit_count", 0)
+    elif scenario == "scroll":
+        require_at_least("player_delta_x", 256)
+        require_at_least("camera_delta_x", 128)
+        require_at_least("scroll_frames", 30)
+        require_at_least("frames_with_visible_enemies", 1)
+        require_at_least("max_visible_enemies", 2)
+        require_equal("player_hit_count", 0)
+    elif scenario == "input":
+        for field in (
+            "input_jump_seen",
+            "input_dash_seen",
+            "input_move_seen",
+            "input_quit_scheduled",
+        ):
+            require_equal(field, 1)
+        bb_frame = result_int(path, "bb_frame")
+        quit_frame = result_int(path, "input_quit_frame")
+        if quit_frame is None or quit_frame <= 0:
+            failures.append(f"input_quit_frame: expected > 0, got {quit_frame}")
+        if bb_frame is None or quit_frame is None or bb_frame > quit_frame + 3:
+            failures.append(
+                "input quit latency: expected shutdown within 3 updates, "
+                f"got bb_frame={bb_frame}, quit_frame={quit_frame}"
+            )
+    elif scenario == "enemy-overflow":
+        visible = result_int(path, "max_visible_enemies")
+        slots = result_int(path, "hw_enemy_slot_count")
+        if visible is None or slots is None or visible <= slots:
+            failures.append(
+                "enemy overflow did not exceed hardware capacity: "
+                f"visible={visible}, slots={slots}"
+            )
+        require_at_least("bitmap_enemy_draws", 1)
+        require_equal("player_hit_count", 0)
+    elif scenario.startswith("stomp"):
+        require_at_least("stomp_count", 1)
+        require_equal("player_hit_count", 0)
+        enemy_count = result_int(path, "enemy_count")
+        alive_enemies = result_int(path, "alive_enemies")
+        if (
+            enemy_count is None
+            or alive_enemies is None
+            or alive_enemies >= enemy_count
+        ):
+            failures.append(
+                "stomp did not remove an enemy: "
+                f"alive={alive_enemies}, total={enemy_count}"
+            )
+
+    return failures
 
 
 def terminate(process: subprocess.Popen) -> None:
@@ -438,28 +550,12 @@ def main() -> int:
 
     print(f"Result file: {found}")
     print(found.read_text(errors="replace"))
-    if args.scenario == "input":
-        missing = []
-        for field in (
-            "input_jump_seen",
-            "input_dash_seen",
-            "input_move_seen",
-            "input_quit_scheduled",
-        ):
-            if result_value(found, field) != "1":
-                missing.append(field)
-        bb_frame = result_int(found, "bb_frame")
-        quit_frame = result_int(found, "input_quit_frame")
-        if quit_frame is None or quit_frame <= 0:
-            missing.append("input_quit_frame")
-        if bb_frame is None or quit_frame is None or bb_frame > quit_frame + 3:
-            missing.append("input_quit_latency")
-        if missing:
-            print(
-                "Byte Brothers input harness failed: " + ", ".join(missing),
-                file=sys.stderr,
-            )
-            return 1
+    failures = validate_result(found, args.scenario, args.machine, frames)
+    if failures:
+        print("Byte Brothers harness failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"  - {failure}", file=sys.stderr)
+        return 1
     return 0
 
 

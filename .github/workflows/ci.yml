@@ -39,6 +39,27 @@ jobs:
       - name: Run tests
         run: make test CC=${{ matrix.compiler }}
 
+  sanitizers:
+    name: Address and undefined behavior sanitizers
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang python3
+
+      - name: Build and run sanitized tests
+        env:
+          CC: clang
+          CFLAGS: -std=c89 -Wall -Wextra -Werror -pedantic -Iinclude -Isrc -fsanitize=address,undefined -fno-omit-frame-pointer
+          TOOL_CFLAGS: -std=gnu99 -Wall -Wextra -Werror -Iinclude -Isrc -fsanitize=address,undefined -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+        run: make clean test
+
   amiga-adfs:
     name: Amiga example ADFs
     runs-on: ubuntu-latest

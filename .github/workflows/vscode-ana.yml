@@ -6,6 +6,11 @@ on:
       - main
     paths:
       - "tools/vscode-ana/**"
+      - "include/**"
+      - "src/**"
+      - "tools/ana-convert/**"
+      - "Makefile"
+      - "LICENSE"
       - "docs/020-vscode-plugin-v0-1-workflow.md"
       - "docs/021-vscode-plugin-v0-2-diagnostics.md"
       - "docs/022-vscode-plugin-v0-3-rich-experience.md"
@@ -14,6 +19,11 @@ on:
       - main
     paths:
       - "tools/vscode-ana/**"
+      - "include/**"
+      - "src/**"
+      - "tools/ana-convert/**"
+      - "Makefile"
+      - "LICENSE"
       - "docs/020-vscode-plugin-v0-1-workflow.md"
       - "docs/021-vscode-plugin-v0-2-diagnostics.md"
       - "docs/022-vscode-plugin-v0-3-rich-experience.md"
@@ -50,6 +60,10 @@ jobs:
 
       - name: Compile
         run: npm run compile
+
+      - name: Verify bundled SDK snapshot is committed
+        working-directory: .
+        run: git diff --exit-code -- tools/vscode-ana/ana-sdk
 
       - name: Test
         run: xvfb-run -a npm test

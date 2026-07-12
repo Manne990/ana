@@ -19,7 +19,6 @@
 #include <graphics/gfxbase.h>
 #include <graphics/sprite.h>
 #include <graphics/view.h>
-#include <hardware/custom.h>
 #include <intuition/intuition.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/screens.h>
@@ -43,11 +42,6 @@
 #define ANA_AMIGA_HARDWARE_SCROLL_BUFFER_COUNT 1
 #define ANA_AMIGA_HARDWARE_SCROLL_BACKGROUND_CACHE 0
 #define ANA_AMIGA_HARDWARE_SCROLL_HUD_CACHE 0
-#define ANA_AMIGA_SPRITE_VISIBLE_START_X 128
-#define ANA_AMIGA_SPRITE_VISIBLE_START_LINE 44
-#define ANA_AMIGA_SPRITE_VISIBLE_END_LINE \
-    (ANA_AMIGA_SPRITE_VISIBLE_START_LINE + ANA_DEFAULT_HEIGHT)
-#define ANA_AMIGA_SPRITE_SAFE_TOP_END_LINE 32
 #ifndef ANA_AMIGA_HARDWARE_SCROLL_SYNC
 #define ANA_AMIGA_HARDWARE_SCROLL_SYNC 1
 #endif
@@ -116,6 +110,106 @@ static int ana_presented_frames = 0;
 static ANA_RenderMode ana_gfx_render_mode = ANA_RENDER_DIRTY;
 static ANA_RenderStats ana_gfx_stats;
 
+#ifndef ANA_TARGET_AMIGA
+static int ana_host_frame_dump_initialized = 0;
+static const char* ana_host_frame_dump_dir = NULL;
+static int ana_host_frame_dump_every = 1;
+static int ana_host_frame_dump_count = 0;
+
+static int ana_host_build_frame_path(
+    char* path,
+    size_t path_size,
+    const char* directory,
+    unsigned int frame)
+{
+    static const char prefix[] = "/frame-";
+    static const char suffix[] = ".ppm";
+    char digits[16];
+    size_t directory_length;
+    size_t digit_count;
+    size_t position;
+    size_t i;
+
+    directory_length = strlen(directory);
+    digit_count = 0u;
+    do {
+        digits[digit_count++] = (char)('0' + (frame % 10u));
+        frame /= 10u;
+    } while (frame != 0u && digit_count < sizeof(digits));
+    while (digit_count < 6u) {
+        digits[digit_count++] = '0';
+    }
+
+    if (directory_length + sizeof(prefix) - 1u + digit_count +
+            sizeof(suffix) > path_size) {
+        return 0;
+    }
+
+    memcpy(path, directory, directory_length);
+    position = directory_length;
+    memcpy(path + position, prefix, sizeof(prefix) - 1u);
+    position += sizeof(prefix) - 1u;
+    for (i = 0u; i < digit_count; i++) {
+        path[position + i] = digits[digit_count - i - 1u];
+    }
+    position += digit_count;
+    memcpy(path + position, suffix, sizeof(suffix));
+    return 1;
+}
+
+static void ana_host_dump_front_buffer(void)
+{
+    unsigned char row[ANA_DEFAULT_WIDTH * 3];
+    const unsigned char* pixels;
+    const ANA_Color* color;
+    const char* every_text;
+    char path[1024];
+    FILE* file;
+    int x;
+    int y;
+
+    if (!ana_host_frame_dump_initialized) {
+        ana_host_frame_dump_initialized = 1;
+        ana_host_frame_dump_dir = getenv("ANA_FRAME_DUMP_DIR");
+        every_text = getenv("ANA_FRAME_DUMP_EVERY");
+        if (every_text != NULL && atoi(every_text) > 0) {
+            ana_host_frame_dump_every = atoi(every_text);
+        }
+    }
+    if (ana_host_frame_dump_dir == NULL ||
+            ana_host_frame_dump_dir[0] == '\0' ||
+            (ana_presented_frames % ana_host_frame_dump_every) != 0) {
+        return;
+    }
+
+    ana_host_frame_dump_count++;
+    if (!ana_host_build_frame_path(
+        path,
+        sizeof(path),
+        ana_host_frame_dump_dir,
+        (unsigned int)ana_host_frame_dump_count)) {
+        return;
+    }
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        return;
+    }
+
+    fprintf(file, "P6\n%d %d\n255\n", ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT);
+    pixels = ana_framebuffers[ana_front_buffer];
+    for (y = 0; y < ANA_DEFAULT_HEIGHT; y++) {
+        for (x = 0; x < ANA_DEFAULT_WIDTH; x++) {
+            color = &ana_palette[pixels[(y * ANA_DEFAULT_WIDTH) + x] & 0x0f];
+            row[(x * 3) + 0] = color->r;
+            row[(x * 3) + 1] = color->g;
+            row[(x * 3) + 2] = color->b;
+        }
+        fwrite(row, 1u, sizeof(row), file);
+    }
+    fclose(file);
+}
+#endif
+
 static const ANA_Color ana_default_palette[ANA_DEFAULT_COLORS] = {
     { 0, 0, 0 },
     { 255, 255, 255 },
@@ -138,7 +232,6 @@ static const ANA_Color ana_default_palette[ANA_DEFAULT_COLORS] = {
 #ifdef ANA_TARGET_AMIGA
 struct GfxBase* GfxBase = NULL;
 struct IntuitionBase* IntuitionBase = NULL;
-extern struct Custom custom;
 
 static struct Screen* ana_amiga_screen = NULL;
 static struct Window* ana_amiga_window = NULL;
@@ -7037,6 +7130,10 @@ void ana_present(void)
     ana_presented_frames++;
     ana_gfx_stats.frames = (long)ana_presented_frames;
 
+#ifndef ANA_TARGET_AMIGA
+    ana_host_dump_front_buffer();
+#endif
+
 #ifdef ANA_TARGET_AMIGA
     ana_amiga_store_framebuffer_dirty_state(ana_front_buffer);
     ana_amiga_present_buffer(ana_framebuffers[ana_front_buffer]);
@@ -7065,252 +7162,6 @@ void* ana_gfx_native_viewport(void)
     return NULL;
 #endif
 }
-
-#ifdef ANA_TARGET_AMIGA
-void ana_amiga_sprite_update_stats_reset(ANA_AmigaSpriteUpdateStats* stats)
-{
-    if (stats == NULL) {
-        return;
-    }
-
-    memset(stats, 0, sizeof(*stats));
-    stats->min_raster_line = 9999;
-    stats->max_raster_line = -1;
-    stats->last_raster_line = -1;
-}
-
-static int ana_amiga_sprite_raster_line(void)
-{
-    UWORD vpos;
-    UWORD vhpos;
-
-    vpos = custom.vposr;
-    vhpos = custom.vhposr;
-    return (int)(((vpos & 0x0001u) << 8) | ((vhpos >> 8) & 0x00ffu));
-}
-
-static int ana_amiga_sprite_line_overlaps_y(int line, int y, int height)
-{
-    int start;
-    int end;
-
-    start = y + ANA_AMIGA_SPRITE_VISIBLE_START_LINE;
-    end = start + height;
-    return line >= start - 1 && line < end + 1;
-}
-
-static int ana_amiga_sprite_current_y(const struct SimpleSprite* sprite)
-{
-    if (sprite == NULL) {
-        return -1000;
-    }
-
-    return (int)sprite->y;
-}
-
-static int ana_amiga_sprite_line_unsafe(
-    const struct SimpleSprite* sprite,
-    int new_y,
-    int height,
-    int line)
-{
-    int old_y;
-
-    old_y = ana_amiga_sprite_current_y(sprite);
-    return ana_amiga_sprite_line_overlaps_y(line, old_y, height) ||
-        ana_amiga_sprite_line_overlaps_y(line, new_y, height);
-}
-
-void ana_amiga_sprite_wait_until_safe(
-    const struct SimpleSprite* sprite,
-    int y,
-    int height,
-    ANA_AmigaSpriteUpdateStats* stats)
-{
-    int line;
-
-    if (height <= 0) {
-        return;
-    }
-
-    line = ana_amiga_sprite_raster_line();
-    if (stats != NULL) {
-        stats->safe_wait_calls++;
-        stats->span_checks++;
-    }
-    if (!ana_amiga_sprite_line_unsafe(sprite, y, height, line)) {
-        if (stats != NULL) {
-            if (line < ANA_AMIGA_SPRITE_SAFE_TOP_END_LINE) {
-                stats->safe_top_hits++;
-            } else if (line >= ANA_AMIGA_SPRITE_VISIBLE_END_LINE) {
-                stats->safe_bottom_hits++;
-            }
-        }
-        return;
-    }
-
-    if (stats != NULL) {
-        stats->safe_write_waits++;
-        stats->span_waits++;
-        if (line >= ANA_AMIGA_SPRITE_SAFE_TOP_END_LINE &&
-                line < ANA_AMIGA_SPRITE_VISIBLE_END_LINE) {
-            stats->safe_visible_waits++;
-        }
-    }
-    while (ana_amiga_sprite_line_unsafe(sprite, y, height, line)) {
-        line = ana_amiga_sprite_raster_line();
-    }
-}
-
-void ana_amiga_sprite_record_write_raster(
-    const struct SimpleSprite* sprite,
-    int y,
-    int height,
-    int trace_raster,
-    ANA_AmigaSpriteUpdateStats* stats)
-{
-    int line;
-
-    if (!trace_raster || stats == NULL || height <= 0) {
-        return;
-    }
-
-    line = ana_amiga_sprite_raster_line();
-    stats->raster_checks++;
-    stats->last_raster_line = line;
-    if (line < stats->min_raster_line) {
-        stats->min_raster_line = line;
-    }
-    if (line > stats->max_raster_line) {
-        stats->max_raster_line = line;
-    }
-    if (line >= ANA_AMIGA_SPRITE_VISIBLE_START_LINE &&
-            line < ANA_AMIGA_SPRITE_VISIBLE_END_LINE) {
-        stats->visible_raster_writes++;
-    }
-    if (ana_amiga_sprite_line_unsafe(sprite, y, height, line)) {
-        stats->unsafe_span_writes++;
-    }
-}
-
-void ana_amiga_sprite_copy_control_words(
-    const struct SimpleSprite* sprite,
-    unsigned short* target_data)
-{
-    if (sprite == NULL || sprite->posctldata == NULL || target_data == NULL) {
-        return;
-    }
-
-    target_data[0] = sprite->posctldata[0];
-    target_data[1] = sprite->posctldata[1];
-}
-
-void ana_amiga_sprite_expected_control_words(
-    int x,
-    int y,
-    int height,
-    unsigned short* word0,
-    unsigned short* word1)
-{
-    int hstart;
-    int vstart;
-    int vstop;
-
-    if (word0 == NULL || word1 == NULL) {
-        return;
-    }
-
-    hstart = x + ANA_AMIGA_SPRITE_VISIBLE_START_X;
-    vstart = y + ANA_AMIGA_SPRITE_VISIBLE_START_LINE;
-    vstop = vstart + height;
-    if (hstart < 0) {
-        hstart = 0;
-    }
-    if (vstart < 0) {
-        vstart = 0;
-    }
-    if (vstop < 0) {
-        vstop = 0;
-    }
-
-    *word0 = (unsigned short)(((vstart & 0xff) << 8) |
-        ((hstart >> 1) & 0xff));
-    *word1 = (unsigned short)(((vstop & 0xff) << 8) |
-        ((vstart & 0x100) != 0 ? 0x0004 : 0x0000) |
-        ((vstop & 0x100) != 0 ? 0x0002 : 0x0000) |
-        (hstart & 1));
-}
-
-void ana_amiga_sprite_set_position_safe(
-    struct SimpleSprite* sprite,
-    int x,
-    int y,
-    int height,
-    int trace_raster,
-    ANA_AmigaSpriteUpdateStats* stats)
-{
-    UWORD* data;
-    unsigned short word0;
-    unsigned short word1;
-
-    if (sprite == NULL || sprite->posctldata == NULL || height <= 0) {
-        return;
-    }
-
-    ana_amiga_sprite_wait_until_safe(sprite, y, height, stats);
-    ana_amiga_sprite_record_write_raster(
-        sprite,
-        y,
-        height,
-        trace_raster,
-        stats);
-    ana_amiga_sprite_expected_control_words(
-        x,
-        y,
-        height,
-        &word0,
-        &word1);
-
-    data = sprite->posctldata;
-    data[0] = (UWORD)word0;
-    data[1] = (UWORD)word1;
-    sprite->x = (WORD)x;
-    sprite->y = (WORD)y;
-}
-
-void ana_amiga_sprite_record_control_check(
-    const struct SimpleSprite* sprite,
-    int x,
-    int y,
-    int height,
-    ANA_AmigaSpriteUpdateStats* stats)
-{
-    unsigned short expected0;
-    unsigned short expected1;
-    const UWORD* data;
-
-    if (stats == NULL || sprite == NULL || sprite->posctldata == NULL ||
-            height <= 0) {
-        return;
-    }
-
-    data = sprite->posctldata;
-    stats->position_checks++;
-    if (data[0] == 0u && data[1] == 0u) {
-        stats->zero_control_words++;
-    }
-
-    ana_amiga_sprite_expected_control_words(
-        x,
-        y,
-        height,
-        &expected0,
-        &expected1);
-    if (data[0] != expected0 || data[1] != expected1) {
-        stats->position_mismatches++;
-    }
-}
-#endif
 
 unsigned char ana_gfx_front_pixel(int x, int y)
 {

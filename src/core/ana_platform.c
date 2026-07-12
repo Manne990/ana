@@ -10,7 +10,43 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #else
-#include <time.h>
+#include <stdlib.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#endif
+
+#ifndef ANA_TARGET_AMIGA
+#define ANA_HOST_TICKS_PER_SECOND 1000000L
+
+static int ana_host_clock_started = 0;
+static long ana_host_clock_start_seconds = 0L;
+static long ana_host_clock_start_micros = 0L;
+static long ana_host_clock_last_tick = 0L;
+
+static long ana_host_time_ticks(void)
+{
+    struct timeval now;
+    long ticks;
+
+    if (gettimeofday(&now, NULL) != 0) {
+        return ana_host_clock_last_tick;
+    }
+
+    if (!ana_host_clock_started) {
+        ana_host_clock_started = 1;
+        ana_host_clock_start_seconds = (long)now.tv_sec;
+        ana_host_clock_start_micros = (long)now.tv_usec;
+    }
+
+    ticks = ((long)now.tv_sec - ana_host_clock_start_seconds) *
+        ANA_HOST_TICKS_PER_SECOND;
+    ticks += (long)now.tv_usec - ana_host_clock_start_micros;
+    if (ticks < ana_host_clock_last_tick) {
+        ticks = ana_host_clock_last_tick;
+    }
+    ana_host_clock_last_tick = ticks;
+    return ticks;
+}
 #endif
 
 static const ANA_Profile ana_ocs_ecs_pal_lores_profile = {
@@ -99,7 +135,7 @@ long ana_platform_time_ticks(void)
         (stamp.ds_Minute * 60L * 50L) +
         stamp.ds_Tick;
 #else
-    return (long)clock();
+    return ana_host_time_ticks();
 #endif
 }
 
@@ -108,11 +144,7 @@ long ana_platform_time_ticks_per_second(void)
 #ifdef ANA_TARGET_AMIGA
     return 50L;
 #else
-    if ((long)CLOCKS_PER_SEC <= 0L) {
-        return 1L;
-    }
-
-    return (long)CLOCKS_PER_SEC;
+    return ANA_HOST_TICKS_PER_SECOND;
 #endif
 }
 
@@ -129,7 +161,7 @@ unsigned long ana_platform_perf_ticks(void)
 
     return (unsigned long)ana_platform_time_ticks() * 20000UL;
 #else
-    return (unsigned long)clock();
+    return (unsigned long)ana_host_time_ticks();
 #endif
 }
 
@@ -138,11 +170,7 @@ unsigned long ana_platform_perf_ticks_per_second(void)
 #ifdef ANA_TARGET_AMIGA
     return 1000000UL;
 #else
-    if ((long)CLOCKS_PER_SEC <= 0L) {
-        return 1UL;
-    }
-
-    return (unsigned long)CLOCKS_PER_SEC;
+    return (unsigned long)ANA_HOST_TICKS_PER_SECOND;
 #endif
 }
 
@@ -153,6 +181,19 @@ void ana_platform_wait_until_time_tick(long target_tick)
         WaitTOF();
     }
 #else
-    (void)target_tick;
+    long remaining;
+    struct timeval delay;
+
+    if (getenv("ANA_HOST_UNPACED") != NULL) {
+        return;
+    }
+
+    remaining = target_tick - ana_host_time_ticks();
+    while (remaining > 0L) {
+        delay.tv_sec = (long)(remaining / ANA_HOST_TICKS_PER_SECOND);
+        delay.tv_usec = (long)(remaining % ANA_HOST_TICKS_PER_SECOND);
+        select(0, NULL, NULL, NULL, &delay);
+        remaining = target_tick - ana_host_time_ticks();
+    }
 #endif
 }

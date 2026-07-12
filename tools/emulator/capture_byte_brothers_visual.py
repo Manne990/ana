@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import json
 import re
 import shutil
 import subprocess
@@ -13,10 +15,13 @@ import time
 from pathlib import Path
 
 import run_byte_brothers as bb
+import analyze_byte_brothers_frames as visual
 
 
 ROOT = Path(__file__).resolve().parents[2]
 VISUAL_ROOT = ROOT / "build" / "emulator-results" / "byte-brothers-visual"
+SCREEN_CAPTURE_SOURCE = ROOT / "tools" / "emulator" / "capture_window_frames.swift"
+SCREEN_CAPTURE_BINARY = ROOT / "build" / "tools" / "emulator" / "capture_window_frames"
 VISUAL_SIGNAL_SCALE = "64:36"
 MIN_USABLE_NONBLACK_RATIO = 0.02
 MIN_GAMEPLAY_SIGNAL_RATIO = 0.01
@@ -66,6 +71,11 @@ let scale = NSScreen.main?.backingScaleFactor ?? 1.0
 print(scale)
 '''
 
+PARK_MOUSE_SWIFT = r'''
+import CoreGraphics
+CGWarpMouseCursorPosition(CGPoint(x: 1, y: 1))
+'''
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -79,15 +89,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--capture-mode",
         choices=("window", "fs-uae", "both", "screen-recording"),
-        default="window",
+        default="screen-recording",
         help=(
             "window captures the real macOS FS-UAE window; fs-uae uses the "
             "emulator screenshot shortcut; both captures the window first and "
             "keeps FS-UAE screenshots as diagnostics; screen-recording records "
-            "the full macOS display through avfoundation and crops to FS-UAE."
+            "the FS-UAE window through ScreenCaptureKit (with AVFoundation "
+            "only as a compatibility fallback)."
         ),
     )
     parser.add_argument("--no-build", action="store_true")
+    parser.add_argument(
+        "--record-fps",
+        type=float,
+        default=20.0,
+        help="Frame rate used by the temporal sprite analyzer.",
+    )
+    parser.add_argument(
+        "--record-duration",
+        type=float,
+        default=8.0,
+        help="Seconds of consecutive gameplay to record and analyze.",
+    )
     parser.add_argument(
         "--avfoundation-screen",
         default=None,
@@ -366,6 +389,17 @@ def raise_fsuae(pid: int | None = None) -> None:
     )
 
 
+def park_mouse_outside_capture() -> None:
+    subprocess.run(
+        ["swift", "-"],
+        input=PARK_MOUSE_SWIFT,
+        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
 def parse_cgwindow_detail_rect(detail: str) -> tuple[int, int, int, int] | None:
     marker = "rect="
     start = detail.find(marker)
@@ -506,6 +540,7 @@ def record_fsuae_screen_frames(
         return False, f"invalid FS-UAE window rect ({detail})"
 
     raise_fsuae(pid)
+    park_mouse_outside_capture()
     time.sleep(0.2)
     output_pattern.parent.mkdir(parents=True, exist_ok=True)
     scale = screen_backing_scale()
@@ -551,6 +586,75 @@ def record_fsuae_screen_frames(
     if not error:
         error = "ffmpeg screen recording produced no frames"
     return False, f"{detail}, ffmpeg={error}"
+
+
+def build_screen_capture_helper() -> tuple[bool, str]:
+    if not SCREEN_CAPTURE_SOURCE.exists():
+        return False, f"missing ScreenCaptureKit helper: {SCREEN_CAPTURE_SOURCE}"
+    try:
+        current = (
+            SCREEN_CAPTURE_BINARY.exists()
+            and SCREEN_CAPTURE_BINARY.stat().st_mtime
+            >= SCREEN_CAPTURE_SOURCE.stat().st_mtime
+        )
+    except OSError as exc:
+        return False, str(exc)
+    if current:
+        return True, "cached"
+
+    SCREEN_CAPTURE_BINARY.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        [
+            "swiftc",
+            "-parse-as-library",
+            str(SCREEN_CAPTURE_SOURCE),
+            "-o",
+            str(SCREEN_CAPTURE_BINARY),
+        ],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return False, proc.stdout.strip() or "swiftc failed"
+    return True, "compiled"
+
+
+def record_fsuae_window_frames(
+    output_directory: Path,
+    pid: int,
+    duration: float,
+    fps: float,
+) -> tuple[bool, str]:
+    ok, detail = build_screen_capture_helper()
+    if not ok:
+        return False, detail
+
+    raise_fsuae(pid)
+    park_mouse_outside_capture()
+    time.sleep(0.1)
+    proc = subprocess.run(
+        [
+            str(SCREEN_CAPTURE_BINARY),
+            str(pid),
+            str(output_directory),
+            f"{duration:.3f}",
+            str(max(1, int(round(fps)))),
+        ],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    captures = list(output_directory.glob("screen-recording-*.png"))
+    if proc.returncode == 0 and captures:
+        summary = proc.stdout.strip() or f"captured_frames={len(captures)}"
+        return True, f"method=ScreenCaptureKit, {summary}"
+    error = proc.stdout.strip() or "ScreenCaptureKit produced no frames"
+    return False, error
 
 
 def image_nonblack_ratio(path: Path) -> float | None:
@@ -764,6 +868,15 @@ def select_contact_frames(captures: list[Path]) -> list[Path]:
     return sorted(captures, key=screenshot_sort_key)
 
 
+def sample_contact_frames(captures: list[Path], count: int = 16) -> list[Path]:
+    if len(captures) <= count:
+        return captures
+    return [
+        captures[round(index * (len(captures) - 1) / (count - 1))]
+        for index in range(count)
+    ]
+
+
 def run_visual_capture(args: argparse.Namespace) -> int:
     scenario = bb.SCENARIOS[args.scenario]
     scenario_id = int(scenario["id"])
@@ -772,7 +885,7 @@ def run_visual_capture(args: argparse.Namespace) -> int:
     avfoundation_input = "4:none"
     avfoundation_detail = "not-used"
 
-    if args.capture_mode in ("window", "both"):
+    if args.capture_mode in ("window", "both", "screen-recording"):
         ok, detail = preflight_screen_capture()
         if not ok:
             print(screen_capture_permission_message(detail), file=sys.stderr)
@@ -799,6 +912,15 @@ def run_visual_capture(args: argparse.Namespace) -> int:
         )
         bb.build_byte_brothers(scenario_id, args.frames, extra_cflags)
     if args.capture_mode == "screen-recording":
+        helper_ok, helper_detail = build_screen_capture_helper()
+        if not helper_ok:
+            print(
+                f"ScreenCaptureKit helper unavailable ({helper_detail}); "
+                "AVFoundation fallback will be used.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"ScreenCaptureKit helper: {helper_detail}")
         avfoundation_input, avfoundation_detail = avfoundation_screen_input(
             args.avfoundation_screen)
         print(
@@ -845,24 +967,37 @@ def run_visual_capture(args: argparse.Namespace) -> int:
             time.sleep(0.35)
 
         if args.capture_mode == "screen-recording":
-            duration = max(1.0, (args.captures * args.interval) + 0.5)
+            duration = max(1.0, args.record_duration)
             pattern = capture_dir / "screen-recording-%03d.png"
-            ok, detail = record_fsuae_screen_frames(
-                pattern,
+            ok, detail = record_fsuae_window_frames(
+                capture_dir,
                 process.pid,
                 duration,
-                1.0 / max(args.interval, 0.001),
-                avfoundation_input,
-                avfoundation_detail,
+                max(1.0, args.record_fps),
             )
+            if not ok:
+                print(
+                    f"ScreenCaptureKit capture failed ({detail}); "
+                    "trying AVFoundation fallback."
+                )
+                ok, detail = record_fsuae_screen_frames(
+                    pattern,
+                    process.pid,
+                    duration,
+                    max(1.0, args.record_fps),
+                    avfoundation_input,
+                    avfoundation_detail,
+                )
             if ok:
                 captures = sorted(
                     capture_dir.glob("screen-recording-*.png"),
                     key=screenshot_sort_key,
                 )
                 seen_captures.update(captures)
-                for path in captures:
-                    print(f"Captured {path} ({detail})")
+                print(
+                    f"Captured {len(captures)} consecutive frames in "
+                    f"{capture_dir} ({detail})"
+                )
             else:
                 print(f"Screen recording capture failed: {detail}")
 
@@ -934,7 +1069,8 @@ def run_visual_capture(args: argparse.Namespace) -> int:
     print_capture_quality(captures)
 
     usable_frames = usable_capture_paths(captures)
-    contact_frames = usable_frames or select_contact_frames(captures)
+    contact_frames = sample_contact_frames(
+        usable_frames or select_contact_frames(captures))
     contact = result_dir / "contact-sheet.png"
     if convert_to_contact_sheet(contact_frames, contact):
         print(f"Contact sheet: {contact}")
@@ -953,9 +1089,84 @@ def run_visual_capture(args: argparse.Namespace) -> int:
         args.frames,
         args.strict_raster,
     )
+    if result is not None:
+        result_failures.extend(
+            bb.validate_result(result, args.scenario, args.machine, args.frames))
+
+    visual_failures: list[str] = []
+    host_visual_fallback_passed = False
+    recording_frames = sorted(
+        capture_dir.glob("screen-recording-*.png"),
+        key=screenshot_sort_key,
+    )
+    if recording_frames and usable_frames:
+        try:
+            decoded = visual.decode_png_sequence(
+                capture_dir / "screen-recording-%03d.png")
+            expected_enemies = 4
+            if result is not None:
+                expected_enemies = max(
+                    1,
+                    result_int(result, "max_visible_enemies"),
+                )
+            analysis = visual.analyze_rgb_frames(
+                decoded,
+                visual.ANALYSIS_WIDTH,
+                visual.ANALYSIS_HEIGHT,
+                expected_enemies,
+                minimum_frames=max(20, int(args.record_fps * 2.0)),
+            )
+            analysis_path = result_dir / "visual-analysis.json"
+            analysis_path.write_text(
+                json.dumps(
+                    dataclasses.asdict(analysis),
+                    indent=2,
+                    sort_keys=True,
+                ) + "\n",
+                encoding="utf-8",
+            )
+            print(f"Visual analysis: {analysis_path}")
+            print(analysis_path.read_text(encoding="utf-8"))
+            visual_failures.extend(analysis.failures)
+        except (OSError, RuntimeError, ValueError) as exc:
+            visual_failures.append(f"visual analyzer could not process frames: {exc}")
+    elif args.capture_mode == "screen-recording":
+        print(
+            "FS-UAE's emulated chipset surface is masked from macOS capture; "
+            "running the deterministic ANA front-buffer visual oracle."
+        )
+        host_visual = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tools" / "emulator" /
+                    "run_byte_brothers_host_visual.py"),
+                "--scenario",
+                args.scenario,
+                "--frames",
+                str(args.frames),
+                "--dump-every",
+                str(max(1, int(round(50.0 / max(1.0, args.record_fps))))),
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        print(host_visual.stdout)
+        host_visual_fallback_passed = host_visual.returncode == 0
+        if not host_visual_fallback_passed:
+            visual_failures.append(
+                "deterministic host visual oracle failed with exit code "
+                f"{host_visual.returncode}"
+            )
     if result_failures:
         print("Harness result validation failed:", file=sys.stderr)
         for failure in result_failures:
+            print(f"- {failure}", file=sys.stderr)
+    if visual_failures:
+        print("Visual sprite validation failed:", file=sys.stderr)
+        for failure in visual_failures:
             print(f"- {failure}", file=sys.stderr)
 
     if not captures:
@@ -966,10 +1177,10 @@ def run_visual_capture(args: argparse.Namespace) -> int:
         )
         return 1
 
-    if result_failures:
+    if result_failures or visual_failures:
         return 3
 
-    if not usable_frames:
+    if not usable_frames and not host_visual_fallback_passed:
         print(
             "Captured PNG frames are not visually usable. In this setup the "
             "FS-UAE window and screen-recording paths can see the window "

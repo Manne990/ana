@@ -11,6 +11,8 @@ SOUND_SOURCE="$WORK_DIR/ana_convert_sound.anasfx"
 SOUND_OUTPUT="$WORK_DIR/ana_convert_sound.anasnd"
 WAV_SOUND_SOURCE="$WORK_DIR/ana_convert_sound.wav"
 WAV_SOUND_OUTPUT="$WORK_DIR/ana_convert_sound_wav.anasnd"
+WAV8_SOUND_SOURCE="$WORK_DIR/ana_convert_sound_8bit.wav"
+WAV8_SOUND_OUTPUT="$WORK_DIR/ana_convert_sound_8bit.anasnd"
 PNG_SOURCE="$WORK_DIR/ana_convert_sheet.png"
 PNG_PALETTE="$WORK_DIR/ana_convert_palette.png"
 PALETTE="$WORK_DIR/game.anapal"
@@ -18,6 +20,8 @@ PNG_OUTPUT="$WORK_DIR/ana_convert_sheet_png.anaimg"
 MANIFEST="$WORK_DIR/assets.ana"
 MANIFEST_OUT="$WORK_DIR/nested/manifest-assets"
 MOD_SOURCE="$WORK_DIR/theme.mod"
+BAD_MOD_SOURCE="$WORK_DIR/theme-5chn.mod"
+INVALID_MANIFEST="$WORK_DIR/assets-invalid.ana"
 
 mkdir -p "$WORK_DIR"
 
@@ -118,6 +122,17 @@ with wave.open(sys.argv[1], "wb") as wav:
     wav.writeframes(b"".join(frames))
 PY
 
+python3 - "$WAV8_SOUND_SOURCE" <<'PY'
+import sys
+import wave
+
+with wave.open(sys.argv[1], "wb") as wav:
+    wav.setnchannels(1)
+    wav.setsampwidth(1)
+    wav.setframerate(8000)
+    wav.writeframes(bytes((0, 64, 128, 192, 255, 128, 64, 0)))
+PY
+
 "$CONVERT" sound "$WAV_SOUND_SOURCE" \
     --out "$WAV_SOUND_OUTPUT" \
     --rate 4000 \
@@ -137,6 +152,24 @@ assert data[15] == 4
 assert data[16] == 1
 assert data[17:20] == b"\x00\x00\x00"
 assert len(data) == 24
+PY
+
+"$CONVERT" sound "$WAV8_SOUND_SOURCE" \
+    --out "$WAV8_SOUND_OUTPUT" \
+    --volume 32 \
+    --priority 2
+
+python3 - "$WAV8_SOUND_OUTPUT" <<'PY'
+import struct
+import sys
+
+data = open(sys.argv[1], "rb").read()
+assert data[:8] == b"ANASND01"
+assert struct.unpack("<H", data[8:10])[0] == 8000
+assert struct.unpack("<I", data[10:14])[0] == 8
+assert data[20] == 128
+assert data[22] == 0
+assert data[24] == 127
 PY
 
 python3 - "$PNG_SOURCE" "$PNG_PALETTE" <<'PY'
@@ -198,6 +231,16 @@ with open(sys.argv[1], "wb") as handle:
     handle.write(data)
 PY
 
+python3 - "$BAD_MOD_SOURCE" <<'PY'
+import sys
+
+data = bytearray(1084)
+data[950] = 1
+data[1080:1084] = b"5CHN"
+with open(sys.argv[1], "wb") as handle:
+    handle.write(data)
+PY
+
 "$CONVERT" palette "$PNG_PALETTE" \
     --out "$PALETTE" \
     --colors 7
@@ -221,6 +264,7 @@ sound coin ana_convert_sound.wav --rate 4000 --volume 44 --priority 4
 music theme theme.mod
 EOF
 
+"$CONVERT" validate "$MANIFEST"
 "$CONVERT" build "$MANIFEST" --out "$MANIFEST_OUT"
 "$PROBE" "$MANIFEST_OUT/sheet.anaimg"
 test -f "$MANIFEST_OUT/game.anapal"
@@ -229,7 +273,36 @@ cmp "$SOUND_OUTPUT" "$MANIFEST_OUT/click.anasnd"
 cmp "$WAV_SOUND_OUTPUT" "$MANIFEST_OUT/coin.anasnd"
 cmp "$MOD_SOURCE" "$MANIFEST_OUT/theme.mod"
 
+cat > "$INVALID_MANIFEST" <<EOF
+ANA_ASSETS 1
+sound ../../outside ana_convert_sound.wav
+EOF
+if "$CONVERT" validate "$INVALID_MANIFEST"; then
+    echo "unsafe manifest asset name was accepted" >&2
+    exit 1
+fi
+
+cat > "$INVALID_MANIFEST" <<EOF
+ANA_ASSETS 1
+sound hit ana_convert_sound.wav
+sound hit ana_convert_sound.wav
+EOF
+if "$CONVERT" validate "$INVALID_MANIFEST"; then
+    echo "duplicate manifest asset name was accepted" >&2
+    exit 1
+fi
+
+cat > "$INVALID_MANIFEST" <<EOF
+ANA_ASSETS 1
+music theme theme-5chn.mod
+EOF
+if "$CONVERT" validate "$INVALID_MANIFEST"; then
+    echo "unsupported MOD channel layout was accepted" >&2
+    exit 1
+fi
+
 rm -rf "$SOURCE" "$OUTPUT" "$PNG_SOURCE" "$PNG_PALETTE" "$PALETTE" \
     "$PNG_OUTPUT" "$FONT_SOURCE" "$FONT_OUTPUT" "$SOUND_SOURCE" \
-    "$SOUND_OUTPUT" "$WAV_SOUND_SOURCE" "$WAV_SOUND_OUTPUT" "$MANIFEST" \
-    "$MANIFEST_OUT" "$MOD_SOURCE"
+    "$SOUND_OUTPUT" "$WAV_SOUND_SOURCE" "$WAV_SOUND_OUTPUT" \
+    "$WAV8_SOUND_SOURCE" "$WAV8_SOUND_OUTPUT" "$MANIFEST" \
+    "$INVALID_MANIFEST" "$MANIFEST_OUT" "$MOD_SOURCE" "$BAD_MOD_SOURCE"

@@ -5,7 +5,7 @@ both framework discipline and game-side discipline.
 
 ## Baseline target
 
-The practical 0.1 baseline is a stock A1200 without Fast RAM for the Invaders
+The practical 0.2 baseline is a stock A1200 without Fast RAM for the showcase
 showcase. The target is stable 50 fps on that machine class, which means the
 normal frame budget is 20 ms. A500/OCS remains interesting, but it is not the
 current performance floor for the complete showcase.
@@ -22,6 +22,17 @@ Current measured baseline, 2026-05-26:
 
 This is now the optimization reference until a newer stock-A1200 measurement
 replaces it.
+
+Current Byte Brothers deterministic measurement, 2026-07-12:
+
+- Machine profile: A1200, no Fast RAM.
+- Workload: 720-frame side-scroll run with up to three visible enemies.
+- Result: 45.1-45.2 fps with hardware-sprite raster tracing enabled.
+- Sprite checks: no control-word mismatch, zero control words, or writes inside
+  an active old/new sprite span across three consecutive runs.
+- Physics checks: no actor/world bounds, support, or camera invariant failures.
+
+Run the same workload with `make emulator-byte-brothers-visual`.
 
 Use the A1200 build targets for baseline measurements:
 

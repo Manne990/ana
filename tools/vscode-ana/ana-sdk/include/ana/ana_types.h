@@ -22,6 +22,8 @@ typedef struct ANA_Game {
     void (*load)(void);
     void (*update)(ANA_Time time);
     void (*draw)(void);
+    void (*pre_present)(void);
+    void (*post_present)(void);
     void (*shutdown)(void);
 
     int width;
@@ -31,6 +33,7 @@ typedef struct ANA_Game {
     ANA_ScreenMode screen_mode;
     ANA_RenderMode render_mode;
     int debug_stats;
+    int warmup_frames;
 } ANA_Game;
 
 #ifdef __cplusplus
