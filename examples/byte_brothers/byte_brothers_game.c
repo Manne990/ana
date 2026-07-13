@@ -62,23 +62,6 @@ static void bb_map_input(void)
 #define BB_TILE_FLAG_COLLECTIBLE 0x08u
 #define BB_TILE_FLAG_GOAL 0x10u
 
-#define BB_PLAYER_DAMAGE_X 4
-#define BB_PLAYER_DAMAGE_Y 4
-#define BB_PLAYER_DAMAGE_W (BB_PLAYER_W - (BB_PLAYER_DAMAGE_X * 2))
-#define BB_PLAYER_DAMAGE_H (BB_PLAYER_H - BB_PLAYER_DAMAGE_Y)
-#define BB_PLAYER_STOMP_X 2
-#define BB_PLAYER_STOMP_Y (BB_PLAYER_H - 6)
-#define BB_PLAYER_STOMP_W (BB_PLAYER_W - (BB_PLAYER_STOMP_X * 2))
-#define BB_PLAYER_STOMP_H 6
-#define BB_ENEMY_DAMAGE_X 6
-#define BB_ENEMY_DAMAGE_Y 16
-#define BB_ENEMY_DAMAGE_W 8
-#define BB_ENEMY_DAMAGE_H (BB_ENEMY_H - BB_ENEMY_DAMAGE_Y)
-#define BB_ENEMY_STOMP_X 0
-#define BB_ENEMY_STOMP_Y 0
-#define BB_ENEMY_STOMP_W 18
-#define BB_ENEMY_STOMP_H 18
-
 #ifndef BB_MAX_ACTIVE_ENEMIES
 #ifdef ANA_TARGET_AMIGA
 /* Keep the stock Amiga path inside the stable hardware sprite budget. */
@@ -98,8 +81,19 @@ static void bb_map_input(void)
 #define BB_HARNESS_SCENARIO_STOMP_MOVING 6
 #define BB_HARNESS_SCENARIO_STOMP_FALL 7
 #define BB_HARNESS_SCENARIO_STOMP_EDGE 8
+#define BB_HARNESS_SCENARIO_STOMP_INVULNERABLE 9
+#define BB_HARNESS_SCENARIO_STOMP_ARC 10
+#define BB_HARNESS_SCENARIO_STOMP_LEVEL_FLOOR 11
+#define BB_HARNESS_SCENARIO_SIDE_CONTACT 12
+#define BB_HARNESS_HIT_NONE 0
+#define BB_HARNESS_HIT_WORLD 1
+#define BB_HARNESS_HIT_HAZARD 2
+#define BB_HARNESS_HIT_ENEMY 3
 #ifndef BB_HARNESS_FRAMES
 #define BB_HARNESS_FRAMES 100
+#endif
+#ifndef BB_HARNESS_STOMP_LEVEL_START_OFFSET
+#define BB_HARNESS_STOMP_LEVEL_START_OFFSET 43
 #endif
 #ifndef BB_HARNESS_SCENARIO
 #define BB_HARNESS_SCENARIO BB_HARNESS_SCENARIO_STATIC
@@ -131,6 +125,23 @@ static int bb_harness_enemy_bounds_failures = 0;
 static int bb_harness_player_support_failures = 0;
 static int bb_harness_enemy_support_failures = 0;
 static int bb_harness_camera_bounds_failures = 0;
+static int bb_harness_pending_hit_reason = BB_HARNESS_HIT_NONE;
+static int bb_harness_hit_reason = BB_HARNESS_HIT_NONE;
+static int bb_harness_hit_enemy_index = -1;
+static int bb_harness_hit_frame = -1;
+static int bb_harness_hit_player_old_y = 0;
+static int bb_harness_hit_player_y = 0;
+static int bb_harness_hit_player_x = 0;
+static int bb_harness_hit_player_old_vy = 0;
+static int bb_harness_hit_player_was_airborne = 0;
+static int bb_harness_hit_player_on_ground = 0;
+static int bb_harness_hit_enemy_x = 0;
+static int bb_harness_hit_enemy_y = 0;
+static int bb_harness_hit_old_bottom = 0;
+static int bb_harness_hit_new_bottom = 0;
+static int bb_harness_hit_enemy_top = 0;
+static int bb_harness_hit_stomp_result = 0;
+static int bb_harness_hit_damage_result = 0;
 
 #ifdef ANA_TARGET_AMIGA
 static const char* bb_harness_scenario_name(void)
@@ -151,6 +162,14 @@ static const char* bb_harness_scenario_name(void)
     return "stomp-fall";
 #elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_EDGE
     return "stomp-edge";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_INVULNERABLE
+    return "stomp-invulnerable";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_ARC
+    return "stomp-arc";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_LEVEL_FLOOR
+    return "stomp-level-floor";
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SIDE_CONTACT
+    return "side-contact";
 #else
     return "static";
 #endif
@@ -260,6 +279,148 @@ static void bb_harness_setup_stomp_moving(void)
 }
 #endif
 
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_INVULNERABLE
+static void bb_harness_setup_stomp_invulnerable(void)
+{
+    BB_Enemy* enemy;
+    int tx;
+    int ty;
+    int platform_top;
+
+    for (ty = 0; ty < 12; ty++) {
+        for (tx = 8; tx <= 24; tx++) {
+            bb_set_tile(tx, ty, BB_TILE_EMPTY);
+        }
+    }
+    for (tx = 8; tx <= 24; tx++) {
+        bb_set_tile(tx, 12, BB_TILE_PLATFORM);
+    }
+    platform_top = 12 * BB_TILE;
+
+    bb_enemy_count = 1;
+    enemy = &bb_enemies[0];
+    enemy->x = bb_actor_tile_x(16, BB_ENEMY_W);
+    enemy->y = platform_top - BB_ENEMY_H;
+    enemy->vy = 0;
+    enemy->on_ground = 1;
+    enemy->vx = 0;
+    enemy->alive = 1;
+
+    bb_player.x = enemy->x + ((BB_ENEMY_W - BB_PLAYER_W) / 2);
+    bb_player.y = enemy->y - BB_PLAYER_H - 34;
+    bb_player.vx = 0;
+    bb_player.vy = 0;
+    bb_player.on_ground = 0;
+    bb_player.dash_ticks = 0;
+    bb_player.facing = 1;
+    bb_player.invuln_ticks = BB_INVULN_TICKS;
+    ana_camera_set_position(&bb_camera, 0, 0);
+}
+#endif
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_ARC
+static void bb_harness_setup_stomp_arc(void)
+{
+    BB_Enemy* enemy;
+    int tx;
+    int ty;
+    int platform_top;
+
+    for (ty = 0; ty < 12; ty++) {
+        for (tx = 8; tx <= 24; tx++) {
+            bb_set_tile(tx, ty, BB_TILE_EMPTY);
+        }
+    }
+    for (tx = 8; tx <= 24; tx++) {
+        bb_set_tile(tx, 12, BB_TILE_PLATFORM);
+    }
+    platform_top = 12 * BB_TILE;
+
+    bb_enemy_count = 1;
+    enemy = &bb_enemies[0];
+    enemy->x = bb_actor_tile_x(16, BB_ENEMY_W);
+    enemy->y = platform_top - BB_ENEMY_H;
+    enemy->vy = 0;
+    enemy->on_ground = 1;
+    enemy->vx = 0;
+    enemy->alive = 1;
+
+    bb_player.x = enemy->x - 42;
+    bb_player.y = platform_top - BB_PLAYER_H;
+    bb_player.vx = 0;
+    bb_player.vy = 0;
+    bb_player.on_ground = 1;
+    bb_player.dash_ticks = 0;
+    bb_player.facing = 1;
+    bb_player.invuln_ticks = 0;
+    ana_camera_set_position(&bb_camera, 0, 0);
+}
+#endif
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_LEVEL_FLOOR
+static void bb_harness_setup_stomp_level_floor(void)
+{
+    BB_Enemy* enemy;
+
+    if (bb_enemy_count <= 0) {
+        return;
+    }
+
+    enemy = &bb_enemies[bb_enemy_count - 1];
+    bb_player.x = enemy->x + BB_HARNESS_STOMP_LEVEL_START_OFFSET;
+    bb_player.y = enemy->y - BB_PLAYER_H - 48;
+    bb_player.vx = 0;
+    bb_player.vy = 0;
+    bb_player.on_ground = 0;
+    bb_player.dash_ticks = 0;
+    bb_player.facing = 1;
+    bb_player.invuln_ticks = 0;
+    ana_camera_set_position(
+        &bb_camera,
+        bb_player.x - BB_CAMERA_TARGET_X,
+        0);
+}
+#endif
+
+#if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SIDE_CONTACT
+static void bb_harness_setup_side_contact(void)
+{
+    BB_Enemy* enemy;
+    int tx;
+    int ty;
+    int platform_top;
+
+    for (ty = 0; ty < 12; ty++) {
+        for (tx = 8; tx <= 24; tx++) {
+            bb_set_tile(tx, ty, BB_TILE_EMPTY);
+        }
+    }
+    for (tx = 8; tx <= 24; tx++) {
+        bb_set_tile(tx, 12, BB_TILE_PLATFORM);
+    }
+    platform_top = 12 * BB_TILE;
+
+    bb_enemy_count = 1;
+    enemy = &bb_enemies[0];
+    enemy->x = bb_actor_tile_x(16, BB_ENEMY_W);
+    enemy->y = platform_top - BB_ENEMY_H;
+    enemy->vy = 0;
+    enemy->on_ground = 1;
+    enemy->vx = 0;
+    enemy->alive = 1;
+
+    bb_player.x = enemy->x - BB_PLAYER_W - 12;
+    bb_player.y = platform_top - BB_PLAYER_H;
+    bb_player.vx = 0;
+    bb_player.vy = 0;
+    bb_player.on_ground = 1;
+    bb_player.dash_ticks = 0;
+    bb_player.facing = 1;
+    bb_player.invuln_ticks = 0;
+    ana_camera_set_position(&bb_camera, 0, 0);
+}
+#endif
+
 static void bb_harness_begin(void)
 {
 #if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
@@ -274,6 +435,14 @@ static void bb_harness_begin(void)
     bb_harness_setup_stomp_fall();
 #elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_EDGE
     bb_harness_setup_stomp_edge();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_INVULNERABLE
+    bb_harness_setup_stomp_invulnerable();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_ARC
+    bb_harness_setup_stomp_arc();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_LEVEL_FLOOR
+    bb_harness_setup_stomp_level_floor();
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SIDE_CONTACT
+    bb_harness_setup_side_contact();
 #endif
     bb_harness_start_player_x = bb_player.x;
     bb_harness_start_player_y = bb_player.y;
@@ -300,6 +469,23 @@ static void bb_harness_begin(void)
     bb_harness_player_support_failures = 0;
     bb_harness_enemy_support_failures = 0;
     bb_harness_camera_bounds_failures = 0;
+    bb_harness_pending_hit_reason = BB_HARNESS_HIT_NONE;
+    bb_harness_hit_reason = BB_HARNESS_HIT_NONE;
+    bb_harness_hit_enemy_index = -1;
+    bb_harness_hit_frame = -1;
+    bb_harness_hit_player_old_y = 0;
+    bb_harness_hit_player_y = 0;
+    bb_harness_hit_player_x = 0;
+    bb_harness_hit_player_old_vy = 0;
+    bb_harness_hit_player_was_airborne = 0;
+    bb_harness_hit_player_on_ground = 0;
+    bb_harness_hit_enemy_x = 0;
+    bb_harness_hit_enemy_y = 0;
+    bb_harness_hit_old_bottom = 0;
+    bb_harness_hit_new_bottom = 0;
+    bb_harness_hit_enemy_top = 0;
+    bb_harness_hit_stomp_result = 0;
+    bb_harness_hit_damage_result = 0;
 #if BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SCROLL || \
         BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_INPUT || \
         BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_ENEMY_OVERFLOW
@@ -314,6 +500,12 @@ static void bb_harness_apply_controls(int* move)
     *move = 1;
 #elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STATIC
     *move = 0;
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_ARC
+    *move = 1;
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_LEVEL_FLOOR
+    *move = -1;
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_SIDE_CONTACT
+    *move = 1;
 #else
     (void)move;
 #endif
@@ -345,6 +537,10 @@ static void bb_harness_schedule_input(void)
         bb_harness_input_quit_scheduled = 1;
         bb_harness_input_quit_frame = bb_frame;
         ana_input_pulse_key_event(ANA_KEY_C);
+    }
+#elif BB_HARNESS_SCENARIO == BB_HARNESS_SCENARIO_STOMP_ARC
+    if (bb_frame == 1) {
+        ana_input_pulse_key_event(ANA_KEY_SPACE);
     }
 #endif
 }
@@ -738,6 +934,64 @@ static void bb_harness_write_result(void)
         file,
         "player_hit_count",
         bb_harness_player_hit_count);
+    bb_harness_write_int_line(file, "hit_reason", bb_harness_hit_reason);
+    bb_harness_write_int_line(
+        file,
+        "hit_enemy_index",
+        bb_harness_hit_enemy_index);
+    bb_harness_write_int_line(file, "hit_frame", bb_harness_hit_frame);
+    bb_harness_write_int_line(
+        file,
+        "hit_player_old_y",
+        bb_harness_hit_player_old_y);
+    bb_harness_write_int_line(
+        file,
+        "hit_player_y",
+        bb_harness_hit_player_y);
+    bb_harness_write_int_line(
+        file,
+        "hit_player_x",
+        bb_harness_hit_player_x);
+    bb_harness_write_int_line(
+        file,
+        "hit_player_old_vy",
+        bb_harness_hit_player_old_vy);
+    bb_harness_write_int_line(
+        file,
+        "hit_player_was_airborne",
+        bb_harness_hit_player_was_airborne);
+    bb_harness_write_int_line(
+        file,
+        "hit_player_on_ground",
+        bb_harness_hit_player_on_ground);
+    bb_harness_write_int_line(
+        file,
+        "hit_enemy_x",
+        bb_harness_hit_enemy_x);
+    bb_harness_write_int_line(
+        file,
+        "hit_enemy_y",
+        bb_harness_hit_enemy_y);
+    bb_harness_write_int_line(
+        file,
+        "hit_old_bottom",
+        bb_harness_hit_old_bottom);
+    bb_harness_write_int_line(
+        file,
+        "hit_new_bottom",
+        bb_harness_hit_new_bottom);
+    bb_harness_write_int_line(
+        file,
+        "hit_enemy_top",
+        bb_harness_hit_enemy_top);
+    bb_harness_write_int_line(
+        file,
+        "hit_stomp_result",
+        bb_harness_hit_stomp_result);
+    bb_harness_write_int_line(
+        file,
+        "hit_damage_result",
+        bb_harness_hit_damage_result);
     bb_harness_write_int_line(
         file,
         "player_bounds_failures",
@@ -1453,6 +1707,41 @@ static void bb_restart_level(void)
     bb_load_level(bb_level_index);
 }
 
+#ifdef BB_EMULATOR_HARNESS
+static void bb_harness_prepare_hit(
+    int reason,
+    int enemy_index,
+    const BB_Enemy* enemy,
+    int player_old_y,
+    int player_old_vy,
+    int player_was_airborne,
+    int stomp_result,
+    int damage_result)
+{
+    bb_harness_pending_hit_reason = reason;
+    bb_harness_hit_enemy_index = enemy_index;
+    bb_harness_hit_player_old_y = player_old_y;
+    bb_harness_hit_player_y = bb_player.y;
+    bb_harness_hit_player_x = bb_player.x;
+    bb_harness_hit_player_old_vy = player_old_vy;
+    bb_harness_hit_player_was_airborne = player_was_airborne;
+    bb_harness_hit_player_on_ground = bb_player.on_ground;
+    bb_harness_hit_old_bottom = player_old_y + BB_PLAYER_H;
+    bb_harness_hit_new_bottom = bb_player.y + BB_PLAYER_H;
+    bb_harness_hit_stomp_result = stomp_result;
+    bb_harness_hit_damage_result = damage_result;
+    if (enemy != NULL) {
+        bb_harness_hit_enemy_x = enemy->x;
+        bb_harness_hit_enemy_y = enemy->y;
+        bb_harness_hit_enemy_top = enemy->y;
+    } else {
+        bb_harness_hit_enemy_x = 0;
+        bb_harness_hit_enemy_y = 0;
+        bb_harness_hit_enemy_top = 0;
+    }
+}
+#endif
+
 static int bb_player_hit(void)
 {
     if (bb_player.invuln_ticks > 0) {
@@ -1461,6 +1750,10 @@ static int bb_player_hit(void)
 
 #ifdef BB_EMULATOR_HARNESS
     bb_harness_player_hit_count++;
+    if (bb_harness_hit_reason == BB_HARNESS_HIT_NONE) {
+        bb_harness_hit_reason = bb_harness_pending_hit_reason;
+        bb_harness_hit_frame = bb_frame;
+    }
 #endif
 
     bb_lives--;
@@ -1641,6 +1934,17 @@ static int bb_clamp_player_to_world(void)
 {
     bb_player.x = ana_clamp_int(bb_player.x, 0, BB_WORLD_W - BB_PLAYER_W);
     if (bb_player.y > BB_WORLD_H) {
+#ifdef BB_EMULATOR_HARNESS
+        bb_harness_prepare_hit(
+            BB_HARNESS_HIT_WORLD,
+            -1,
+            NULL,
+            bb_player.y,
+            bb_player.vy,
+            !bb_player.on_ground,
+            0,
+            0);
+#endif
         return bb_player_hit();
     }
 
@@ -1770,8 +2074,9 @@ static int bb_player_stomps_enemy(
         bb_player_stomp_rect_at(bb_player.x, bb_player.y);
     enemy_rect = bb_enemy_stomp_rect(enemy);
 
-    if (player_rect.x + player_rect.w <= enemy_rect.x ||
-            player_rect.x >= enemy_rect.x + enemy_rect.w) {
+    if (bb_player.x + BB_PLAYER_W + BB_STOMP_HORIZONTAL_GRACE <= enemy->x ||
+            bb_player.x >=
+                enemy->x + BB_ENEMY_W + BB_STOMP_HORIZONTAL_GRACE) {
         return 0;
     }
 
@@ -1832,10 +2137,30 @@ static int bb_resolve_player_enemy_contacts(
     int player_was_airborne)
 {
     int i;
+    int damage_result;
+    int stomp_result;
     BB_Enemy* enemy;
 
-    if (bb_player.invuln_ticks > 0 || bb_enemy_count <= 0) {
+    if (bb_enemy_count <= 0) {
         return 0;
+    }
+
+    /* A descending contact wins before any damage contact in the same frame. */
+    for (i = 0; i < bb_enemy_count; i++) {
+        enemy = &bb_enemies[i];
+        if (!enemy->alive) {
+            continue;
+        }
+
+        stomp_result = bb_player_stomps_enemy(
+            enemy,
+            player_old_y,
+            player_old_vy,
+            player_was_airborne);
+        if (stomp_result) {
+            bb_stomp_enemy(enemy);
+            return 0;
+        }
     }
 
     for (i = 0; i < bb_enemy_count; i++) {
@@ -1843,20 +2168,22 @@ static int bb_resolve_player_enemy_contacts(
         if (!enemy->alive) {
             continue;
         }
-
-        if (bb_player_stomps_enemy(
-                enemy,
-                player_old_y,
-                player_old_vy,
-                player_was_airborne)) {
-            bb_stomp_enemy(enemy);
+        damage_result = bb_player_enemy_intersects(enemy);
+        if (!damage_result) {
             continue;
         }
 
-        if (!bb_player_enemy_intersects(enemy)) {
-            continue;
-        }
-
+#ifdef BB_EMULATOR_HARNESS
+        bb_harness_prepare_hit(
+            BB_HARNESS_HIT_ENEMY,
+            i,
+            enemy,
+            player_old_y,
+            player_old_vy,
+            player_was_airborne,
+            0,
+            damage_result);
+#endif
         return bb_player_hit();
     }
 
@@ -2084,8 +2411,21 @@ void byte_brothers_update(ANA_Time time)
     }
 
     bb_scan_player_tiles(&hit_hazard, &reached_goal);
-    if (hit_hazard && bb_player_hit()) {
-        return;
+    if (hit_hazard) {
+#ifdef BB_EMULATOR_HARNESS
+        bb_harness_prepare_hit(
+            BB_HARNESS_HIT_HAZARD,
+            -1,
+            NULL,
+            player_old_y,
+            player_old_vy,
+            player_was_airborne,
+            0,
+            0);
+#endif
+        if (bb_player_hit()) {
+            return;
+        }
     }
 
     if (bb_resolve_player_enemy_contacts(

@@ -31,6 +31,10 @@ SCENARIOS = {
     "stomp-moving": {"id": 6, "frames": 100, "min_fps_x100": 3500},
     "stomp-fall": {"id": 7, "frames": 80, "min_fps_x100": 3500},
     "stomp-edge": {"id": 8, "frames": 80, "min_fps_x100": 3500},
+    "stomp-invulnerable": {"id": 9, "frames": 90, "min_fps_x100": 3500},
+    "stomp-arc": {"id": 10, "frames": 100, "min_fps_x100": 3500},
+    "stomp-level-floor": {"id": 11, "frames": 100, "min_fps_x100": 3500},
+    "side-contact": {"id": 12, "frames": 24, "min_fps_x100": 2000},
 }
 
 MACHINE_CONFIGS = {
@@ -418,6 +422,10 @@ def validate_result(
                 "stomp did not remove an enemy: "
                 f"alive={alive_enemies}, total={enemy_count}"
             )
+    elif scenario == "side-contact":
+        require_at_least("player_hit_count", 1)
+        require_equal("stomp_count", 0)
+        require_equal("lives", 2)
 
     return failures
 

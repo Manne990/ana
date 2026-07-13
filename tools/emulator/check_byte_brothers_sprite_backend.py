@@ -21,6 +21,9 @@ SCENARIOS = {
     "stomp-moving": {"frames": 100, "min_fps_x100": 4500},
     "stomp-fall": {"frames": 80, "min_fps_x100": 4500},
     "stomp-edge": {"frames": 80, "min_fps_x100": 4500},
+    "stomp-invulnerable": {"frames": 90, "min_fps_x100": 4500},
+    "stomp-arc": {"frames": 100, "min_fps_x100": 4500},
+    "stomp-level-floor": {"frames": 100, "min_fps_x100": 4500},
 }
 
 
@@ -121,6 +124,9 @@ def validate_result(
         "stomp-moving",
         "stomp-fall",
         "stomp-edge",
+        "stomp-invulnerable",
+        "stomp-arc",
+        "stomp-level-floor",
     }:
         require(failures, as_int(result, "alive_enemies") == 0,
                 "enemy was not defeated by stomp")

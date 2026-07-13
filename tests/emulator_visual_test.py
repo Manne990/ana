@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "emulator"))
 
 from analyze_byte_brothers_frames import analyze_rgb_frames  # noqa: E402
+import write_fsuae_launch_config as fsuae_launch  # noqa: E402
 
 
 WIDTH = 160
@@ -71,6 +73,28 @@ class VisualAnalysisTest(unittest.TestCase):
         )
         self.assertIn(5, analysis.player_flicker_frames)
         self.assertTrue(analysis.failures)
+
+
+class FsUaeLaunchConfigTest(unittest.TestCase):
+    def test_resolves_relative_kickstart_from_fsuae_rom_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            config_path = root / "Configurations" / "A1200.fs-uae"
+            kickstart_path = root / "Kickstarts" / "amiga-os-310-a1200.rom"
+            kickstart_path.parent.mkdir(parents=True)
+            kickstart_path.write_bytes(b"test-rom")
+
+            original_roots = fsuae_launch.KICKSTART_ROOTS
+            try:
+                fsuae_launch.KICKSTART_ROOTS = (kickstart_path.parent,)
+                resolved = fsuae_launch.resolve_kickstart(
+                    ["[fs-uae]\n", f"kickstart_file = {kickstart_path.name}\n"],
+                    config_path,
+                )
+            finally:
+                fsuae_launch.KICKSTART_ROOTS = original_roots
+
+            self.assertEqual(kickstart_path.resolve(), resolved)
 
 
 if __name__ == "__main__":

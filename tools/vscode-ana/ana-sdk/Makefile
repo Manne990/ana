@@ -211,7 +211,9 @@ BYTE_BROTHERS_A1200_ADF := $(ADF_DIR)/byte-brothers-a1200.adf
 BYTE_BROTHERS_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-a1200-debug.adf
 BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG := $(BUILD_DIR)/fs-uae/byte-brothers-a1200-debug.fs-uae
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
+
+force-byte-brothers-a1200-debug-adf:
 
 all: lib examples tools
 
@@ -306,6 +308,10 @@ emulator-byte-brothers-all:
 	python3 tools/emulator/run_byte_brothers.py --scenario stomp-moving
 	python3 tools/emulator/run_byte_brothers.py --scenario stomp-fall
 	python3 tools/emulator/run_byte_brothers.py --scenario stomp-edge
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-invulnerable
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-arc
+	python3 tools/emulator/run_byte_brothers.py --scenario stomp-level-floor
+	python3 tools/emulator/run_byte_brothers.py --scenario side-contact
 
 emulator-byte-brothers-sprite-check:
 	python3 tools/emulator/check_byte_brothers_sprite_backend.py
@@ -656,7 +662,7 @@ $(AMAZE_A1200_DEBUG_ADF): $(AMIGA_AMAZE_A1200_DEBUG_BIN) $(AMAZE_ASSET_STAMP)
 	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l AMAZE12Dbg $(AMAZE_ASSET_DIR)
 
-$(BYTE_BROTHERS_A1200_DEBUG_ADF): $(AMIGA_BYTE_BROTHERS_A1200_DEBUG_BIN) $(BYTE_BROTHERS_ASSET_STAMP)
+$(BYTE_BROTHERS_A1200_DEBUG_ADF): $(AMIGA_BYTE_BROTHERS_A1200_DEBUG_BIN) $(BYTE_BROTHERS_ASSET_STAMP) force-byte-brothers-a1200-debug-adf
 	mkdir -p $(@D)
 	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l BYTE12Dbg $(BYTE_BROTHERS_ASSET_DIR)

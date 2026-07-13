@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 
@@ -32,6 +33,7 @@ OVERRIDE_KEYS = {
     "joystick_port_0_mode",
     "joystick_port_1",
     "joystick_port_1_mode",
+    "kickstart_file",
     "keyboard_input_grab",
     "keyboard_key_a",
     "keyboard_key_c",
@@ -54,6 +56,11 @@ OVERRIDE_KEYS = {
     "logs_dir",
     "save_states_dir",
 }
+
+KICKSTART_ROOTS = (
+    Path.home() / "Documents" / "FS-UAE" / "Kickstarts",
+    Path.home() / "Library" / "Application Support" / "FS-UAE" / "Kickstarts",
+)
 
 KEYBOARD_MAPPING = {
     "keyboard_key_a": "action_key_a",
@@ -103,13 +110,46 @@ def config_key(line: str) -> str | None:
     return stripped.split("=", 1)[0].strip().lower()
 
 
+def base_config_path(args: argparse.Namespace) -> Path:
+    return args.base_config if args.base_config is not None else PROFILES[args.profile]
+
+
 def read_base_config(args: argparse.Namespace) -> list[str]:
-    path = args.base_config if args.base_config is not None else PROFILES[args.profile]
+    path = base_config_path(args)
     if path.exists():
         return path.read_text(encoding="utf-8").splitlines(keepends=True)
     if args.profile.startswith("a500"):
         return ["[fs-uae]\n", "amiga_model = A500/512K\n"]
     return ["[fs-uae]\n", "amiga_model = A1200\n"]
+
+
+def config_value(lines: list[str], wanted_key: str) -> str | None:
+    for line in lines:
+        if config_key(line) == wanted_key:
+            return line.split("=", 1)[1].strip().strip('"')
+    return None
+
+
+def resolve_kickstart(lines: list[str], config_path: Path) -> Path | None:
+    value = config_value(lines, "kickstart_file")
+    if value is None or not value:
+        return None
+
+    expanded = Path(os.path.expandvars(value)).expanduser()
+    candidates = [expanded]
+    if not expanded.is_absolute():
+        candidates.append(config_path.parent / expanded)
+        candidates.extend(root / expanded for root in KICKSTART_ROOTS)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+
+    searched = ", ".join(str(candidate) for candidate in candidates)
+    raise SystemExit(
+        f"Kickstart ROM '{value}' from {config_path} was not found. "
+        f"Searched: {searched}"
+    )
 
 
 def launch_options(args: argparse.Namespace) -> dict[str, str]:
@@ -133,9 +173,10 @@ def launch_options(args: argparse.Namespace) -> dict[str, str]:
 
 
 def write_config(args: argparse.Namespace) -> Path:
+    base_lines = read_base_config(args)
     kept_lines: list[str] = []
 
-    for line in read_base_config(args):
+    for line in base_lines:
         key = config_key(line)
         if key is None or key not in OVERRIDE_KEYS:
             kept_lines.append(line)
@@ -148,7 +189,11 @@ def write_config(args: argparse.Namespace) -> Path:
         config_text += "\n"
 
     config_text += "\n# ANA reproducible launch overrides\n"
-    for key, value in sorted(launch_options(args).items()):
+    options = launch_options(args)
+    kickstart = resolve_kickstart(base_lines, base_config_path(args))
+    if kickstart is not None:
+        options["kickstart_file"] = str(kickstart)
+    for key, value in sorted(options.items()):
         config_text += f"{key} = {value}\n"
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
