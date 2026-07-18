@@ -26,6 +26,14 @@ static VoidstrikeTelemetry t;
 static int px,py,invul,fire_wait,scroll,boss_hp,boss_x;
 static ANA_TileLayer terrain_layer;
 static ANA_Camera terrain_camera;
+static ANA_Image player_base_image,player_speed_image,player_twin_image,player_wide_image,player_laser_image;
+static ANA_Image turret_image,crawler_image,drone_image,boss_image,player_shot_image,core_image,title_image;
+static ANA_Sound fire_sound,pickup_sound,install_sound,explosion_sound,death_sound,victory_sound;
+#ifdef ANA_TARGET_AMIGA
+#define VS_ASSET_ROOT "assets/"
+#else
+#define VS_ASSET_ROOT "build/assets/voidstrike/assets/"
+#endif
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 static char h_source_commit[65],h_build_id[80],h_adf_sha256[65],h_machine[32],h_scenario[24];
 static int h_keyboard_events,h_joystick_events,h_ctrl_events,h_space_events,h_joy_direction_events,h_joy_fire_events,h_joy_space_events,h_prev_ctrl,h_prev_space,h_prev_fire,h_prev_direction,h_window_start,h_min_fps;
@@ -48,11 +56,15 @@ static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return
 static unsigned char terrain_tile(int tx,int ty,void *user_data) { (void)user_data; return (unsigned char)((tx + ty * 3) % 3); }
 static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,16,16); }
 static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
+static ANA_Image player_image_for_modules(void) { if(t.installed_modules&8u)return player_laser_image;if(t.installed_modules&4u)return player_wide_image;if(t.installed_modules&2u)return player_twin_image;if(t.installed_modules&1u)return player_speed_image;return player_base_image; }
+static ANA_Image enemy_image_for_type(int type) { return type==0?turret_image:(type==1?crawler_image:drone_image); }
+static void free_assets(void) { ana_free_image(title_image);ana_free_image(core_image);ana_free_image(player_shot_image);ana_free_image(boss_image);ana_free_image(drone_image);ana_free_image(crawler_image);ana_free_image(turret_image);ana_free_image(player_laser_image);ana_free_image(player_wide_image);ana_free_image(player_twin_image);ana_free_image(player_speed_image);ana_free_image(player_base_image);ana_free_sound(victory_sound);ana_free_sound(death_sound);ana_free_sound(explosion_sound);ana_free_sound(install_sound);ana_free_sound(pickup_sound);ana_free_sound(fire_sound); }
+static void load_assets(void) { ANA_AudioConfig audio; audio.music_channels=ANA_AUDIO_CH_0|ANA_AUDIO_CH_1;audio.sfx_channels=ANA_AUDIO_CH_2|ANA_AUDIO_CH_3;audio.sfx_can_steal_music=0;audio.music_can_use_free_sfx_channels=0;ana_configure_audio(&audio);player_base_image=ana_load_image(VS_ASSET_ROOT "player_base.anaimg");player_speed_image=ana_load_image(VS_ASSET_ROOT "player_speed.anaimg");player_twin_image=ana_load_image(VS_ASSET_ROOT "player_twin.anaimg");player_wide_image=ana_load_image(VS_ASSET_ROOT "player_wide.anaimg");player_laser_image=ana_load_image(VS_ASSET_ROOT "player_laser.anaimg");turret_image=ana_load_image(VS_ASSET_ROOT "defense_node.anaimg");crawler_image=ana_load_image(VS_ASSET_ROOT "maintenance_crawler.anaimg");drone_image=ana_load_image(VS_ASSET_ROOT "security_drone.anaimg");boss_image=ana_load_image(VS_ASSET_ROOT "reactor_guardian.anaimg");player_shot_image=ana_load_image(VS_ASSET_ROOT "player_shot.anaimg");core_image=ana_load_image(VS_ASSET_ROOT "energy_core.anaimg");title_image=ana_load_image(VS_ASSET_ROOT "title_wordmark.anaimg");fire_sound=ana_load_sound(VS_ASSET_ROOT "fire.anasnd");pickup_sound=ana_load_sound(VS_ASSET_ROOT "pickup.anasnd");install_sound=ana_load_sound(VS_ASSET_ROOT "install.anasnd");explosion_sound=ana_load_sound(VS_ASSET_ROOT "explosion.anasnd");death_sound=ana_load_sound(VS_ASSET_ROOT "player_death.anasnd");victory_sound=ana_load_sound(VS_ASSET_ROOT "victory.anasnd"); }
 static int player_width(void) { return PLAYER_W+((t.installed_modules&2u)?4:0)+((t.installed_modules&4u)?10:0); }
 static void start_game(void) { t.score=0;t.lives=3;t.selected_module=-1;t.installed_modules=0;t.enemies_spawned=0;t.enemies_destroyed=0;t.boss_phase=0;t.state=VOIDSTRIKE_PLAYING;px=152;py=184;invul=50;fire_wait=0;scroll=0;boss_hp=48;boss_x=128;clear_actors(bullets);clear_actors(enemies);clear_actors(cores); }
 static void add_core(int x,int y) { int i; for(i=0;i<MAX_ACTORS;i++)if(!cores[i].active){cores[i].active=1;cores[i].x=x;cores[i].y=y;return;} }
-static void shoot(void) { int i; if(fire_wait)return; for(i=0;i<MAX_ACTORS;i++)if(!bullets[i].active){bullets[i].active=1;bullets[i].x=px+7;bullets[i].y=py;break;} if((t.installed_modules&2u)&&i+1<MAX_ACTORS){bullets[i+1].active=1;bullets[i+1].x=px+15;bullets[i+1].y=py;} fire_wait=(t.installed_modules&8u)?8:12; }
-static void hurt_player(void) { if(invul)return;t.lives--;if(t.lives<=0){t.state=VOIDSTRIKE_GAME_OVER;return;}t.installed_modules=0;t.selected_module=-1;px=152;invul=80;t.state=VOIDSTRIKE_RESPAWN; }
+static void shoot(void) { int i; if(fire_wait)return;ana_play_sound(fire_sound);for(i=0;i<MAX_ACTORS;i++)if(!bullets[i].active){bullets[i].active=1;bullets[i].x=px+7;bullets[i].y=py;break;} if((t.installed_modules&2u)&&i+1<MAX_ACTORS){bullets[i+1].active=1;bullets[i+1].x=px+15;bullets[i+1].y=py;} fire_wait=(t.installed_modules&8u)?8:12; }
+static void hurt_player(void) { if(invul)return;ana_play_sound(death_sound);t.lives--;if(t.lives<=0){t.state=VOIDSTRIKE_GAME_OVER;return;}t.installed_modules=0;t.selected_module=-1;px=152;invul=80;t.state=VOIDSTRIKE_RESPAWN; }
 static void spawn(int tick) { int i; int x;if(tick>=LEVEL_TICKS-2200||tick%45)return;for(i=0;i<MAX_ACTORS;i++)if(!enemies[i].active){x=20+((tick*37+i*19)%270);if(x>px-18&&x<px+player_width()+18)x=(x+112)%290+12;enemies[i].active=1;enemies[i].type=(tick/45)%3;enemies[i].x=x;enemies[i].y=TOP;enemies[i].hp=enemies[i].type?1:2;t.enemies_spawned++;return;} }
 static void play(int tick)
 { int i,j,w; scroll++;ana_camera_set_position(&terrain_camera,0,scroll);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);if(fire_wait)fire_wait--;if(invul)invul--;if(t.state==VOIDSTRIKE_RESPAWN&&invul<45)t.state=VOIDSTRIKE_PLAYING;w=player_width();if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT))px-=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT))px+=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP))py-=3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN))py+=3;px=ana_clamp_int(px,4,ANA_DEFAULT_WIDTH-w-4);py=ana_clamp_int(py,TOP+4,BOTTOM-PLAYER_H);if(ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1))shoot();if(ana_input_action_pressed(ANA_INPUT_DEVICE_0,ANA_ACTION_2)&&t.selected_module>=0){if(t.installed_modules&(1u<<t.selected_module)){t.score+=250;
@@ -77,7 +89,7 @@ void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map
 h_read_request();h_phase("title");
 #endif
 }
-void voidstrike_load(void){} void voidstrike_shutdown(void){
+void voidstrike_load(void){load_assets();} void voidstrike_shutdown(void){free_assets();
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 h_write_result();
 #endif
@@ -106,7 +118,8 @@ void voidstrike_draw(void)
     ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
     ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
     if (t.state == VOIDSTRIKE_TITLE) {
-        ana_fill_rect(10u, 70, 68, 180, 8);
+        if (title_image) ana_draw_image(title_image, 64, 54);
+        ana_fill_rect(10u, 70, 100, 180, 4);
         ana_fill_rect(7u, 88, 94, 144, 4);
         ana_fill_rect(12u, 104, 122, 112, 4);
         ana_fill_rect(6u, 76, 144, 168, 3);
@@ -125,14 +138,17 @@ void voidstrike_draw(void)
         if (t.installed_modules & (1u << i)) ana_fill_rect(12u, 118 + i * 25, 232, 8, 4);
     }
     w = player_width();
-    if (!(invul & 4)) ship(px, py, w);
+    if (!(invul & 4)) {
+        if (player_image_for_modules()) ana_draw_image(player_image_for_modules(), px - 10, py - 4);
+        else ship(px, py, w);
+    }
     for (i = 0; i < MAX_ACTORS; i++) {
-        if (bullets[i].active) ana_fill_rect(7u, bullets[i].x, bullets[i].y, 2, 6);
-        if (enemies[i].active) ana_fill_rect(enemies[i].type == 2 ? 15u : 13u, enemies[i].x, enemies[i].y, 14, 12);
-        if (cores[i].active) ana_fill_rect(12u, cores[i].x, cores[i].y, 8, 8);
+        if (bullets[i].active) { if (player_shot_image) ana_draw_image(player_shot_image, bullets[i].x, bullets[i].y); else ana_fill_rect(7u, bullets[i].x, bullets[i].y, 2, 6); }
+        if (enemies[i].active) { if (enemy_image_for_type(enemies[i].type)) ana_draw_image_frame(enemy_image_for_type(enemies[i].type), enemies[i].type == 2 ? i % 3 : 0, enemies[i].x, enemies[i].y); else ana_fill_rect(enemies[i].type == 2 ? 15u : 13u, enemies[i].x, enemies[i].y, 14, 12); }
+        if (cores[i].active) { if (core_image) ana_draw_image(core_image, cores[i].x, cores[i].y); else ana_fill_rect(12u, cores[i].x, cores[i].y, 8, 8); }
     }
     if (t.boss_phase) {
-        ana_fill_rect(15u, boss_x, 38, 64, 30);
+        if (boss_image) ana_draw_image(boss_image, boss_x - 24, 26); else ana_fill_rect(15u, boss_x, 38, 64, 30);
         ana_fill_rect(t.boss_phase == 2 ? 7u : 14u, boss_x + 28, 46, 10, 12);
     }
 }
