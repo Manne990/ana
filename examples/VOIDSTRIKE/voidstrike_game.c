@@ -24,6 +24,8 @@ typedef struct Actor { int active,x,y,hp,type; } Actor;
 static Actor bullets[MAX_ACTORS], enemies[MAX_ACTORS], cores[MAX_ACTORS];
 static VoidstrikeTelemetry t;
 static int px,py,invul,fire_wait,scroll,boss_hp,boss_x;
+static ANA_TileLayer terrain_layer;
+static ANA_Camera terrain_camera;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 static char h_source_commit[65],h_build_id[80],h_adf_sha256[65],h_machine[32],h_scenario[24];
 static int h_keyboard_events,h_joystick_events,h_ctrl_events,h_space_events,h_joy_direction_events,h_joy_fire_events,h_joy_space_events,h_prev_ctrl,h_prev_space,h_prev_fire,h_prev_direction,h_window_start,h_min_fps;
@@ -43,6 +45,8 @@ static void h_measure_window(void) { int elapsed,fps; if(t.state!=VOIDSTRIKE_PLA
 #endif
 static const ANA_Color palette[16]={{0,0,0},{17,17,34},{34,34,51},{51,68,85},{85,102,119},{119,136,153},{170,187,204},{221,238,255},{0,51,102},{0,85,170},{0,170,221},{17,102,51},{68,221,119},{255,170,34},{255,221,68},{221,51,68}};
 static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by; }
+static unsigned char terrain_tile(int tx,int ty,void *user_data) { (void)user_data; return (unsigned char)((tx + ty * 3) % 3); }
+static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,16,16); }
 static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
 static int player_width(void) { return PLAYER_W+((t.installed_modules&2u)?4:0)+((t.installed_modules&4u)?10:0); }
 static void start_game(void) { t.score=0;t.lives=3;t.selected_module=-1;t.installed_modules=0;t.enemies_spawned=0;t.enemies_destroyed=0;t.boss_phase=0;t.state=VOIDSTRIKE_PLAYING;px=152;py=184;invul=50;fire_wait=0;scroll=0;boss_hp=48;boss_x=128;clear_actors(bullets);clear_actors(enemies);clear_actors(cores); }
@@ -51,7 +55,7 @@ static void shoot(void) { int i; if(fire_wait)return; for(i=0;i<MAX_ACTORS;i++)i
 static void hurt_player(void) { if(invul)return;t.lives--;if(t.lives<=0){t.state=VOIDSTRIKE_GAME_OVER;return;}t.installed_modules=0;t.selected_module=-1;px=152;invul=80;t.state=VOIDSTRIKE_RESPAWN; }
 static void spawn(int tick) { int i; int x;if(tick>=LEVEL_TICKS-2200||tick%45)return;for(i=0;i<MAX_ACTORS;i++)if(!enemies[i].active){x=20+((tick*37+i*19)%270);if(x>px-18&&x<px+player_width()+18)x=(x+112)%290+12;enemies[i].active=1;enemies[i].type=(tick/45)%3;enemies[i].x=x;enemies[i].y=TOP;enemies[i].hp=enemies[i].type?1:2;t.enemies_spawned++;return;} }
 static void play(int tick)
-{ int i,j,w; scroll++;if(fire_wait)fire_wait--;if(invul)invul--;if(t.state==VOIDSTRIKE_RESPAWN&&invul<45)t.state=VOIDSTRIKE_PLAYING;w=player_width();if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT))px-=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT))px+=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP))py-=3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN))py+=3;px=ana_clamp_int(px,4,ANA_DEFAULT_WIDTH-w-4);py=ana_clamp_int(py,TOP+4,BOTTOM-PLAYER_H);if(ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1))shoot();if(ana_input_action_pressed(ANA_INPUT_DEVICE_0,ANA_ACTION_2)&&t.selected_module>=0){if(t.installed_modules&(1u<<t.selected_module)){t.score+=250;
+{ int i,j,w; scroll++;ana_camera_set_position(&terrain_camera,0,scroll);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);if(fire_wait)fire_wait--;if(invul)invul--;if(t.state==VOIDSTRIKE_RESPAWN&&invul<45)t.state=VOIDSTRIKE_PLAYING;w=player_width();if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT))px-=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT))px+=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP))py-=3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN))py+=3;px=ana_clamp_int(px,4,ANA_DEFAULT_WIDTH-w-4);py=ana_clamp_int(py,TOP+4,BOTTOM-PLAYER_H);if(ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1))shoot();if(ana_input_action_pressed(ANA_INPUT_DEVICE_0,ANA_ACTION_2)&&t.selected_module>=0){if(t.installed_modules&(1u<<t.selected_module)){t.score+=250;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 h_repeat_installs++;
 #endif
@@ -68,7 +72,7 @@ if(t.selected_module==0)h_module_wraps++;
 #endif
 }}
 if(tick>=LEVEL_TICKS){t.boss_phase=1;}if(t.boss_phase){boss_x=128+((tick/12)%50);for(j=0;j<MAX_ACTORS;j++)if(bullets[j].active&&hit(bullets[j].x,bullets[j].y,2,6,boss_x,38,64,30)){bullets[j].active=0;boss_hp--;}if(boss_hp<24){t.boss_phase=2;}if(boss_hp<=0){t.score+=5000;t.state=VOIDSTRIKE_VICTORY;}} }
-void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);t.state=VOIDSTRIKE_TITLE;
+void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);ana_camera_init(&terrain_camera,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP,ANA_DEFAULT_WIDTH,4096);ana_tile_layer_init(&terrain_layer,ANA_LAYER_VERTICAL_SCROLL,0,16,16,20,256);ana_tile_layer_set_callbacks(&terrain_layer,terrain_tile,terrain_draw,0);ana_tile_layer_set_viewport(&terrain_layer,ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));ana_tile_layer_set_clear_color(&terrain_layer,3u);ana_tile_layer_set_scroll_backend(&terrain_layer,ANA_SCROLL_BACKEND_HARDWARE);ana_tile_layer_set_scroll_sync(&terrain_layer,ANA_SCROLL_SYNC_DIRTY);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);t.state=VOIDSTRIKE_TITLE;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 h_read_request();h_phase("title");
 #endif
