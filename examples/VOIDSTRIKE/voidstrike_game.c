@@ -38,20 +38,299 @@ static ANA_Sound fire_sound,pickup_sound,install_sound,explosion_sound,death_sou
 #endif
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 static char h_source_commit[65],h_build_id[80],h_adf_sha256[65],h_machine[32],h_scenario[24];
-static int h_keyboard_events,h_joystick_events,h_ctrl_events,h_space_events,h_joy_direction_events,h_joy_fire_events,h_joy_space_events,h_prev_ctrl,h_prev_space,h_prev_fire,h_prev_direction,h_window_start,h_min_fps,h_started_once,h_restart_events,h_restart_requested,h_cores_collected,h_boss_hits,h_respawns;
+static int h_keyboard_events,h_joystick_events,h_ctrl_events,h_space_events,h_joy_direction_events,h_joy_fire_events,h_joy_space_events,h_prev_ctrl,h_prev_space,h_prev_fire,h_prev_direction,h_min_fps,h_started_once,h_restart_events,h_restart_requested,h_cores_collected,h_boss_hits,h_respawns;
 static int h_module_installs[4],h_module_wraps,h_repeat_installs;
+static int h_window_intervals,h_window_gameplay_intervals;
+static int h_gameplay_windows,h_included_gameplay_windows,h_excluded_nongameplay_windows;
+static int h_slow_frame_count,h_visible_enemies,h_visible_projectiles,h_visible_effects,h_visible_modules;
+static int h_last_was_gameplay,h_stage_snapshot_ready;
+static long h_last_time_ticks,h_window_elapsed_ticks,h_slowest_frame_ms_x100;
+static long h_last_update_perf_ticks,h_last_draw_perf_ticks,h_last_present_perf_ticks,h_last_render_perf_ticks,h_last_present_count;
+static long h_gameplay_update_perf_ticks,h_gameplay_draw_perf_ticks,h_gameplay_present_perf_ticks,h_gameplay_render_perf_ticks;
+static long h_gameplay_update_samples,h_gameplay_present_samples;
+static unsigned long h_last_perf_ticks;
 static const char *h_scenario_name(void) { static const char *names[] = {"victory","game-over","input-keyboard","input-joystick","module-progression","boss"}; return names[VOIDSTRIKE_HARNESS_SCENARIO_ID < 0 || VOIDSTRIKE_HARNESS_SCENARIO_ID > 5 ? 0 : VOIDSTRIKE_HARNESS_SCENARIO_ID]; }
 static void h_value(char *line,const char *key,char *out,int size) { int n; n=(int)strlen(key); if(strncmp(line,key,(size_t)n)==0&&line[n]=='='){strncpy(out,line+n+1,(size_t)(size-1));out[size-1]='\0';out[strcspn(out,"\r\n")]='\0';} }
 static void h_read_request(void) { FILE *f; char line[160]; strcpy(h_source_commit,"unknown");strcpy(h_build_id,"voidstrike-harness");strcpy(h_adf_sha256,"0000000000000000000000000000000000000000000000000000000000000000");strcpy(h_machine,"a1200");strcpy(h_scenario,h_scenario_name()); f=fopen(H_REQUEST_FILE,"r");if(!f)return;while(fgets(line,sizeof(line),f)){h_value(line,"source_commit",h_source_commit,sizeof(h_source_commit));h_value(line,"build_id",h_build_id,sizeof(h_build_id));h_value(line,"adf_sha256",h_adf_sha256,sizeof(h_adf_sha256));h_value(line,"requested_scenario",h_scenario,sizeof(h_scenario));h_value(line,"machine_profile",h_machine,sizeof(h_machine));}fclose(f); }
 static void h_phase(const char *phase) { FILE *f=fopen(H_PHASE_FILE,"w");if(f){fprintf(f,"phase=%s\nscenario=%s\n",phase,h_scenario);fclose(f);} }
-static void h_write_result(void) { FILE *f; const char *terminal; const char *actual; const char *reason; ANA_RunStats stats; int pass; int floor; int contract_complete; if(t.state!=VOIDSTRIKE_VICTORY&&t.state!=VOIDSTRIKE_GAME_OVER)return; stats=ana_last_run_stats();actual=h_scenario_name();terminal=t.state==VOIDSTRIKE_VICTORY?"victory":"game-over";floor=4500;
+static long h_average_stage_us(long total,long frames,long ticks_per_second)
+{
+    long average_ticks;
+
+    if(total<=0L||frames<=0L||ticks_per_second<=0L)return 0L;
+    average_ticks=total/frames;
+    if(ticks_per_second>=1000L)
+        return (average_ticks*1000L)/(ticks_per_second/1000L);
+    return (average_ticks*1000000L)/ticks_per_second;
+}
+static long h_perf_ticks_to_ms_x100(unsigned long ticks,unsigned long ticks_per_second)
+{
+    unsigned long whole_seconds;
+    unsigned long remaining_ticks;
+
+    if(ticks_per_second==0UL)return 0L;
+    whole_seconds=ticks/ticks_per_second;
+    remaining_ticks=ticks%ticks_per_second;
+    if(ticks_per_second>=100000UL)
+        return (long)(whole_seconds*100000UL+
+            remaining_ticks/(ticks_per_second/100000UL));
+    return (long)(whole_seconds*100000UL+
+        (remaining_ticks*100000UL)/ticks_per_second);
+}
+static int h_active_count(const Actor *actors)
+{
+    int count;
+    int i;
+
+    count=0;
+    for(i=0;i<MAX_ACTORS;i++)if(actors[i].active)count++;
+    return count;
+}
+static int h_installed_module_count(void)
+{
+    int count;
+    int i;
+
+    count=0;
+    for(i=0;i<4;i++)if(t.installed_modules&(1u<<i))count++;
+    return count;
+}
+static void h_capture_stage_sample(void)
+{
+    ANA_RunStats stats;
+    ANA_RenderStats render_stats;
+    long present_count;
+    long presented_frames;
+
+    stats=ana_last_run_stats();
+    render_stats=ana_render_stats();
+    present_count=(long)ana_gfx_present_count();
+    if(h_stage_snapshot_ready&&h_last_was_gameplay){
+        h_gameplay_update_perf_ticks+=
+            stats.update_perf_ticks-h_last_update_perf_ticks;
+        h_gameplay_update_samples++;
+        presented_frames=present_count-h_last_present_count;
+        if(presented_frames>0L){
+            h_gameplay_draw_perf_ticks+=
+                stats.draw_perf_ticks-h_last_draw_perf_ticks;
+            h_gameplay_present_perf_ticks+=
+                stats.present_perf_ticks-h_last_present_perf_ticks;
+            h_gameplay_render_perf_ticks+=
+                render_stats.present_convert_perf_ticks-
+                    h_last_render_perf_ticks;
+            h_gameplay_present_samples+=presented_frames;
+        }
+    }
+    h_last_update_perf_ticks=stats.update_perf_ticks;
+    h_last_draw_perf_ticks=stats.draw_perf_ticks;
+    h_last_present_perf_ticks=stats.present_perf_ticks;
+    h_last_render_perf_ticks=render_stats.present_convert_perf_ticks;
+    h_last_present_count=present_count;
+    h_stage_snapshot_ready=1;
+}
+static void h_write_result(void)
+{
+    FILE *f;
+    const char *terminal;
+    const char *actual;
+    const char *reason;
+    ANA_RunStats stats;
+    ANA_RenderStats render_stats;
+    long simulated_time_ms;
+    long update_stage_us;
+    long draw_stage_us;
+    long render_stage_us;
+    long present_stage_us;
+    int pass;
+    int floor;
+    int min_floor;
+    int contract_complete;
+
+    if(t.state!=VOIDSTRIKE_VICTORY&&t.state!=VOIDSTRIKE_GAME_OVER)return;
+    h_capture_stage_sample();
+    stats=ana_last_run_stats();
+    render_stats=ana_render_stats();
+    actual=h_scenario_name();
+    terminal=t.state==VOIDSTRIKE_VICTORY?"victory":"game-over";
+    floor=4500;
+    min_floor=4000;
 #ifdef ANA_DEBUG_STATS
-floor=3500;
+    floor=3500;
+    min_floor=3500;
 #endif
-contract_complete=h_joy_direction_events>0&&h_ctrl_events>0&&h_cores_collected>0&&(h_module_installs[0]+h_module_installs[1]+h_module_installs[2]+h_module_installs[3])>0&&h_boss_hits>0&&t.state==VOIDSTRIKE_VICTORY;pass=t.enemies_destroyed<=t.enemies_spawned&&stats.average_fps_x100>=floor&&h_min_fps>=floor; if(VOIDSTRIKE_HARNESS_SCENARIO_ID==0&&!contract_complete)pass=0;if(VOIDSTRIKE_HARNESS_SCENARIO_ID==5&&t.state!=VOIDSTRIKE_VICTORY)pass=0;if(VOIDSTRIKE_HARNESS_SCENARIO_ID==1&&t.state!=VOIDSTRIKE_GAME_OVER)pass=0;reason=pass?"":(VOIDSTRIKE_HARNESS_SCENARIO_ID==0&&!contract_complete?"incomplete-victory-contract":"terminal-or-performance-failure");f=fopen(H_RESULT_FILE,"w");if(!f)return;fprintf(f,"schema_version=1\nsource_commit=%s\nbuild_id=%s\nadf_sha256=%s\nrequested_scenario=%s\nactual_scenario=%s\nmachine_profile=%s\n",h_source_commit,h_build_id,h_adf_sha256,h_scenario,actual,h_machine);fprintf(f,"fast_memory_kib=0\ntotal_frames=%ld\nsimulated_time_ms=%ld\nterminal_state=%s\nscore=%d\nremaining_lives=%d\ninstalled_modules=%u\n",stats.frames,(stats.elapsed_ticks*1000L)/stats.ticks_per_second,terminal,t.score,t.lives,t.installed_modules);fprintf(f,"enemies_spawned=%d\nenemies_destroyed=%d\nboss_phase=%d\nboss_defeated=%d\ncollision_invariant_failures=%d\nworld_bound_invariant_failures=%d\nrestart_events=%d\ncores_collected=%d\nboss_hits=%d\nrespawns=%d\nvictory_contract_complete=%d\n",t.enemies_spawned,t.enemies_destroyed,t.boss_phase,t.state==VOIDSTRIKE_VICTORY,t.collision_invariant_failures,t.world_bound_invariant_failures,h_restart_events,h_cores_collected,h_boss_hits,h_respawns,contract_complete);fprintf(f,"input_keyboard_events=%d\ninput_joystick_events=%d\ninput_keyboard_ctrl_events=%d\ninput_keyboard_space_events=%d\ninput_joystick_direction_events=%d\ninput_joystick_fire_events=%d\ninput_joystick_space_events=%d\n",h_keyboard_events,h_joystick_events,h_ctrl_events,h_space_events,h_joy_direction_events,h_joy_fire_events,h_joy_space_events);fprintf(f,"module_speed_installs=%d\nmodule_twin_shot_installs=%d\nmodule_wide_shot_installs=%d\nmodule_laser_installs=%d\nmodule_rail_wraps=%d\nmodule_repeat_install_events=%d\n",h_module_installs[0],h_module_installs[1],h_module_installs[2],h_module_installs[3],h_module_wraps,h_repeat_installs);fprintf(f,"minimum_fps_x100=%d\naverage_fps_x100=%ld\nminimum_five_second_fps_x100=%d\nresult_complete=1\npass=%d\nfailure_reasons=%s\n",h_min_fps,stats.average_fps_x100,h_min_fps,pass,reason);fclose(f);h_phase("shutdown"); }
+    contract_complete=h_joy_direction_events>0&&h_ctrl_events>0&&
+        h_cores_collected>0&&
+        (h_module_installs[0]+h_module_installs[1]+
+            h_module_installs[2]+h_module_installs[3])>0&&
+        h_boss_hits>0&&t.state==VOIDSTRIKE_VICTORY;
+    pass=t.enemies_destroyed<=t.enemies_spawned&&
+        stats.average_fps_x100>=floor&&h_min_fps>=min_floor;
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==0&&!contract_complete)pass=0;
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==5&&
+            t.state!=VOIDSTRIKE_VICTORY)pass=0;
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==1&&
+            t.state!=VOIDSTRIKE_GAME_OVER)pass=0;
+    reason=pass?"":(VOIDSTRIKE_HARNESS_SCENARIO_ID==0&&!contract_complete?
+        "incomplete-victory-contract":"terminal-or-performance-failure");
+
+    simulated_time_ms=(stats.elapsed_ticks*1000L)/stats.ticks_per_second;
+    /* ANA leaves these counters at zero when its backend was built without
+     * ANA_DEBUG_PERF_TIMING.  Preserve that auditable zero instead of
+     * inventing a stage duration.  Render is ANA's chunky-to-planar convert
+     * stage; present is ANA's complete present callback measurement. */
+    update_stage_us=h_average_stage_us(h_gameplay_update_perf_ticks,
+        h_gameplay_update_samples,stats.perf_ticks_per_second);
+    draw_stage_us=h_average_stage_us(h_gameplay_draw_perf_ticks,
+        h_gameplay_present_samples,stats.perf_ticks_per_second);
+    render_stage_us=h_average_stage_us(h_gameplay_render_perf_ticks,
+        h_gameplay_present_samples,render_stats.perf_ticks_per_second);
+    present_stage_us=h_average_stage_us(h_gameplay_present_perf_ticks,
+        h_gameplay_present_samples,stats.perf_ticks_per_second);
+
+    f=fopen(H_RESULT_FILE,"w");
+    if(!f)return;
+    fprintf(f,"schema_version=1\n");
+    fprintf(f,"source_commit=%s\n",h_source_commit);
+    fprintf(f,"build_id=%s\n",h_build_id);
+    fprintf(f,"adf_sha256=%s\n",h_adf_sha256);
+    fprintf(f,"requested_scenario=%s\n",h_scenario);
+    fprintf(f,"actual_scenario=%s\n",actual);
+    fprintf(f,"machine_profile=%s\n",h_machine);
+    fprintf(f,"fast_memory_kib=0\n");
+    fprintf(f,"total_frames=%ld\n",stats.frames);
+    fprintf(f,"simulated_time_ms=%ld\n",simulated_time_ms);
+    fprintf(f,"terminal_state=%s\n",terminal);
+    fprintf(f,"score=%d\n",t.score);
+    fprintf(f,"remaining_lives=%d\n",t.lives);
+    fprintf(f,"installed_modules=%u\n",t.installed_modules);
+    fprintf(f,"enemies_spawned=%d\n",t.enemies_spawned);
+    fprintf(f,"enemies_destroyed=%d\n",t.enemies_destroyed);
+    fprintf(f,"boss_phase=%d\n",t.boss_phase);
+    fprintf(f,"boss_defeated=%d\n",t.state==VOIDSTRIKE_VICTORY);
+    fprintf(f,"collision_invariant_failures=%d\n",
+        t.collision_invariant_failures);
+    fprintf(f,"world_bound_invariant_failures=%d\n",
+        t.world_bound_invariant_failures);
+    fprintf(f,"restart_events=%d\n",h_restart_events);
+    fprintf(f,"cores_collected=%d\n",h_cores_collected);
+    fprintf(f,"boss_hits=%d\n",h_boss_hits);
+    fprintf(f,"respawns=%d\n",h_respawns);
+    fprintf(f,"victory_contract_complete=%d\n",contract_complete);
+    fprintf(f,"input_keyboard_events=%d\n",h_keyboard_events);
+    fprintf(f,"input_joystick_events=%d\n",h_joystick_events);
+    fprintf(f,"input_keyboard_ctrl_events=%d\n",h_ctrl_events);
+    fprintf(f,"input_keyboard_space_events=%d\n",h_space_events);
+    fprintf(f,"input_joystick_direction_events=%d\n",
+        h_joy_direction_events);
+    fprintf(f,"input_joystick_fire_events=%d\n",h_joy_fire_events);
+    fprintf(f,"input_joystick_space_events=%d\n",h_joy_space_events);
+    fprintf(f,"module_speed_installs=%d\n",h_module_installs[0]);
+    fprintf(f,"module_twin_shot_installs=%d\n",h_module_installs[1]);
+    fprintf(f,"module_wide_shot_installs=%d\n",h_module_installs[2]);
+    fprintf(f,"module_laser_installs=%d\n",h_module_installs[3]);
+    fprintf(f,"module_rail_wraps=%d\n",h_module_wraps);
+    fprintf(f,"module_repeat_install_events=%d\n",h_repeat_installs);
+    fprintf(f,"minimum_fps_x100=%d\n",h_min_fps);
+    fprintf(f,"average_fps_x100=%ld\n",stats.average_fps_x100);
+    fprintf(f,"minimum_five_second_fps_x100=%d\n",h_min_fps);
+    fprintf(f,"slowest_frame_ms_x100=%ld\n",h_slowest_frame_ms_x100);
+    fprintf(f,"slow_frame_count=%d\n",h_slow_frame_count);
+    fprintf(f,"gameplay_window_count=%d\n",h_gameplay_windows);
+    fprintf(f,"included_gameplay_window_count=%d\n",
+        h_included_gameplay_windows);
+    fprintf(f,"excluded_nongameplay_window_count=%d\n",
+        h_excluded_nongameplay_windows);
+    fprintf(f,"gameplay_window_min_fps_x100=%d\n",h_min_fps);
+    fprintf(f,"update_stage_us=%ld\n",update_stage_us);
+    fprintf(f,"draw_stage_us=%ld\n",draw_stage_us);
+    fprintf(f,"render_stage_us=%ld\n",render_stage_us);
+    fprintf(f,"present_stage_us=%ld\n",present_stage_us);
+    fprintf(f,"visible_enemies=%d\n",h_visible_enemies);
+    fprintf(f,"visible_projectiles=%d\n",h_visible_projectiles);
+    fprintf(f,"visible_effects=%d\n",h_visible_effects);
+    fprintf(f,"visible_modules=%d\n",h_visible_modules);
+    fprintf(f,"result_complete=1\n");
+    fprintf(f,"pass=%d\n",pass);
+    fprintf(f,"failure_reasons=%s\n",reason);
+    fclose(f);
+    h_phase("shutdown");
+}
 static void h_drive_input(void) { int i,dodge; if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2||VOIDSTRIKE_HARNESS_SCENARIO_ID==3)return;if(t.frame<8){ana_input_set_pending_key_state(ANA_KEY_CTRL,1);ana_input_advance_without_poll();return;}if(t.frame==8){ana_input_set_pending_key_state(ANA_KEY_CTRL,0);ana_input_advance_without_poll();return;}if(VOIDSTRIKE_HARNESS_SCENARIO_ID==1){if(t.frame>=VOIDSTRIKE_HARNESS_FRAME_LIMIT&&!h_restart_requested){h_restart_requested=1;ana_input_pulse_key_event(ANA_KEY_CTRL);ana_input_advance_without_poll();}return;}dodge=0;for(i=0;i<MAX_ACTORS;i++)if(hostile_bullets[i].active&&hostile_bullets[i].y>=py-28&&hostile_bullets[i].y<=py+PLAYER_H&&px<hostile_bullets[i].x+4&&px+PLAYER_W>hostile_bullets[i].x)dodge=1;ana_input_pulse_key_event(ANA_KEY_CTRL);if(dodge)ana_input_pulse_key_event(px<150?ANA_KEY_RIGHT:ANA_KEY_LEFT);else if(t.boss_phase){if(px<122)ana_input_pulse_key_event(ANA_KEY_RIGHT);else if(px>128)ana_input_pulse_key_event(ANA_KEY_LEFT);}else if(t.frame<21)ana_input_pulse_key_event(ANA_KEY_LEFT);if(t.selected_module>=0)ana_input_pulse_key_event(ANA_KEY_SPACE);if(VOIDSTRIKE_HARNESS_SCENARIO_ID==4&&(t.frame%120)==0)ana_input_pulse_key_event(ANA_KEY_SPACE);ana_input_advance_without_poll(); }
 static void h_observe_input(void) { ANA_InputDebug d; int direction; ana_input_debug_snapshot(&d); direction=ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN);if(d.key_ctrl_down&&!h_prev_ctrl){h_keyboard_events++;h_ctrl_events++;}if(d.key_space_down&&!h_prev_space){h_keyboard_events++;h_space_events++;}if(!d.key_ctrl_down&&ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1)&&!h_prev_fire){h_joystick_events++;h_joy_fire_events++;}if(!d.key_ctrl_down&&direction&&!h_prev_direction){h_joystick_events++;h_joy_direction_events++;}h_prev_ctrl=d.key_ctrl_down;h_prev_space=d.key_space_down;h_prev_fire=ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1);h_prev_direction=direction; }
-static void h_measure_window(void) { int elapsed,fps; if(t.state!=VOIDSTRIKE_PLAYING)return;if(h_window_start==0)h_window_start=(int)ana_platform_time_ticks();if((t.frame%250)!=0)return;elapsed=(int)ana_platform_time_ticks()-h_window_start;if(elapsed>0){fps=(int)((250L*(long)ana_platform_time_ticks_per_second()*100L)/elapsed);if(h_min_fps==0||fps<h_min_fps)h_min_fps=fps;}h_window_start=(int)ana_platform_time_ticks(); }
+static void h_measure_window(void)
+{
+    unsigned long perf_now;
+    unsigned long perf_elapsed;
+    unsigned long perf_ticks_per_second;
+    long now;
+    long elapsed;
+    long ticks_per_second;
+    long frame_ms_x100;
+    int count;
+    int fps;
+    int playing;
+
+    now=ana_platform_time_ticks();
+    perf_now=ana_platform_perf_ticks();
+    playing=t.state==VOIDSTRIKE_PLAYING;
+    ticks_per_second=ana_platform_time_ticks_per_second();
+    perf_ticks_per_second=ana_platform_perf_ticks_per_second();
+    h_capture_stage_sample();
+
+    if(h_last_time_ticks!=0L){
+        elapsed=now-h_last_time_ticks;
+        if(elapsed<0L)elapsed=0L;
+        h_window_elapsed_ticks+=elapsed;
+        h_window_intervals++;
+        if(h_last_was_gameplay)h_window_gameplay_intervals++;
+
+        /* ANA does not expose an individual presented-frame duration here.
+         * Report the real effective gameplay update interval; catch-up
+         * updates remain separate measured samples rather than fabricated
+         * presentation samples. */
+        perf_elapsed=perf_now-h_last_perf_ticks;
+        if(h_last_was_gameplay){
+            frame_ms_x100=h_perf_ticks_to_ms_x100(perf_elapsed,
+                perf_ticks_per_second);
+            if(frame_ms_x100>h_slowest_frame_ms_x100)
+                h_slowest_frame_ms_x100=frame_ms_x100;
+            if(perf_ticks_per_second>0UL&&
+                    perf_elapsed>perf_ticks_per_second/ANA_DEFAULT_FPS)
+                h_slow_frame_count++;
+        }
+
+        if(h_window_intervals==ANA_DEFAULT_FPS*5){
+            h_gameplay_windows++;
+            if(h_window_gameplay_intervals==ANA_DEFAULT_FPS*5&&
+                    h_window_elapsed_ticks>0L&&ticks_per_second>0L){
+                h_included_gameplay_windows++;
+                fps=(int)(((long)ANA_DEFAULT_FPS*5L*
+                    ticks_per_second*100L)/h_window_elapsed_ticks);
+                if(h_min_fps==0||fps<h_min_fps)h_min_fps=fps;
+            }else{
+                h_excluded_nongameplay_windows++;
+            }
+            h_window_intervals=0;
+            h_window_gameplay_intervals=0;
+            h_window_elapsed_ticks=0L;
+        }
+    }
+
+    if(playing){
+        count=h_active_count(enemies)+(t.boss_phase?1:0);
+        if(count>h_visible_enemies)h_visible_enemies=count;
+        count=h_active_count(bullets);
+        if(count>h_visible_projectiles)h_visible_projectiles=count;
+        count=h_active_count(effects);
+        if(count>h_visible_effects)h_visible_effects=count;
+        count=h_installed_module_count();
+        if(count>h_visible_modules)h_visible_modules=count;
+    }
+
+    h_last_time_ticks=now;
+    h_last_perf_ticks=perf_now;
+    h_last_was_gameplay=playing;
+}
 #endif
 static const ANA_Color palette[16]={{0,0,0},{17,17,34},{34,34,51},{51,68,85},{85,102,119},{119,136,153},{170,187,204},{221,238,255},{0,51,102},{0,85,170},{0,170,221},{17,102,51},{68,221,119},{255,170,34},{255,221,68},{221,51,68}};
 static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by; }
