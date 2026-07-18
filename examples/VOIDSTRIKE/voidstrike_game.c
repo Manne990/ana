@@ -96,4 +96,43 @@ if(t.state==VOIDSTRIKE_GAME_OVER||t.state==VOIDSTRIKE_VICTORY)ana_quit();
 #endif
 if(ana_quit_requested())ana_quit();}
 static void ship(int x,int y,int w){ana_fill_rect(9,x+5,y,6,16);ana_fill_rect(7,x+7,y+3,2,5);if(t.installed_modules&1u)ana_fill_rect(10,x+6,y+16,4,6);if(t.installed_modules&2u){ana_fill_rect(7,x,y+5,4,8);ana_fill_rect(7,x+12,y+5,4,8);}if(t.installed_modules&4u)ana_fill_rect(10,x-5,y+7,w+10,4);if(t.installed_modules&8u)ana_fill_rect(7,x+7,y-5,2,8);}
-void voidstrike_draw(void){int i,w;ana_clear(1);ana_fill_rect(3,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP);for(i=0;i<ANA_DEFAULT_WIDTH;i+=32)ana_fill_rect(8,i,(scroll%16)+TOP,16,2);ana_fill_rect(2,0,0,ANA_DEFAULT_WIDTH,TOP);ana_fill_rect(2,0,BOTTOM,ANA_DEFAULT_WIDTH,ANA_DEFAULT_HEIGHT-BOTTOM);if(t.state==VOIDSTRIKE_TITLE){ana_fill_rect(10,70,68,180,8);ana_fill_rect(7,88,94,144,4);ana_fill_rect(12,104,122,112,4);ana_fill_rect(6,76,144,168,3);ana_fill_rect(10,76,154,116,3);ana_fill_rect(7,76,164,142,3);return;}if(t.state==VOIDSTRIKE_GAME_OVER){ana_fill_rect(15,104,105,112,8);return;}if(t.state==VOIDSTRIKE_VICTORY){ana_fill_rect(12,104,105,112,8);return;}for(i=0;i<t.lives;i++)ana_fill_rect(12,6+i*4,6,3,4);for(i=0;i<20&&i<t.score/100;i++)ana_fill_rect(7,80+i*4,6,3,4);for(i=0;i<4;i++){ana_fill_rect(i==t.selected_module?10:4,112+i*25,228,20,12);if(t.installed_modules&(1u<<i))ana_fill_rect(12,118+i*25,232,8,4);}w=player_width();if(!(invul&4))ship(px,py,w);for(i=0;i<MAX_ACTORS;i++){if(bullets[i].active)ana_fill_rect(7,bullets[i].x,bullets[i].y,2,6);if(enemies[i].active)ana_fill_rect(enemies[i].type==2?15:13,enemies[i].x,enemies[i].y,14,12);if(cores[i].active)ana_fill_rect(12,cores[i].x,cores[i].y,8,8);}if(t.boss_phase){ana_fill_rect(15,boss_x,38,64,30);ana_fill_rect(t.boss_phase==2?7:14,boss_x+28,46,10,12);}}
+void voidstrike_draw(void)
+{
+    int i;
+    int w;
+
+    ana_clear(1u);
+    ana_tile_layer_draw(&terrain_layer);
+    ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
+    ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
+    if (t.state == VOIDSTRIKE_TITLE) {
+        ana_fill_rect(10u, 70, 68, 180, 8);
+        ana_fill_rect(7u, 88, 94, 144, 4);
+        ana_fill_rect(12u, 104, 122, 112, 4);
+        ana_fill_rect(6u, 76, 144, 168, 3);
+        ana_fill_rect(10u, 76, 154, 116, 3);
+        ana_fill_rect(7u, 76, 164, 142, 3);
+        return;
+    }
+    if (t.state == VOIDSTRIKE_GAME_OVER || t.state == VOIDSTRIKE_VICTORY) {
+        ana_fill_rect(t.state == VOIDSTRIKE_VICTORY ? 12u : 15u, 104, 105, 112, 8);
+        return;
+    }
+    for (i = 0; i < t.lives; i++) ana_fill_rect(12u, 6 + i * 4, 6, 3, 4);
+    for (i = 0; i < 20 && i < t.score / 100; i++) ana_fill_rect(7u, 80 + i * 4, 6, 3, 4);
+    for (i = 0; i < 4; i++) {
+        ana_fill_rect(i == t.selected_module ? 10u : 4u, 112 + i * 25, 228, 20, 12);
+        if (t.installed_modules & (1u << i)) ana_fill_rect(12u, 118 + i * 25, 232, 8, 4);
+    }
+    w = player_width();
+    if (!(invul & 4)) ship(px, py, w);
+    for (i = 0; i < MAX_ACTORS; i++) {
+        if (bullets[i].active) ana_fill_rect(7u, bullets[i].x, bullets[i].y, 2, 6);
+        if (enemies[i].active) ana_fill_rect(enemies[i].type == 2 ? 15u : 13u, enemies[i].x, enemies[i].y, 14, 12);
+        if (cores[i].active) ana_fill_rect(12u, cores[i].x, cores[i].y, 8, 8);
+    }
+    if (t.boss_phase) {
+        ana_fill_rect(15u, boss_x, 38, 64, 30);
+        ana_fill_rect(t.boss_phase == 2 ? 7u : 14u, boss_x + 28, 46, 10, 12);
+    }
+}
