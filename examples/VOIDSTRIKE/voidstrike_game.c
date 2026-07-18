@@ -418,6 +418,8 @@ void voidstrike_draw(void)
     int w;
 
     ana_tile_layer_draw(&terrain_layer);
+    ana_tile_layer_restore_world_rect(&terrain_layer,
+        ana_rect_make(0, scroll, ANA_DEFAULT_WIDTH, BOTTOM - TOP));
     ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
     ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
     if (t.state == VOIDSTRIKE_TITLE) {
