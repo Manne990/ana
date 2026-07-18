@@ -113,7 +113,6 @@ void voidstrike_draw(void)
     int i;
     int w;
 
-    ana_clear(1u);
     ana_tile_layer_draw(&terrain_layer);
     ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
     ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
