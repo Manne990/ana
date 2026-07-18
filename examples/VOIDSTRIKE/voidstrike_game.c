@@ -115,6 +115,8 @@ if(t.state==VOIDSTRIKE_GAME_OVER||t.state==VOIDSTRIKE_VICTORY)ana_quit();
 #endif
 if(ana_quit_requested())ana_quit();}
 static void ship(int x,int y,int w){ana_fill_rect(9,x+5,y,6,16);ana_fill_rect(7,x+7,y+3,2,5);if(t.installed_modules&1u)ana_fill_rect(10,x+6,y+16,4,6);if(t.installed_modules&2u){ana_fill_rect(7,x,y+5,4,8);ana_fill_rect(7,x+12,y+5,4,8);}if(t.installed_modules&4u)ana_fill_rect(10,x-5,y+7,w+10,4);if(t.installed_modules&8u)ana_fill_rect(7,x+7,y-5,2,8);}
+static const unsigned char vs_letters[26][7]={{14,17,17,31,17,17,17},{30,17,17,30,17,17,30},{14,17,16,16,16,17,14},{30,17,17,17,17,17,30},{31,16,16,30,16,16,31},{31,16,16,30,16,16,16},{14,17,16,23,17,17,15},{17,17,17,31,17,17,17},{31,4,4,4,4,4,31},{7,2,2,2,2,18,12},{17,18,20,24,20,18,17},{16,16,16,16,16,16,31},{17,27,21,21,17,17,17},{17,25,21,19,17,17,17},{14,17,17,17,17,17,14},{30,17,17,30,16,16,16},{14,17,17,17,21,18,13},{30,17,17,30,20,18,17},{15,16,16,14,1,1,30},{31,4,4,4,4,4,4},{17,17,17,17,17,17,14},{17,17,17,17,17,10,4},{17,17,17,21,21,21,10},{17,17,10,4,10,17,17},{17,17,10,4,4,4,4},{31,1,2,4,8,16,31}};
+static void vs_text(const char *text,int x,int y,unsigned char color) { int row,col,index; while(*text){if(*text>='A'&&*text<='Z'){index=*text-'A';for(row=0;row<7;row++)for(col=0;col<5;col++)if(vs_letters[index][row]&(1u<<(4-col)))ana_fill_rect(color,x+col*2,y+row*2,2,2);}x+=12;text++;} }
 void voidstrike_draw(void)
 {
     int i;
@@ -128,13 +130,16 @@ void voidstrike_draw(void)
         ana_fill_rect(10u, 70, 100, 180, 4);
         ana_fill_rect(7u, 88, 94, 144, 4);
         ana_fill_rect(12u, 104, 122, 112, 4);
-        ana_fill_rect(6u, 76, 144, 168, 3);
-        ana_fill_rect(10u, 76, 154, 116, 3);
-        ana_fill_rect(7u, 76, 164, 142, 3);
+        vs_text("ARROWS MOVE", 94, 142, 6u);
+        vs_text("CTRL FIRE", 112, 158, 10u);
+        vs_text("SPACE INSTALL", 94, 174, 7u);
+        vs_text("ONE BUTTON START", 70, 190, 12u);
         return;
     }
     if (t.state == VOIDSTRIKE_GAME_OVER || t.state == VOIDSTRIKE_VICTORY) {
         ana_fill_rect(t.state == VOIDSTRIKE_VICTORY ? 12u : 15u, 104, 105, 112, 8);
+        vs_text(t.state == VOIDSTRIKE_VICTORY ? "VICTORY" : "GAME OVER", 118, 94, t.state == VOIDSTRIKE_VICTORY ? 12u : 15u);
+        vs_text("ONE BUTTON RESTART", 62, 126, 7u);
         return;
     }
     for (i = 0; i < t.lives; i++) ana_fill_rect(12u, 6 + i * 4, 6, 3, 4);
