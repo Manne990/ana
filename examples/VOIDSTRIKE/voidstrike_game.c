@@ -20,6 +20,7 @@
 #define PLAYER_H 20
 #define MAX_ACTORS 16
 #define MAX_DYNAMIC_RECTS (MAX_ACTORS * 5 + 4)
+#define DYNAMIC_RECT_GENERATIONS 2
 #define LEVEL_TICKS (ANA_DEFAULT_FPS * 255)
 #define SPAWN_STOP_TICKS 2200
 #define BOSS_START_HP 48
@@ -29,10 +30,12 @@ static VoidstrikeTelemetry t;
 static int px,py,invul,fire_wait,scroll,boss_hp,boss_x;
 static ANA_TileLayer terrain_layer;
 static ANA_Camera terrain_camera;
-static ANA_Rect previous_dynamic_rects[MAX_DYNAMIC_RECTS];
-static int previous_dynamic_rect_count;
-static int previous_dynamic_camera_y;
-static int previous_dynamic_valid;
+static ANA_Rect previous_dynamic_rects[DYNAMIC_RECT_GENERATIONS][MAX_DYNAMIC_RECTS];
+static int previous_dynamic_rect_counts[DYNAMIC_RECT_GENERATIONS];
+static int previous_dynamic_camera_y[DYNAMIC_RECT_GENERATIONS];
+static int previous_dynamic_valid[DYNAMIC_RECT_GENERATIONS];
+static int dynamic_record_generation;
+static int dynamic_write_generation;
 static ANA_Image player_base_image,player_speed_image,player_twin_image,player_wide_image,player_laser_image;
 static ANA_Image turret_image,crawler_image,drone_image,boss_image,player_shot_image,hostile_shot_image,core_image,explosion_image,null_foundry_tiles_image,module_dock_image,title_image;
 static ANA_Sound fire_sound,pickup_sound,install_sound,explosion_sound,death_sound,victory_sound;
@@ -346,12 +349,14 @@ static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void
 static void remember_dynamic_rect(int x,int y,int w,int h)
 {
     ANA_Rect rect;
+    int count;
 
     rect=ana_rect_clip(ana_rect_make(x,y,w,h),
         ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));
-    if(ana_rect_is_empty(rect)||
-            previous_dynamic_rect_count>=MAX_DYNAMIC_RECTS)return;
-    previous_dynamic_rects[previous_dynamic_rect_count++]=rect;
+    count=previous_dynamic_rect_counts[dynamic_record_generation];
+    if(ana_rect_is_empty(rect)||count>=MAX_DYNAMIC_RECTS)return;
+    previous_dynamic_rects[dynamic_record_generation][count]=rect;
+    previous_dynamic_rect_counts[dynamic_record_generation]=count+1;
 }
 static void remember_dynamic_image(ANA_Image image,int x,int y)
 {
@@ -362,26 +367,32 @@ static void restore_previous_dynamic_regions(void)
 {
     ANA_Rect screen_rect;
     ANA_Rect world_rect;
+    int generation;
     int i;
     int screen_dy;
 
-    screen_dy=previous_dynamic_valid?
-        previous_dynamic_camera_y-terrain_camera.y:0;
-    for(i=0;i<previous_dynamic_rect_count;i++){
-        screen_rect=previous_dynamic_rects[i];
-        screen_rect.y+=screen_dy;
-        screen_rect=ana_rect_clip(screen_rect,
-            ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));
-        if(ana_rect_is_empty(screen_rect))continue;
-        world_rect=ana_rect_make(
-            screen_rect.x+terrain_camera.x,
-            screen_rect.y-TOP+terrain_camera.y,
-            screen_rect.w,screen_rect.h);
-        ana_tile_layer_restore_world_rect(&terrain_layer,world_rect);
+    for(generation=0;generation<DYNAMIC_RECT_GENERATIONS;generation++){
+        if(!previous_dynamic_valid[generation])continue;
+        screen_dy=previous_dynamic_camera_y[generation]-terrain_camera.y;
+        for(i=0;i<previous_dynamic_rect_counts[generation];i++){
+            screen_rect=previous_dynamic_rects[generation][i];
+            screen_rect.y+=screen_dy;
+            screen_rect=ana_rect_clip(screen_rect,
+                ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));
+            if(ana_rect_is_empty(screen_rect))continue;
+            world_rect=ana_rect_make(
+                screen_rect.x+terrain_camera.x,
+                screen_rect.y-TOP+terrain_camera.y,
+                screen_rect.w,screen_rect.h);
+            ana_tile_layer_restore_world_rect(&terrain_layer,world_rect);
+        }
     }
-    previous_dynamic_rect_count=0;
-    previous_dynamic_camera_y=terrain_camera.y;
-    previous_dynamic_valid=1;
+    dynamic_record_generation=dynamic_write_generation;
+    previous_dynamic_rect_counts[dynamic_record_generation]=0;
+    previous_dynamic_camera_y[dynamic_record_generation]=terrain_camera.y;
+    previous_dynamic_valid[dynamic_record_generation]=1;
+    dynamic_write_generation=(dynamic_write_generation+1)%
+        DYNAMIC_RECT_GENERATIONS;
 }
 static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
 static ANA_Image player_image_for_modules(void) { if(t.installed_modules&8u)return player_laser_image;if(t.installed_modules&4u)return player_wide_image;if(t.installed_modules&2u)return player_twin_image;if(t.installed_modules&1u)return player_speed_image;return player_base_image; }
