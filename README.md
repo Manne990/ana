@@ -319,6 +319,13 @@ ANA work is tracked in focused specs:
 16. [Byte Brothers platform sample](docs/016-byte-brothers-platform-sample.md)
 17. [Scroll, camera, and tilemap](docs/017-scroll-camera-tilemap.md)
 18. [Render modes and backends](docs/018-render-modes-and-backends.md)
+19. [Layered rendering roadmap](docs/019-layered-rendering-roadmap.md)
+20. [VS Code Plugin v0.1 Workflow](docs/020-vscode-plugin-v0-1-workflow.md)
+21. [VS Code Plugin v0.2 Diagnostics](docs/021-vscode-plugin-v0-2-diagnostics.md)
+22. [VS Code Plugin v0.3 Rich Experience](docs/022-vscode-plugin-v0-3-rich-experience.md)
+23. [Build Week Vertical Shooter Sample](docs/023-build-week-vertical-shooter-sample.md)
+24. [VOIDSTRIKE Ways of Working](docs/024-voidstrike-ways-of-working.md)
+25. [VOIDSTRIKE Art Direction](docs/025-voidstrike-art-direction.md)
 
 ## License
 
