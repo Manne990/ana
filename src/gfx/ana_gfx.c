@@ -391,6 +391,7 @@ static ANA_Rect ana_amiga_active_layer_viewport;
 
 static void ana_amiga_clear_bitmap(struct BitMap* bitmap);
 static void ana_amiga_set_screen_bitmap_direct(struct BitMap* bitmap);
+static int ana_amiga_set_screen_bitmap(struct BitMap* bitmap);
 static int ana_amiga_hardware_scroll_active(void);
 #endif
 
@@ -2035,7 +2036,7 @@ static struct BitMap* ana_amiga_hardware_scroll_draw_bitmap(void)
         return &ana_amiga_hardware_scroll.background_bitmap;
     }
     if (ana_amiga_hardware_scroll.external_display) {
-        return &ana_amiga_hidden_bitmap;
+        return ana_amiga_draw_bitmap;
     }
 
     return ana_amiga_hardware_scroll_bitmap_at(
@@ -2498,10 +2499,10 @@ static int ana_amiga_hardware_scroll_alloc(const ANA_TileLayer* tile_layer)
     if (tile_layer->layer.kind == ANA_LAYER_VERTICAL_SCROLL) {
         width = ANA_DEFAULT_WIDTH;
         height = ana_amiga_hardware_scroll_target_height(world_h, viewport);
-        /* Build the tall terrain cache separately, stage each completed view
-         * in the screen-sized hidden bitmap, then blit it to the screen-owned
-         * visible bitmap. Attaching separately allocated rasters to the
-         * Intuition Screen leaves the stock A1200 copper display blank. */
+        /* Build the tall terrain cache separately and stage each completed
+         * view in the hidden screen buffer before flipping. Attaching
+         * separately allocated rasters to the Intuition Screen leaves the
+         * stock A1200 copper display blank. */
         buffer_count = 1;
         bitmap_height = ANA_DEFAULT_HEIGHT;
         ana_amiga_hardware_scroll.external_display = 1;
@@ -2690,19 +2691,12 @@ static void ana_amiga_hardware_scroll_commit_view_offset(void)
 #endif
 #endif
     if (ana_amiga_hardware_scroll.external_display) {
-        BltBitMap(
-            draw_bitmap,
-            0,
-            0,
-            ana_amiga_visible_bitmap,
-            0,
-            0,
-            ANA_DEFAULT_WIDTH,
-            ANA_DEFAULT_HEIGHT,
-            0xc0,
-            0xff,
-            NULL);
-        WaitBlit();
+        struct BitMap* old_visible_bitmap;
+
+        old_visible_bitmap = ana_amiga_visible_bitmap;
+        ana_amiga_set_screen_bitmap(draw_bitmap);
+        ana_amiga_visible_bitmap = draw_bitmap;
+        ana_amiga_draw_bitmap = old_visible_bitmap;
         ana_amiga_hardware_scroll.buffer_offset_valid[0] = 1;
         ana_amiga_hardware_scroll.buffer_offset_x[0] =
             ana_amiga_hardware_scroll.offset_x;
@@ -4074,15 +4068,21 @@ static void ana_amiga_set_screen_bitmap_direct(struct BitMap* bitmap)
 static int ana_amiga_set_screen_bitmap(struct BitMap* bitmap)
 {
     struct ScreenBuffer* screen_buffer;
+    struct ScreenBuffer* previous_screen_buffer;
 
     if (ana_amiga_screen == NULL || bitmap == NULL) {
         return 0;
     }
 
     screen_buffer = ana_amiga_screen_buffer_for(bitmap);
+    previous_screen_buffer =
+        ana_amiga_screen_buffer_for(ana_amiga_visible_bitmap);
     if (screen_buffer != NULL &&
             ChangeScreenBuffer(ana_amiga_screen, screen_buffer)) {
-        ana_amiga_wait_screen_buffer_safe(screen_buffer);
+        if (previous_screen_buffer != NULL &&
+                previous_screen_buffer != screen_buffer) {
+            ana_amiga_wait_screen_buffer_safe(previous_screen_buffer);
+        }
         return 1;
     }
 
