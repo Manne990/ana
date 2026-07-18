@@ -107,7 +107,7 @@ if(tick>=LEVEL_TICKS){t.boss_phase=1;}if(t.boss_phase){boss_x=128+((tick/12)%50)
 h_boss_hits++;
 #endif
 }if(boss_hp<24){t.boss_phase=2;}if(boss_hp<=0){ana_play_sound(victory_sound);t.score+=5000;t.state=VOIDSTRIKE_VICTORY;}} }
-void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);ana_camera_init(&terrain_camera,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP,ANA_DEFAULT_WIDTH,4096);ana_tile_layer_init(&terrain_layer,ANA_LAYER_VERTICAL_SCROLL,0,16,16,20,256);ana_tile_layer_set_callbacks(&terrain_layer,terrain_tile,terrain_draw,0);ana_tile_layer_set_viewport(&terrain_layer,ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));ana_tile_layer_set_clear_color(&terrain_layer,3u);ana_tile_layer_set_scroll_backend(&terrain_layer,ANA_SCROLL_BACKEND_HARDWARE);ana_tile_layer_set_scroll_sync(&terrain_layer,ANA_SCROLL_SYNC_DIRTY);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);t.state=VOIDSTRIKE_TITLE;
+void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);ana_camera_init(&terrain_camera,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP,ANA_DEFAULT_WIDTH,4096);ana_tile_layer_init(&terrain_layer,ANA_LAYER_VERTICAL_SCROLL,0,16,16,20,256);ana_tile_layer_set_callbacks(&terrain_layer,terrain_tile,terrain_draw,0);ana_tile_layer_set_viewport(&terrain_layer,ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));ana_tile_layer_set_clear_color(&terrain_layer,3u);ana_tile_layer_set_scroll_backend(&terrain_layer,ANA_SCROLL_BACKEND_NATIVE);ana_tile_layer_set_scroll_sync(&terrain_layer,ANA_SCROLL_SYNC_DIRTY);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);t.state=VOIDSTRIKE_TITLE;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 h_read_request();h_phase("title");
 #endif
@@ -137,18 +137,8 @@ void voidstrike_draw(void)
 {
     int i;
     int w;
-    int terrain_y;
 
-    ana_fill_rect(3u, 0, TOP, ANA_DEFAULT_WIDTH, BOTTOM - TOP);
-    terrain_y = TOP - (scroll % 32);
-    for (i = -1; i < 8; i++) {
-        ana_fill_rect((i & 1) ? 4u : 8u, 0, terrain_y + i * 32,
-                ANA_DEFAULT_WIDTH, 2);
-    }
-    for (i = 0; i < 3; i++) {
-        ana_fill_rect(15u, 32 + i * 96, TOP + ((scroll / 3 + i * 61) % 160),
-                16, 3);
-    }
+    ana_tile_layer_draw(&terrain_layer);
     ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
     ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
     if (t.state == VOIDSTRIKE_TITLE) {
