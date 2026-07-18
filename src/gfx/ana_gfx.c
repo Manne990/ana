@@ -2481,7 +2481,11 @@ static int ana_amiga_hardware_scroll_alloc(const ANA_TileLayer* tile_layer)
     if (tile_layer->layer.kind == ANA_LAYER_VERTICAL_SCROLL) {
         width = ANA_DEFAULT_WIDTH;
         height = ana_amiga_hardware_scroll_target_height(world_h, viewport);
-        buffer_count = ANA_AMIGA_HARDWARE_SCROLL_MAX_BUFFER_COUNT;
+        /* Keep the vertically scrolled raster attached to one stable
+         * BitMap.  ScrollVPort can reinterpret its RyOffset in place; swapping
+         * separately allocated tall rasters through an Intuition Screen made
+         * the stock A1200 copper display a blank surface. */
+        buffer_count = 1;
     } else {
         width = ana_amiga_hardware_scroll_target_width(world_w, viewport);
         height = ANA_DEFAULT_HEIGHT;
