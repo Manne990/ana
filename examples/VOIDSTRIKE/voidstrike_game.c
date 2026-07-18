@@ -342,9 +342,9 @@ static void h_drive_input(void)
         else if(cores[target].x>px+PLAYER_W)
             ana_input_pulse_key_event(ANA_KEY_RIGHT);
     }else if(t.boss_phase){
-        if(px<122)
+        if(((t.frame/24)&1)&&px<boss_x+24)
             ana_input_pulse_key_event(ANA_KEY_RIGHT);
-        else if(px>128)
+        else if(!((t.frame/24)&1)&&px>boss_x-4)
             ana_input_pulse_key_event(ANA_KEY_LEFT);
     }else if(t.frame<21){
         ana_input_pulse_key_event(ANA_KEY_LEFT);

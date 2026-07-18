@@ -266,10 +266,11 @@ voidstrike-host-smoke: $(VOIDSTRIKE_HOST_HARNESS_BIN)
 	rm -f build/voidstrike-harness-result.txt
 	ANA_HOST_UNPACED=1 $(VOIDSTRIKE_HOST_HARNESS_BIN)
 	test -f build/voidstrike-harness-result.txt
-	grep -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
+	grep -qx 'terminal_state=victory' build/voidstrike-harness-result.txt
 	grep -qx 'result_complete=1' build/voidstrike-harness-result.txt
 	grep -Eq '^cores_collected=[1-9][0-9]*$$' build/voidstrike-harness-result.txt
 	grep -Eq '^module_.*_installs=[1-9][0-9]*$$' build/voidstrike-harness-result.txt
+	grep -qx 'victory_contract_complete=1' build/voidstrike-harness-result.txt
 
 voidstrike-host-restart: $(VOIDSTRIKE_SRCS) $(VOIDSTRIKE_HEADERS) $(LIBANA) $(VOIDSTRIKE_ASSET_STAMP)
 	mkdir -p build/host-harness/restart
