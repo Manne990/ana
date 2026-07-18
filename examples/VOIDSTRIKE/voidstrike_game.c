@@ -57,7 +57,7 @@ static const ANA_Color palette[16]={{0,0,0},{17,17,34},{34,34,51},{51,68,85},{85
 static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by; }
 static int terrain_hazard_tile(int tx,int ty) { return (ty%29)==7&&((tx%7)==2||(tx%7)==3); }
 static unsigned char terrain_tile(int tx,int ty,void *user_data) { (void)user_data; if(terrain_hazard_tile(tx,ty))return 3u;return (unsigned char)((tx + ty * 3) % 3); }
-static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; if(tile==3u&&null_foundry_tiles_image)ana_draw_image_frame(null_foundry_tiles_image,3,x,y);else ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,32,16); }
+static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; if(tile==3u&&null_foundry_tiles_image)ana_draw_image_frame(null_foundry_tiles_image,3,x,y);else ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,16,16); }
 static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
 static ANA_Image player_image_for_modules(void) { if(t.installed_modules&8u)return player_laser_image;if(t.installed_modules&4u)return player_wide_image;if(t.installed_modules&2u)return player_twin_image;if(t.installed_modules&1u)return player_speed_image;return player_base_image; }
 static ANA_Image enemy_image_for_type(int type) { return type==0?turret_image:(type==1?crawler_image:drone_image); }
@@ -107,7 +107,7 @@ if(tick>=LEVEL_TICKS){t.boss_phase=1;}if(t.boss_phase){boss_x=128+((tick/12)%50)
 h_boss_hits++;
 #endif
 }if(boss_hp<24){t.boss_phase=2;}if(boss_hp<=0){ana_play_sound(victory_sound);t.score+=5000;t.state=VOIDSTRIKE_VICTORY;}} }
-void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);ana_camera_init(&terrain_camera,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP,ANA_DEFAULT_WIDTH,4096);ana_tile_layer_init(&terrain_layer,ANA_LAYER_VERTICAL_SCROLL,0,32,16,10,256);ana_tile_layer_set_callbacks(&terrain_layer,terrain_tile,terrain_draw,0);ana_tile_layer_set_viewport(&terrain_layer,ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));ana_tile_layer_set_clear_color(&terrain_layer,3u);ana_tile_layer_set_scroll_backend(&terrain_layer,ANA_SCROLL_BACKEND_NATIVE);ana_tile_layer_set_scroll_sync(&terrain_layer,ANA_SCROLL_SYNC_CHUNKY);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);t.state=VOIDSTRIKE_TITLE;
+void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);ana_camera_init(&terrain_camera,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP,ANA_DEFAULT_WIDTH,4096);ana_tile_layer_init(&terrain_layer,ANA_LAYER_VERTICAL_SCROLL,0,16,16,20,256);ana_tile_layer_set_callbacks(&terrain_layer,terrain_tile,terrain_draw,0);ana_tile_layer_set_viewport(&terrain_layer,ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));ana_tile_layer_set_clear_color(&terrain_layer,3u);ana_tile_layer_set_scroll_backend(&terrain_layer,ANA_SCROLL_BACKEND_NATIVE);ana_tile_layer_set_scroll_sync(&terrain_layer,ANA_SCROLL_SYNC_CHUNKY);ana_tile_layer_set_camera(&terrain_layer,&terrain_camera);t.state=VOIDSTRIKE_TITLE;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 h_read_request();h_phase("title");
 #endif
