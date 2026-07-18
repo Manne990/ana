@@ -137,8 +137,18 @@ void voidstrike_draw(void)
 {
     int i;
     int w;
+    int terrain_y;
 
-    ana_tile_layer_draw(&terrain_layer);
+    ana_fill_rect(3u, 0, TOP, ANA_DEFAULT_WIDTH, BOTTOM - TOP);
+    terrain_y = TOP - (scroll % 32);
+    for (i = -1; i < 8; i++) {
+        ana_fill_rect((i & 1) ? 4u : 8u, 0, terrain_y + i * 32,
+                ANA_DEFAULT_WIDTH, 2);
+    }
+    for (i = 0; i < 3; i++) {
+        ana_fill_rect(15u, 32 + i * 96, TOP + ((scroll / 3 + i * 61) % 160),
+                16, 3);
+    }
     ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
     ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
     if (t.state == VOIDSTRIKE_TITLE) {
