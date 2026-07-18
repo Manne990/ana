@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "tools" / "emulator"))
 
 from analyze_byte_brothers_frames import analyze_rgb_frames  # noqa: E402
 import write_fsuae_launch_config as fsuae_launch  # noqa: E402
+import voidstrike_result as voidstrike_result  # noqa: E402
 
 
 WIDTH = 160
@@ -95,6 +96,47 @@ class FsUaeLaunchConfigTest(unittest.TestCase):
                 fsuae_launch.KICKSTART_ROOTS = original_roots
 
             self.assertEqual(kickstart_path.resolve(), resolved)
+
+
+class VoidstrikeResultContractTest(unittest.TestCase):
+    def test_rejects_stale_artifact_and_low_sustained_normal_performance(self) -> None:
+        commit = "6fca1a9f29d8967fae48886448edfa1b82b90e8f"
+        adf_sha256 = "a" * 64
+        values = {key: "0" for key in voidstrike_result.REQUIRED_FIELDS}
+        values.update(
+            {
+                "schema_version": voidstrike_result.SCHEMA_VERSION,
+                "source_commit": commit,
+                "build_id": "voidstrike-normal-test",
+                "adf_sha256": "b" * 64,
+                "requested_scenario": "victory",
+                "actual_scenario": "victory",
+                "machine_profile": "a1200",
+                "terminal_state": "victory",
+                "failure_reasons": "",
+                "total_frames": "15000",
+                "simulated_time_ms": "300000",
+                "enemies_spawned": "10",
+                "enemies_destroyed": "10",
+                "boss_phase": "2",
+                "boss_defeated": "1",
+                "minimum_fps_x100": "4300",
+                "average_fps_x100": "4700",
+                "minimum_five_second_fps_x100": "3999",
+                "result_complete": "1",
+                "pass": "1",
+            }
+        )
+        failures = voidstrike_result.validate_result(
+            values,
+            source_commit=commit,
+            adf_sha256=adf_sha256,
+            scenario="victory",
+            machine_profile="a1200",
+            build_kind="normal",
+        )
+        self.assertIn("adf_sha256: result does not name the mounted ADF", failures)
+        self.assertIn("normal build five-second FPS floor is below 40", failures)
 
 
 if __name__ == "__main__":

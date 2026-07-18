@@ -7,7 +7,7 @@ one result file only after that flow has completed.
 
 ## Result protocol
 
-The deterministic harness writes `ana_voidstrike_result.txt` into the
+The deterministic harness writes `DH0:ana_voidstrike_result.txt` into the
 host-mounted writable directory. Its final write is a UTF-8 `key=value` file;
 keys are unique, blank lines and `#` comments are ignored. `phase=shutdown` in
 `ana_voidstrike_phase.txt` is the completion marker, but only a result accepted
@@ -27,9 +27,9 @@ result_complete pass failure_reasons
 ```
 
 `source_commit` and `adf_sha256` must identify the exact source and mounted
-artifact. The runner supplies the requested scenario and machine profile through
-the harness build/configuration; the game echoes them only after it has observed
-the requested path. `pass=1` requires `result_complete=1`, zero invariant
+artifact. Before launch the runner writes `DH0:ana_voidstrike_request.txt`; the
+game reads and echoes its source identity, ADF hash, build ID, requested scenario,
+and machine profile only after it has observed the requested path. `pass=1` requires `result_complete=1`, zero invariant
 failures, and an empty `failure_reasons` value. FPS values use hundredths of an
 FPS to avoid float formatting differences between host and m68k builds.
 
@@ -45,7 +45,7 @@ window; debug builds report separately and have a 35 FPS guidance floor.
 ## Runner boundary
 
 Each runner invocation creates a new ignored directory under
-`build/emulator-results/voidstrike/<build-kind>/<machine>/<scenario>/` containing
+`build/emulator-results/voidstrike/<build-kind>/<machine>/<scenario>/<run-id>/` containing
 the generated FS-UAE config, logs, writable drive, phase markers, final result,
 ADF SHA-256, and visual artifacts. It must mount the requested ADF directly,
 hash it before launch, disable Fast RAM for `a1200`, and reject stale or partial
@@ -57,7 +57,7 @@ validation, visual capture, and release-facing commands. The validator is
 intentionally usable before the game exists:
 
 ```sh
-python3 tests/voidstrike_result_test.py
+python3 tests/emulator_visual_test.py
 python3 tools/emulator/voidstrike_result.py \
   --result build/emulator-results/voidstrike/.../ana_voidstrike_result.txt \
   --source-commit "$(git rev-parse HEAD)" --adf-sha256 "$(shasum -a 256 ... | cut -d ' ' -f 1)" \
