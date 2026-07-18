@@ -191,10 +191,14 @@ def presentation_board():
         x = 88 + i * 36; rect(a, x, 228, 30, 18, 4 if i != 2 else 10)
         rect(a, x + 2, 230, 26, 14, 2)
         if i in (0, 1, 3): rect(a, x + 11, 235, 8, 4, 12)
-    # A compact title treatment placed in the status band with no reference typography.
-    rect(a, 122, 5, 18, 4, 7); rect(a, 122, 9, 4, 5, 7); rect(a, 136, 9, 4, 5, 7)
-    rect(a, 144, 5, 4, 10, 10); rect(a, 152, 5, 18, 4, 6); rect(a, 152, 11, 18, 4, 6)
-    rect(a, 174, 5, 18, 4, 7); rect(a, 174, 11, 18, 4, 7); rect(a, 174, 5, 4, 10, 7)
+    # The board must state the full original title at native size, not an abstract mark.
+    glyphs = {"V":["10001","10001","01010","01010","00100"], "O":["01110","10001","10001","10001","01110"], "I":["11111","00100","00100","00100","11111"], "D":["11110","10001","10001","10001","11110"], "S":["01111","10000","01110","00001","11110"], "T":["11111","00100","00100","00100","00100"], "R":["11110","10001","11110","10100","10010"], "K":["10001","10010","11100","10010","10001"], "E":["11111","10000","11110","10000","11111"]}
+    x = 100
+    for ch in "VOIDSTRIKE":
+        for yy, row in enumerate(glyphs[ch]):
+            for xx, bit in enumerate(row):
+                if bit == "1": rect(a, x + xx * 2, 4 + yy * 2, 2, 2, 7 if ch in "VOID" else 6)
+        x += 12
     write("presentation_board.ppm", a)
 
 
