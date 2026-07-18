@@ -22,6 +22,10 @@ total_frames simulated_time_ms terminal_state score remaining_lives
 installed_modules enemies_spawned enemies_destroyed boss_phase boss_defeated
 collision_invariant_failures world_bound_invariant_failures
 input_keyboard_events input_joystick_events
+input_keyboard_ctrl_events input_keyboard_space_events
+input_joystick_direction_events input_joystick_fire_events input_joystick_space_events
+module_speed_installs module_twin_shot_installs module_wide_shot_installs
+module_laser_installs module_rail_wraps module_repeat_install_events
 minimum_fps_x100 average_fps_x100 minimum_five_second_fps_x100
 result_complete pass failure_reasons
 ```
@@ -38,7 +42,11 @@ The supported scenario names are `victory`, `game-over`, `input-keyboard`,
 screen and use real input/update/collision/render paths. The victory and boss
 scenarios must finish in `terminal_state=victory`; the game-over scenario must
 finish in `terminal_state=game-over`. Keyboard and joystick scenarios must
-increment their respective observed-input counters. A normal A1200 result is
+increment their respective observed-input counters. `input-keyboard` must also
+observe Ctrl fire and Space install; `input-joystick` must observe joystick
+direction, joystick fire, and Amiga-keyboard Space install. `module-progression`
+must install Speed, Twin Shot, Wide Shot, and Laser, wrap the rail, and exercise
+the defined repeat-install behavior. A normal A1200 result is
 rejected below 45 average FPS or below 40 FPS for any five-second gameplay
 window; debug builds report separately and have a 35 FPS guidance floor.
 

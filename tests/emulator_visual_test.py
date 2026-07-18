@@ -138,6 +138,41 @@ class VoidstrikeResultContractTest(unittest.TestCase):
         self.assertIn("adf_sha256: result does not name the mounted ADF", failures)
         self.assertIn("normal build five-second FPS floor is below 40", failures)
 
+    def test_requires_explicit_input_and_module_progression_evidence(self) -> None:
+        commit = "6fca1a9f29d8967fae48886448edfa1b82b90e8f"
+        adf_sha256 = "a" * 64
+        values = {key: "1" for key in voidstrike_result.REQUIRED_FIELDS}
+        values.update(
+            {
+                "schema_version": voidstrike_result.SCHEMA_VERSION,
+                "source_commit": commit,
+                "build_id": "voidstrike-normal-test",
+                "adf_sha256": adf_sha256,
+                "requested_scenario": "input-keyboard",
+                "actual_scenario": "input-keyboard",
+                "machine_profile": "a1200",
+                "terminal_state": "victory",
+                "failure_reasons": "",
+                "input_keyboard_ctrl_events": "0",
+                "input_keyboard_space_events": "0",
+                "minimum_fps_x100": "4300",
+                "average_fps_x100": "4700",
+                "minimum_five_second_fps_x100": "4100",
+                "result_complete": "1",
+                "pass": "1",
+            }
+        )
+        failures = voidstrike_result.validate_result(
+            values,
+            source_commit=commit,
+            adf_sha256=adf_sha256,
+            scenario="input-keyboard",
+            machine_profile="a1200",
+            build_kind="normal",
+        )
+        self.assertIn("input-keyboard scenario did not observe Ctrl fire", failures)
+        self.assertIn("input-keyboard scenario did not observe Space install", failures)
+
 
 if __name__ == "__main__":
     unittest.main()

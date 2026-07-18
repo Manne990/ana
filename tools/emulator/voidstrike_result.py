@@ -49,6 +49,17 @@ REQUIRED_FIELDS = frozenset(
         "world_bound_invariant_failures",
         "input_keyboard_events",
         "input_joystick_events",
+        "input_keyboard_ctrl_events",
+        "input_keyboard_space_events",
+        "input_joystick_direction_events",
+        "input_joystick_fire_events",
+        "input_joystick_space_events",
+        "module_speed_installs",
+        "module_twin_shot_installs",
+        "module_wide_shot_installs",
+        "module_laser_installs",
+        "module_rail_wraps",
+        "module_repeat_install_events",
         "minimum_fps_x100",
         "average_fps_x100",
         "minimum_five_second_fps_x100",
@@ -168,8 +179,33 @@ def validate_result(
         failures.append("game-over scenario did not reach game-over")
     if scenario == "input-keyboard" and integers["input_keyboard_events"] == 0:
         failures.append("input-keyboard scenario observed no keyboard input")
-    if scenario == "input-joystick" and integers["input_joystick_events"] == 0:
-        failures.append("input-joystick scenario observed no joystick input")
+    if scenario == "input-keyboard":
+        if integers["input_keyboard_ctrl_events"] == 0:
+            failures.append("input-keyboard scenario did not observe Ctrl fire")
+        if integers["input_keyboard_space_events"] == 0:
+            failures.append("input-keyboard scenario did not observe Space install")
+    if scenario == "input-joystick":
+        if integers["input_joystick_events"] == 0:
+            failures.append("input-joystick scenario observed no joystick input")
+        if integers["input_joystick_direction_events"] == 0:
+            failures.append("input-joystick scenario did not observe joystick direction")
+        if integers["input_joystick_fire_events"] == 0:
+            failures.append("input-joystick scenario did not observe joystick fire")
+        if integers["input_joystick_space_events"] == 0:
+            failures.append("input-joystick scenario did not observe Amiga keyboard Space install")
+    if scenario == "module-progression":
+        for key in (
+            "module_speed_installs",
+            "module_twin_shot_installs",
+            "module_wide_shot_installs",
+            "module_laser_installs",
+        ):
+            if integers[key] == 0:
+                failures.append(f"module-progression scenario did not install {key[7:-9]}")
+        if integers["module_rail_wraps"] == 0:
+            failures.append("module-progression scenario did not wrap the module rail")
+        if integers["module_repeat_install_events"] == 0:
+            failures.append("module-progression scenario did not exercise repeat install")
     if scenario == "boss" and integers["boss_defeated"] != 1:
         failures.append("boss scenario did not defeat the boss")
     if build_kind == "normal":
