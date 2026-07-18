@@ -155,6 +155,7 @@ static void h_write_result(void)
     int floor;
     int min_floor;
     int contract_complete;
+    int input_contract_complete;
 
     if(t.state!=VOIDSTRIKE_VICTORY&&t.state!=VOIDSTRIKE_GAME_OVER)return;
     h_capture_stage_sample();
@@ -173,15 +174,34 @@ static void h_write_result(void)
         (h_module_installs[0]+h_module_installs[1]+
             h_module_installs[2]+h_module_installs[3])>0&&
         h_boss_hits>0&&t.state==VOIDSTRIKE_VICTORY;
+    input_contract_complete=1;
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2){
+        input_contract_complete=h_keyboard_events>=3&&h_ctrl_events>0&&
+            h_space_events>0&&h_cores_collected>0&&
+            t.enemies_destroyed>0&&t.installed_modules!=0u&&
+            t.state==VOIDSTRIKE_GAME_OVER;
+    }else if(VOIDSTRIKE_HARNESS_SCENARIO_ID==3){
+        input_contract_complete=h_joy_direction_events>0&&
+            h_joy_fire_events>0&&h_joy_space_events>0&&
+            h_cores_collected>0&&t.enemies_destroyed>0&&
+            t.installed_modules!=0u&&t.state==VOIDSTRIKE_GAME_OVER;
+    }
     pass=t.enemies_destroyed<=t.enemies_spawned&&
         stats.average_fps_x100>=floor&&h_min_fps>=min_floor;
     if(VOIDSTRIKE_HARNESS_SCENARIO_ID==0&&!contract_complete)pass=0;
+    if((VOIDSTRIKE_HARNESS_SCENARIO_ID==2||
+            VOIDSTRIKE_HARNESS_SCENARIO_ID==3)&&
+            !input_contract_complete)pass=0;
     if(VOIDSTRIKE_HARNESS_SCENARIO_ID==5&&
             t.state!=VOIDSTRIKE_VICTORY)pass=0;
     if(VOIDSTRIKE_HARNESS_SCENARIO_ID==1&&
             t.state!=VOIDSTRIKE_GAME_OVER)pass=0;
     reason=pass?"":(VOIDSTRIKE_HARNESS_SCENARIO_ID==0&&!contract_complete?
-        "incomplete-victory-contract":"terminal-or-performance-failure");
+        "incomplete-victory-contract":
+        ((VOIDSTRIKE_HARNESS_SCENARIO_ID==2||
+            VOIDSTRIKE_HARNESS_SCENARIO_ID==3)&&
+            !input_contract_complete?"incomplete-input-contract":
+            "terminal-or-performance-failure"));
 
     simulated_time_ms=(stats.elapsed_ticks*1000L)/stats.ticks_per_second;
     /* ANA leaves these counters at zero when its backend was built without
@@ -273,9 +293,84 @@ static void h_drive_input(void)
     int hazard;
     int threat_y;
     int threat_direction;
+    int input_direction;
+    int install;
+    unsigned int joystick_state;
 
     if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2||
-            VOIDSTRIKE_HARNESS_SCENARIO_ID==3)return;
+            VOIDSTRIKE_HARNESS_SCENARIO_ID==3){
+        input_direction=0;
+        target=-1;
+        dodge=0;
+        threat_y=-1;
+        threat_direction=0;
+        hazard=terrain_hazard_tile(px/16,(scroll+py-TOP)/16)||
+            terrain_hazard_tile((px+PLAYER_W)/16,
+                (scroll+py-TOP)/16);
+        for(i=0;i<MAX_ACTORS;i++){
+            if(cores[i].active&&cores[i].y>py-64)target=i;
+            if(hostile_bullets[i].active&&
+                    hostile_bullets[i].y>=py-28&&
+                    hostile_bullets[i].y<=py+PLAYER_H&&
+                    px<hostile_bullets[i].x+4&&
+                    px+PLAYER_W>hostile_bullets[i].x)dodge=1;
+            if(enemies[i].active&&enemies[i].y>=py-48&&
+                    enemies[i].y<=py+PLAYER_H&&
+                    enemies[i].x+14>=px-20&&
+                    enemies[i].x<=px+PLAYER_W+20&&
+                    enemies[i].y>threat_y){
+                threat_y=enemies[i].y;
+                if(enemies[i].x+7<px+PLAYER_W/2)
+                    threat_direction=ANA_KEY_RIGHT;
+                else
+                    threat_direction=ANA_KEY_LEFT;
+                if(px<=24&&threat_direction==ANA_KEY_LEFT)
+                    threat_direction=ANA_KEY_RIGHT;
+                else if(px>=ANA_DEFAULT_WIDTH-PLAYER_W-24&&
+                        threat_direction==ANA_KEY_RIGHT)
+                    threat_direction=ANA_KEY_LEFT;
+            }
+        }
+        if(dodge||hazard)
+            input_direction=px<150?ANA_KEY_RIGHT:ANA_KEY_LEFT;
+        else if(threat_direction)
+            input_direction=threat_direction;
+        else if(target>=0){
+            if(cores[target].x<px)
+                input_direction=ANA_KEY_LEFT;
+            else if(cores[target].x>px+PLAYER_W)
+                input_direction=ANA_KEY_RIGHT;
+        }else if(t.frame>=9&&t.frame<21)
+            input_direction=ANA_KEY_LEFT;
+
+        install=(t.state==VOIDSTRIKE_PLAYING||
+            t.state==VOIDSTRIKE_RESPAWN)&&t.selected_module>=0;
+        ana_input_set_pending_state(ANA_INPUT_DEVICE_0,0u);
+        ana_input_set_pending_key_state(ANA_KEY_LEFT,0);
+        ana_input_set_pending_key_state(ANA_KEY_RIGHT,0);
+        ana_input_set_pending_key_state(ANA_KEY_CTRL,0);
+        ana_input_set_pending_key_state(ANA_KEY_SPACE,0);
+        if(t.frame<VOIDSTRIKE_HARNESS_FRAME_LIMIT){
+            if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2){
+                ana_input_set_pending_key_state(ANA_KEY_CTRL,1);
+                if(input_direction)
+                    ana_input_set_pending_key_state(
+                        (ANA_Key)input_direction,1);
+            }else{
+                joystick_state=ANA_ACTION_1_MASK;
+                if(input_direction==ANA_KEY_LEFT)
+                    joystick_state|=ANA_INPUT_LEFT_MASK;
+                else if(input_direction==ANA_KEY_RIGHT)
+                    joystick_state|=ANA_INPUT_RIGHT_MASK;
+                ana_input_set_pending_state(ANA_INPUT_DEVICE_0,
+                    joystick_state);
+            }
+            if(install)
+                ana_input_set_pending_key_state(ANA_KEY_SPACE,1);
+        }
+        ana_input_advance_without_poll();
+        return;
+    }
 
     if(t.frame<8){
         ana_input_set_pending_key_state(ANA_KEY_CTRL,1);
@@ -356,7 +451,44 @@ static void h_drive_input(void)
         ana_input_pulse_key_event(ANA_KEY_SPACE);
     ana_input_advance_without_poll();
 }
-static void h_observe_input(void) { ANA_InputDebug d; int direction; ana_input_debug_snapshot(&d); direction=ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN);if(d.key_ctrl_down&&!h_prev_ctrl){h_keyboard_events++;h_ctrl_events++;}if(d.key_space_down&&!h_prev_space){h_keyboard_events++;h_space_events++;}if(!d.key_ctrl_down&&ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1)&&!h_prev_fire){h_joystick_events++;h_joy_fire_events++;}if(!d.key_ctrl_down&&direction&&!h_prev_direction){h_joystick_events++;h_joy_direction_events++;}h_prev_ctrl=d.key_ctrl_down;h_prev_space=d.key_space_down;h_prev_fire=ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1);h_prev_direction=direction; }
+static void h_observe_input(void)
+{
+    ANA_InputDebug d;
+    int direction;
+    int fire;
+
+    ana_input_debug_snapshot(&d);
+    direction=ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT)||
+        ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT)||
+        ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP)||
+        ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN);
+    fire=ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1);
+    if(d.key_ctrl_down&&!h_prev_ctrl){
+        h_keyboard_events++;
+        h_ctrl_events++;
+    }
+    if(d.key_space_down&&!h_prev_space){
+        h_keyboard_events++;
+        h_space_events++;
+        if(VOIDSTRIKE_HARNESS_SCENARIO_ID==3)h_joy_space_events++;
+    }
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2){
+        if(direction&&!h_prev_direction)h_keyboard_events++;
+    }else{
+        if(!d.key_ctrl_down&&fire&&!h_prev_fire){
+            h_joystick_events++;
+            h_joy_fire_events++;
+        }
+        if(!d.key_ctrl_down&&direction&&!h_prev_direction){
+            h_joystick_events++;
+            h_joy_direction_events++;
+        }
+    }
+    h_prev_ctrl=d.key_ctrl_down;
+    h_prev_space=d.key_space_down;
+    h_prev_fire=fire;
+    h_prev_direction=direction;
+}
 static void h_measure_window(void)
 {
     unsigned long perf_now;
