@@ -34,6 +34,7 @@ AMIGA_BYTE_BROTHERS_HARNESS_CFLAGS ?= $(AMIGA_A1200_DEBUG_CFLAGS) -DBB_EMULATOR_
 VOIDSTRIKE_HARNESS_SCENARIO_ID ?= 0
 VOIDSTRIKE_HARNESS_FRAME_LIMIT ?= 16000
 AMIGA_VOIDSTRIKE_HARNESS_CFLAGS ?= $(AMIGA_A1200_DEBUG_CFLAGS) -DVOIDSTRIKE_EMULATOR_HARNESS -DVOIDSTRIKE_HARNESS_SCENARIO_ID=$(VOIDSTRIKE_HARNESS_SCENARIO_ID) -DVOIDSTRIKE_HARNESS_FRAME_LIMIT=$(VOIDSTRIKE_HARNESS_FRAME_LIMIT)
+AMIGA_VOIDSTRIKE_NORMAL_HARNESS_CFLAGS ?= $(AMIGA_A1200_CFLAGS) -DVOIDSTRIKE_EMULATOR_HARNESS -DVOIDSTRIKE_HARNESS_SCENARIO_ID=$(VOIDSTRIKE_HARNESS_SCENARIO_ID) -DVOIDSTRIKE_HARNESS_FRAME_LIMIT=$(VOIDSTRIKE_HARNESS_FRAME_LIMIT)
 AMIGA_BUFFERED_DEBUG_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_DEBUG_STATS
 AMIGA_SYNC_CFLAGS ?= $(AMIGA_BASE_CFLAGS) -DANA_AMIGA_DIRECT_PRESENT -DANA_AMIGA_DIRECT_PRESENT_SYNC -DANA_DEBUG_STATS
 AMIGA_A1200_BASE_CFLAGS ?= -O2 -std=gnu89 -Wall -Wextra -Werror -Iinclude -Isrc -m68020 -DANA_TARGET_AMIGA -DANA_AMIGA_A1200_BASELINE
@@ -199,6 +200,7 @@ AMIGA_INPUT_PROBE_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/input_probe
 AMIGA_INPUT_PROBE_SYNTHETIC_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/input_probe_synthetic/input_probe
 AMIGA_BYTE_BROTHERS_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/byte_brothers/byte_brothers
 AMIGA_VOIDSTRIKE_HARNESS_BIN := $(AMIGA_HARNESS_BUILD_DIR)/examples/VOIDSTRIKE/voidstrike
+AMIGA_VOIDSTRIKE_NORMAL_HARNESS_BIN := $(BUILD_DIR)/amiga-harness-normal/examples/VOIDSTRIKE/voidstrike
 AMIGA_VOIDSTRIKE_A1200_BIN := $(AMIGA_A1200_BUILD_DIR)/examples/VOIDSTRIKE/voidstrike
 AMIGA_VOIDSTRIKE_A1200_DEBUG_BIN := $(AMIGA_A1200_DEBUG_BUILD_DIR)/examples/VOIDSTRIKE/voidstrike
 HOST_BYTE_BROTHERS_HARNESS_BIN := $(BUILD_DIR)/host-harness/examples/byte_brothers/byte_brothers
@@ -230,9 +232,10 @@ BYTE_BROTHERS_A1200_DEBUG_ADF := $(ADF_DIR)/byte-brothers-a1200-debug.adf
 VOIDSTRIKE_A1200_ADF := $(ADF_DIR)/voidstrike-a1200.adf
 VOIDSTRIKE_A1200_DEBUG_ADF := $(ADF_DIR)/voidstrike-a1200-debug.adf
 VOIDSTRIKE_HARNESS_ADF := $(ADF_DIR)/voidstrike-harness.adf
+VOIDSTRIKE_NORMAL_HARNESS_ADF := $(ADF_DIR)/voidstrike-harness-normal.adf
 BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG := $(BUILD_DIR)/fs-uae/byte-brothers-a1200-debug.fs-uae
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test voidstrike-host-harness voidstrike-host-smoke amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-voidstrike-harness amiga-voidstrike-a1200 amiga-voidstrike-a1200-debug amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf voidstrike-a1200-adf voidstrike-a1200-debug-adf voidstrike-harness-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test voidstrike-host-harness voidstrike-host-smoke amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-voidstrike-harness amiga-voidstrike-normal-harness amiga-voidstrike-a1200 amiga-voidstrike-a1200-debug amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual emulator-voidstrike-all emulator-voidstrike-full-run emulator-voidstrike-visual emulator-voidstrike-performance emulator-voidstrike-input invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf voidstrike-a1200-adf voidstrike-a1200-debug-adf voidstrike-harness-adf voidstrike-harness-normal-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
 
 force-byte-brothers-a1200-debug-adf:
 
@@ -297,6 +300,8 @@ amiga-input-probe-synthetic-harness: $(AMIGA_INPUT_PROBE_SYNTHETIC_HARNESS_BIN)
 amiga-byte-brothers-harness: $(AMIGA_BYTE_BROTHERS_HARNESS_BIN)
 
 amiga-voidstrike-harness: $(AMIGA_VOIDSTRIKE_HARNESS_BIN)
+
+amiga-voidstrike-normal-harness: $(AMIGA_VOIDSTRIKE_NORMAL_HARNESS_BIN)
 
 amiga-voidstrike-a1200: $(AMIGA_VOIDSTRIKE_A1200_BIN)
 
@@ -371,6 +376,27 @@ emulator-byte-brothers-visual:
 emulator-byte-brothers-host-visual:
 	python3 tools/emulator/run_byte_brothers_host_visual.py --scenario scroll
 
+emulator-voidstrike-full-run:
+	$(MAKE) -B voidstrike-harness-normal-adf VOIDSTRIKE_HARNESS_SCENARIO_ID=0 VOIDSTRIKE_HARNESS_FRAME_LIMIT=21000
+	python3 tools/emulator/run_voidstrike.py --adf $(VOIDSTRIKE_NORMAL_HARNESS_ADF) --scenario victory --build-kind normal --machine a1200 --source-commit $$(git rev-parse HEAD) --timeout 420
+
+emulator-voidstrike-performance: emulator-voidstrike-full-run
+
+emulator-voidstrike-input:
+	$(MAKE) -B voidstrike-harness-normal-adf VOIDSTRIKE_HARNESS_SCENARIO_ID=2 VOIDSTRIKE_HARNESS_FRAME_LIMIT=1000
+	python3 tools/emulator/run_voidstrike.py --adf $(VOIDSTRIKE_NORMAL_HARNESS_ADF) --scenario input-keyboard --build-kind normal --machine a1200 --source-commit $$(git rev-parse HEAD) --timeout 90
+	$(MAKE) -B voidstrike-harness-normal-adf VOIDSTRIKE_HARNESS_SCENARIO_ID=3 VOIDSTRIKE_HARNESS_FRAME_LIMIT=1000
+	python3 tools/emulator/run_voidstrike.py --adf $(VOIDSTRIKE_NORMAL_HARNESS_ADF) --scenario input-joystick --build-kind normal --machine a1200 --source-commit $$(git rev-parse HEAD) --timeout 90
+
+emulator-voidstrike-visual:
+	$(MAKE) -B voidstrike-harness-normal-adf VOIDSTRIKE_HARNESS_SCENARIO_ID=0 VOIDSTRIKE_HARNESS_FRAME_LIMIT=1000
+	python3 tools/emulator/capture_voidstrike_visual.py --adf $(VOIDSTRIKE_NORMAL_HARNESS_ADF) --source-commit $$(git rev-parse HEAD) --scenario victory --build-kind normal --machine a1200 --timeout 90
+
+emulator-voidstrike-all:
+	$(MAKE) emulator-voidstrike-full-run
+	$(MAKE) emulator-voidstrike-input
+	$(MAKE) emulator-voidstrike-visual
+
 amaze-a1200-adf: $(AMAZE_A1200_ADF)
 
 amaze-a1200-debug-adf: $(AMAZE_A1200_DEBUG_ADF)
@@ -384,6 +410,8 @@ voidstrike-a1200-adf: $(VOIDSTRIKE_A1200_ADF)
 voidstrike-a1200-debug-adf: $(VOIDSTRIKE_A1200_DEBUG_ADF)
 
 voidstrike-harness-adf: $(VOIDSTRIKE_HARNESS_ADF)
+
+voidstrike-harness-normal-adf: $(VOIDSTRIKE_NORMAL_HARNESS_ADF)
 
 byte-brothers-a1200-debug-fsuae-config: $(BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG)
 
@@ -659,6 +687,10 @@ $(AMIGA_VOIDSTRIKE_HARNESS_BIN): $(VOIDSTRIKE_SRCS) $(VOIDSTRIKE_HEADERS) $(AMIG
 	mkdir -p $(@D)
 	$(AMIGA_CC) $(AMIGA_VOIDSTRIKE_HARNESS_CFLAGS) $(VOIDSTRIKE_SRCS) $(AMIGA_A1200_DEBUG_LIBANA) $(AMIGA_LDFLAGS) -o $@
 
+$(AMIGA_VOIDSTRIKE_NORMAL_HARNESS_BIN): $(VOIDSTRIKE_SRCS) $(VOIDSTRIKE_HEADERS) $(AMIGA_A1200_LIBANA) $(VOIDSTRIKE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(AMIGA_CC) $(AMIGA_VOIDSTRIKE_NORMAL_HARNESS_CFLAGS) $(VOIDSTRIKE_SRCS) $(AMIGA_A1200_LIBANA) $(AMIGA_LDFLAGS) -o $@
+
 $(ADF_DIR)/hello.adf: $(AMIGA_BUILD_DIR)/examples/hello/hello
 	mkdir -p $(@D)
 	$(RM) $@
@@ -758,6 +790,11 @@ $(VOIDSTRIKE_HARNESS_ADF): $(AMIGA_VOIDSTRIKE_HARNESS_BIN) $(VOIDSTRIKE_ASSET_ST
 	mkdir -p $(@D)
 	$(RM) $@
 	$(ADFTOOL) -i $< -a $@ -l VOIDHARNESS $(VOIDSTRIKE_ASSET_DIR)
+
+$(VOIDSTRIKE_NORMAL_HARNESS_ADF): $(AMIGA_VOIDSTRIKE_NORMAL_HARNESS_BIN) $(VOIDSTRIKE_ASSET_STAMP)
+	mkdir -p $(@D)
+	$(RM) $@
+	$(ADFTOOL) -i $< -a $@ -l VOIDNORMHARNESS $(VOIDSTRIKE_ASSET_DIR)
 
 $(BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG): $(BYTE_BROTHERS_A1200_DEBUG_ADF) tools/emulator/write_fsuae_launch_config.py
 	python3 tools/emulator/write_fsuae_launch_config.py --profile a1200 --adf $(BYTE_BROTHERS_A1200_DEBUG_ADF) --output $@
