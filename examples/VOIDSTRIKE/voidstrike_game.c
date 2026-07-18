@@ -19,6 +19,7 @@
 #define PLAYER_W 16
 #define PLAYER_H 20
 #define MAX_ACTORS 16
+#define MAX_DYNAMIC_RECTS (MAX_ACTORS * 5 + 4)
 #define LEVEL_TICKS (ANA_DEFAULT_FPS * 255)
 #define SPAWN_STOP_TICKS 2200
 #define BOSS_START_HP 48
@@ -28,6 +29,10 @@ static VoidstrikeTelemetry t;
 static int px,py,invul,fire_wait,scroll,boss_hp,boss_x;
 static ANA_TileLayer terrain_layer;
 static ANA_Camera terrain_camera;
+static ANA_Rect previous_dynamic_rects[MAX_DYNAMIC_RECTS];
+static int previous_dynamic_rect_count;
+static int previous_dynamic_camera_y;
+static int previous_dynamic_valid;
 static ANA_Image player_base_image,player_speed_image,player_twin_image,player_wide_image,player_laser_image;
 static ANA_Image turret_image,crawler_image,drone_image,boss_image,player_shot_image,hostile_shot_image,core_image,explosion_image,null_foundry_tiles_image,module_dock_image,title_image;
 static ANA_Sound fire_sound,pickup_sound,install_sound,explosion_sound,death_sound,victory_sound;
@@ -338,6 +343,46 @@ static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return
 static int terrain_hazard_tile(int tx,int ty) { return (ty%29)==7&&((tx%7)==2||(tx%7)==3); }
 static unsigned char terrain_tile(int tx,int ty,void *user_data) { (void)user_data; if(terrain_hazard_tile(tx,ty))return 3u;return (unsigned char)((tx + ty * 3) % 3); }
 static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; if(tile==3u&&null_foundry_tiles_image)ana_draw_image_frame(null_foundry_tiles_image,3,x,y);else ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,16,16); }
+static void remember_dynamic_rect(int x,int y,int w,int h)
+{
+    ANA_Rect rect;
+
+    rect=ana_rect_clip(ana_rect_make(x,y,w,h),
+        ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));
+    if(ana_rect_is_empty(rect)||
+            previous_dynamic_rect_count>=MAX_DYNAMIC_RECTS)return;
+    previous_dynamic_rects[previous_dynamic_rect_count++]=rect;
+}
+static void remember_dynamic_image(ANA_Image image,int x,int y)
+{
+    if(image)remember_dynamic_rect(x,y,
+        ana_image_width(image),ana_image_height(image));
+}
+static void restore_previous_dynamic_regions(void)
+{
+    ANA_Rect screen_rect;
+    ANA_Rect world_rect;
+    int i;
+    int screen_dy;
+
+    screen_dy=previous_dynamic_valid?
+        previous_dynamic_camera_y-terrain_camera.y:0;
+    for(i=0;i<previous_dynamic_rect_count;i++){
+        screen_rect=previous_dynamic_rects[i];
+        screen_rect.y+=screen_dy;
+        screen_rect=ana_rect_clip(screen_rect,
+            ana_rect_make(0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP));
+        if(ana_rect_is_empty(screen_rect))continue;
+        world_rect=ana_rect_make(
+            screen_rect.x+terrain_camera.x,
+            screen_rect.y-TOP+terrain_camera.y,
+            screen_rect.w,screen_rect.h);
+        ana_tile_layer_restore_world_rect(&terrain_layer,world_rect);
+    }
+    previous_dynamic_rect_count=0;
+    previous_dynamic_camera_y=terrain_camera.y;
+    previous_dynamic_valid=1;
+}
 static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
 static ANA_Image player_image_for_modules(void) { if(t.installed_modules&8u)return player_laser_image;if(t.installed_modules&4u)return player_wide_image;if(t.installed_modules&2u)return player_twin_image;if(t.installed_modules&1u)return player_speed_image;return player_base_image; }
 static ANA_Image enemy_image_for_type(int type) { return type==0?turret_image:(type==1?crawler_image:drone_image); }
@@ -419,8 +464,7 @@ void voidstrike_draw(void)
     int w;
 
     ana_tile_layer_draw(&terrain_layer);
-    ana_tile_layer_restore_world_rect(&terrain_layer,
-        ana_rect_make(0, scroll, ANA_DEFAULT_WIDTH, BOTTOM - TOP));
+    restore_previous_dynamic_regions();
     ana_fill_rect(2u, 0, 0, ANA_DEFAULT_WIDTH, TOP);
     ana_fill_rect(2u, 0, BOTTOM, ANA_DEFAULT_WIDTH, ANA_DEFAULT_HEIGHT - BOTTOM);
     if (t.state == VOIDSTRIKE_TITLE) {
@@ -432,12 +476,14 @@ void voidstrike_draw(void)
         vs_text("CTRL FIRE", 112, 158, 10u);
         vs_text("SPACE INSTALL", 94, 174, 7u);
         vs_text("ONE BUTTON START", 70, 190, 12u);
+        remember_dynamic_rect(64, 54, 192, 150);
         return;
     }
     if (t.state == VOIDSTRIKE_GAME_OVER || t.state == VOIDSTRIKE_VICTORY) {
         ana_fill_rect(t.state == VOIDSTRIKE_VICTORY ? 12u : 15u, 104, 105, 112, 8);
         vs_text(t.state == VOIDSTRIKE_VICTORY ? "VICTORY" : "GAME OVER", 118, 94, t.state == VOIDSTRIKE_VICTORY ? 12u : 15u);
         vs_text("ONE BUTTON RESTART", 62, 126, 7u);
+        remember_dynamic_rect(62, 94, 216, 46);
         return;
     }
     for (i = 0; i < t.lives; i++) ana_fill_rect(12u, 6 + i * 4, 6, 3, 4);
@@ -449,18 +495,23 @@ void voidstrike_draw(void)
     }
     w = player_width();
     if (!(invul & 4)) {
-        if (player_image_for_modules()) ana_draw_image(player_image_for_modules(), px - 10, py - 4);
-        else ship(px, py, w);
+        if (player_image_for_modules()) {
+            ana_draw_image(player_image_for_modules(), px - 10, py - 4);
+            remember_dynamic_image(player_image_for_modules(), px - 10, py - 4);
+        } else {
+            ship(px, py, w);
+            remember_dynamic_rect(px - 5, py - 5, w + 10, 27);
+        }
     }
     for (i = 0; i < MAX_ACTORS; i++) {
-        if (bullets[i].active) { if (player_shot_image) ana_draw_image(player_shot_image, bullets[i].x, bullets[i].y); else ana_fill_rect(7u, bullets[i].x, bullets[i].y, 2, 6); }
-        if (hostile_bullets[i].active) { if (hostile_shot_image) ana_draw_image(hostile_shot_image, hostile_bullets[i].x, hostile_bullets[i].y); else ana_fill_rect(15u, hostile_bullets[i].x, hostile_bullets[i].y, 4, 8); }
-        if (enemies[i].active) { if (enemy_image_for_type(enemies[i].type)) ana_draw_image_frame(enemy_image_for_type(enemies[i].type), enemies[i].type == 2 ? i % 3 : 0, enemies[i].x, enemies[i].y); else ana_fill_rect(enemies[i].type == 2 ? 15u : 13u, enemies[i].x, enemies[i].y, 14, 12); }
-        if (cores[i].active) { if (core_image) ana_draw_image(core_image, cores[i].x, cores[i].y); else ana_fill_rect(12u, cores[i].x, cores[i].y, 8, 8); }
-        if (effects[i].active) { if (explosion_image) ana_draw_image_frame(explosion_image, effects[i].hp & 3, effects[i].x, effects[i].y); else ana_fill_rect(15u, effects[i].x, effects[i].y, 12, 12); }
+        if (bullets[i].active) { if (player_shot_image) { ana_draw_image(player_shot_image, bullets[i].x, bullets[i].y); remember_dynamic_image(player_shot_image, bullets[i].x, bullets[i].y); } else { ana_fill_rect(7u, bullets[i].x, bullets[i].y, 2, 6); remember_dynamic_rect(bullets[i].x, bullets[i].y, 2, 6); } }
+        if (hostile_bullets[i].active) { if (hostile_shot_image) { ana_draw_image(hostile_shot_image, hostile_bullets[i].x, hostile_bullets[i].y); remember_dynamic_image(hostile_shot_image, hostile_bullets[i].x, hostile_bullets[i].y); } else { ana_fill_rect(15u, hostile_bullets[i].x, hostile_bullets[i].y, 4, 8); remember_dynamic_rect(hostile_bullets[i].x, hostile_bullets[i].y, 4, 8); } }
+        if (enemies[i].active) { if (enemy_image_for_type(enemies[i].type)) { ana_draw_image_frame(enemy_image_for_type(enemies[i].type), enemies[i].type == 2 ? i % 3 : 0, enemies[i].x, enemies[i].y); remember_dynamic_image(enemy_image_for_type(enemies[i].type), enemies[i].x, enemies[i].y); } else { ana_fill_rect(enemies[i].type == 2 ? 15u : 13u, enemies[i].x, enemies[i].y, 14, 12); remember_dynamic_rect(enemies[i].x, enemies[i].y, 14, 12); } }
+        if (cores[i].active) { if (core_image) { ana_draw_image(core_image, cores[i].x, cores[i].y); remember_dynamic_image(core_image, cores[i].x, cores[i].y); } else { ana_fill_rect(12u, cores[i].x, cores[i].y, 8, 8); remember_dynamic_rect(cores[i].x, cores[i].y, 8, 8); } }
+        if (effects[i].active) { if (explosion_image) { ana_draw_image_frame(explosion_image, effects[i].hp & 3, effects[i].x, effects[i].y); remember_dynamic_image(explosion_image, effects[i].x, effects[i].y); } else { ana_fill_rect(15u, effects[i].x, effects[i].y, 12, 12); remember_dynamic_rect(effects[i].x, effects[i].y, 12, 12); } }
     }
     if (t.boss_phase) {
-        if (boss_image) ana_draw_image(boss_image, boss_x - 24, 26); else ana_fill_rect(15u, boss_x, 38, 64, 30);
+        if (boss_image) { ana_draw_image(boss_image, boss_x - 24, 26); remember_dynamic_image(boss_image, boss_x - 24, 26); } else { ana_fill_rect(15u, boss_x, 38, 64, 30); remember_dynamic_rect(boss_x, 38, 64, 30); }
         ana_fill_rect(t.boss_phase == 2 ? 7u : 14u, boss_x + 28, 46, 10, 12);
     }
 }
