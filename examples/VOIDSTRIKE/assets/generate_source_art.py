@@ -160,10 +160,48 @@ def hud_and_title():
     write("title_wordmark.ppm", a)
 
 
+def presentation_board():
+    """A 320x256 native-resolution readability board, not a runtime asset."""
+    a = image(320, 256, 1)
+    # Top status band and lower module dock area.
+    rect(a, 0, 0, 320, 18, 2); rect(a, 0, 220, 320, 36, 2)
+    rect(a, 8, 6, 54, 4, 6); rect(a, 266, 6, 38, 4, 6)
+    # Broad industrial plates and blue conduit regions: calm central lane.
+    for y in range(24, 216, 32):
+        rect(a, 0, y, 82, 28, 3); rect(a, 238, y + 8, 82, 24, 3)
+        rect(a, 4, y + 4, 70, 20, 4); rect(a, 246, y + 12, 70, 16, 4)
+        rect(a, 78, y + 10, 10, 4, 8); rect(a, 232, y + 18, 10, 4, 8)
+        rect(a, 80, y + 11, 6, 2, 10); rect(a, 234, y + 19, 6, 2, 10)
+    # Reactor guardian at the top, with a readable cyan core and amber ports.
+    rect(a, 108, 26, 104, 30, 2); rect(a, 116, 22, 28, 40, 3)
+    rect(a, 176, 20, 28, 42, 3); rect(a, 148, 18, 24, 48, 5)
+    rect(a, 156, 28, 8, 20, 10); rect(a, 158, 32, 4, 12, 7)
+    rect(a, 103, 38, 14, 6, 13); rect(a, 203, 40, 14, 6, 13)
+    # A player craft whose modules visibly widen the silhouette.
+    rect(a, 151, 152, 18, 26, 4); rect(a, 156, 144, 8, 18, 6)
+    rect(a, 158, 148, 4, 8, 10); rect(a, 128, 162, 26, 10, 5)
+    rect(a, 166, 162, 26, 10, 5); rect(a, 126, 158, 8, 5, 10)
+    rect(a, 186, 158, 8, 5, 10); rect(a, 156, 178, 8, 10, 10)
+    # Distinct hostile drone, red bolt, and green energy core.
+    rect(a, 98, 104, 14, 14, 3); rect(a, 94, 108, 22, 6, 4); rect(a, 103, 109, 4, 4, 15)
+    rect(a, 214, 116, 6, 10, 15); rect(a, 212, 118, 10, 6, 13)
+    rect(a, 210, 174, 6, 6, 12); rect(a, 207, 177, 12, 6, 10); rect(a, 211, 181, 4, 5, 14)
+    # Four original bottom module cells with cyan selected outline and green installed state.
+    for i in range(4):
+        x = 88 + i * 36; rect(a, x, 228, 30, 18, 4 if i != 2 else 10)
+        rect(a, x + 2, 230, 26, 14, 2)
+        if i in (0, 1, 3): rect(a, x + 11, 235, 8, 4, 12)
+    # A compact title treatment placed in the status band with no reference typography.
+    rect(a, 122, 5, 18, 4, 7); rect(a, 122, 9, 4, 5, 7); rect(a, 136, 9, 4, 5, 7)
+    rect(a, 144, 5, 4, 10, 10); rect(a, 152, 5, 18, 4, 6); rect(a, 152, 11, 18, 4, 6)
+    rect(a, 174, 5, 18, 4, 7); rect(a, 174, 11, 18, 4, 7); rect(a, 174, 5, 4, 10, 7)
+    write("presentation_board.ppm", a)
+
+
 def main():
     palette(); player("player_base.ppm"); player("player_speed.ppm", ("speed",))
     player("player_twin.ppm", ("twin",)); player("player_wide.ppm", ("wide",))
-    player("player_laser.ppm", ("laser",)); enemies(); combat(); boss(); terrain(); hud_and_title()
+    player("player_laser.ppm", ("laser",)); enemies(); combat(); boss(); terrain(); hud_and_title(); presentation_board()
 
 
 if __name__ == "__main__":

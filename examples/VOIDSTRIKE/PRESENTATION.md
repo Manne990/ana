@@ -47,10 +47,19 @@ directory after editing the generator:
 python3 generate_source_art.py
 ```
 
+`assets/presentation_board.ppm` is a generated 320x256 native-resolution
+readability board. It is intentionally not packed into the runtime manifest;
+it provides a durable visual review surface for the title band, calm central
+lane, terrain masses, boss core, player growth, hostile shot, energy core, and
+module dock before integrated FS-UAE capture exists.
+
 The PPMs and `.anasfx` recipes are licensed under the repository's MIT license,
 authored for VOIDSTRIKE by the Gaia team on 2026-07-18. The candidate product
-owner MOD is intentionally not referenced or copied: its exact license
-identifier remains a release gate.
+owner MOD is intentionally not referenced or copied. Its SHA-256 is
+`baa0604d129006216978b6992047311847fe3df031b9ab48ddd727499753d7ff`; it
+identifies itself as `memorydust` / "made by codex of razor 1911", and no
+explicit compatible redistribution license has been found. It remains a hard
+release gate.
 
 ## SFX event names
 
