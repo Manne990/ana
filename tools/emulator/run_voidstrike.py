@@ -182,13 +182,17 @@ def main() -> int:
     result_dir.mkdir(parents=True)
     for directory in ("fs-uae-base", "logs", "save-states"):
         (result_dir / directory).mkdir()
-    shutil.copy2(args.adf, result_dir / args.adf.name)
+    mounted_adf = result_dir / args.adf.name
+    shutil.copy2(args.adf, mounted_adf)
+    if sha256(mounted_adf) != adf_sha256:
+        print("Copied ADF hash does not match the requested artifact.", file=sys.stderr)
+        return 2
     (result_dir / "adf.sha256").write_text(f"{adf_sha256}  {args.adf.name}\n", encoding="ascii")
     write_request(
         result_dir, source_commit=source_commit, adf_sha256=adf_sha256,
         scenario=args.scenario, machine=args.machine, build_kind=args.build_kind,
     )
-    options = run_options(args.machine, args.adf, result_dir)
+    options = run_options(args.machine, mounted_adf, result_dir)
     config = write_config(options, result_dir)
     print(f"VOIDSTRIKE isolated result directory: {result_dir}")
     print(f"ADF SHA-256: {adf_sha256}")
