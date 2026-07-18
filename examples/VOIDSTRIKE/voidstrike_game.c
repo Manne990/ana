@@ -1,0 +1,32 @@
+/* Rules-first VOIDSTRIKE foundation.  All control goes through ANA mappings. */
+#include "voidstrike_game.h"
+#define TOP 18
+#define BOTTOM 220
+#define PLAYER_W 16
+#define PLAYER_H 20
+#define MAX_ACTORS 16
+#define LEVEL_TICKS (ANA_DEFAULT_FPS * 255)
+typedef struct Actor { int active,x,y,hp,type; } Actor;
+static Actor bullets[MAX_ACTORS], enemies[MAX_ACTORS], cores[MAX_ACTORS];
+static VoidstrikeTelemetry t;
+static int px,py,invul,fire_wait,scroll,boss_hp,boss_x;
+static const ANA_Color palette[16]={{0,0,0},{17,17,34},{34,34,51},{51,68,85},{85,102,119},{119,136,153},{170,187,204},{221,238,255},{0,51,102},{0,85,170},{0,170,221},{17,102,51},{68,221,119},{255,170,34},{255,221,68},{221,51,68}};
+static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by; }
+static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
+static int player_width(void) { return PLAYER_W+((t.installed_modules&2u)?4:0)+((t.installed_modules&4u)?10:0); }
+static void start_game(void) { t.score=0;t.lives=3;t.selected_module=-1;t.installed_modules=0;t.enemies_spawned=0;t.enemies_destroyed=0;t.boss_phase=0;t.state=VOIDSTRIKE_PLAYING;px=152;py=184;invul=50;fire_wait=0;scroll=0;boss_hp=48;boss_x=128;clear_actors(bullets);clear_actors(enemies);clear_actors(cores); }
+static void add_core(int x,int y) { int i; for(i=0;i<MAX_ACTORS;i++)if(!cores[i].active){cores[i].active=1;cores[i].x=x;cores[i].y=y;return;} }
+static void shoot(void) { int i; if(fire_wait)return; for(i=0;i<MAX_ACTORS;i++)if(!bullets[i].active){bullets[i].active=1;bullets[i].x=px+7;bullets[i].y=py;break;} if((t.installed_modules&2u)&&i+1<MAX_ACTORS){bullets[i+1].active=1;bullets[i+1].x=px+15;bullets[i+1].y=py;} fire_wait=(t.installed_modules&8u)?8:12; }
+static void hurt_player(void) { if(invul)return;t.lives--;if(t.lives<=0){t.state=VOIDSTRIKE_GAME_OVER;return;}t.installed_modules=0;t.selected_module=-1;px=152;invul=80;t.state=VOIDSTRIKE_RESPAWN; }
+static void spawn(int tick) { int i;if(tick>=LEVEL_TICKS-2200||tick%45)return;for(i=0;i<MAX_ACTORS;i++)if(!enemies[i].active){enemies[i].active=1;enemies[i].type=(tick/45)%3;enemies[i].x=20+((tick*37+i*19)%270);enemies[i].y=TOP;enemies[i].hp=enemies[i].type?1:2;t.enemies_spawned++;return;} }
+static void play(int tick)
+{ int i,j,w; scroll++;if(fire_wait)fire_wait--;if(invul)invul--;if(t.state==VOIDSTRIKE_RESPAWN&&invul<45)t.state=VOIDSTRIKE_PLAYING;w=player_width();if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT))px-=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT))px+=(t.installed_modules&1u)?4:3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP))py-=3;if(ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN))py+=3;px=ana_clamp_int(px,4,ANA_DEFAULT_WIDTH-w-4);py=ana_clamp_int(py,TOP+4,BOTTOM-PLAYER_H);if(ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1))shoot();if(ana_input_action_pressed(ANA_INPUT_DEVICE_0,ANA_ACTION_2)&&t.selected_module>=0)t.installed_modules|=1u<<t.selected_module;spawn(tick);
+for(i=0;i<MAX_ACTORS;i++)if(bullets[i].active){bullets[i].y-=7;if(bullets[i].y<TOP)bullets[i].active=0;}
+for(i=0;i<MAX_ACTORS;i++)if(enemies[i].active){enemies[i].y+=enemies[i].type==1?2:1;if(hit(px,py,w,PLAYER_H,enemies[i].x,enemies[i].y,14,12)){enemies[i].active=0;hurt_player();}for(j=0;j<MAX_ACTORS;j++)if(bullets[j].active&&hit(bullets[j].x,bullets[j].y,2,6,enemies[i].x,enemies[i].y,14,12)){bullets[j].active=0;if(--enemies[i].hp<=0){add_core(enemies[i].x,enemies[i].y);enemies[i].active=0;t.score+=100;t.enemies_destroyed++;}break;}if(enemies[i].y>BOTTOM)enemies[i].active=0;}
+for(i=0;i<MAX_ACTORS;i++)if(cores[i].active){cores[i].y++;if(hit(px,py,w,PLAYER_H,cores[i].x,cores[i].y,8,8)){cores[i].active=0;t.selected_module=(t.selected_module+1)&3;}}
+if(tick>=LEVEL_TICKS)t.boss_phase=1;if(t.boss_phase){boss_x=128+((tick/12)%50);for(j=0;j<MAX_ACTORS;j++)if(bullets[j].active&&hit(bullets[j].x,bullets[j].y,2,6,boss_x,38,64,30)){bullets[j].active=0;boss_hp--;}if(boss_hp<24)t.boss_phase=2;if(boss_hp<=0){t.score+=5000;t.state=VOIDSTRIKE_VICTORY;}} }
+void voidstrike_init(void) { ana_set_palette(palette,16);ana_input_clear_key_map();ana_input_map_default_keys(ANA_INPUT_DEVICE_0);ana_input_map_key_to_action(ANA_KEY_CTRL,ANA_INPUT_DEVICE_0,ANA_ACTION_1);ana_input_map_key_to_action(ANA_KEY_SPACE,ANA_INPUT_DEVICE_0,ANA_ACTION_2);t.state=VOIDSTRIKE_TITLE; }
+void voidstrike_load(void){} void voidstrike_shutdown(void){} VoidstrikeTelemetry voidstrike_telemetry(void){return t;}
+void voidstrike_update(ANA_Time time){t.frame=time.tick;if(t.state==VOIDSTRIKE_TITLE||t.state==VOIDSTRIKE_GAME_OVER||t.state==VOIDSTRIKE_VICTORY){if(ana_input_action_pressed(ANA_INPUT_DEVICE_0,ANA_ACTION_1))start_game();}else play(time.tick);if(ana_quit_requested())ana_quit();}
+static void ship(int x,int y,int w){ana_fill_rect(9,x+5,y,6,16);ana_fill_rect(7,x+7,y+3,2,5);ana_fill_rect(10,x+7,y+16,2,4);if(w>PLAYER_W)ana_fill_rect(10,x,y+7,w,4);}
+void voidstrike_draw(void){int i,w;ana_clear(1);ana_fill_rect(3,0,TOP,ANA_DEFAULT_WIDTH,BOTTOM-TOP);for(i=0;i<ANA_DEFAULT_WIDTH;i+=32)ana_fill_rect(8,i,(scroll%16)+TOP,16,2);ana_fill_rect(2,0,0,ANA_DEFAULT_WIDTH,TOP);ana_fill_rect(2,0,BOTTOM,ANA_DEFAULT_WIDTH,ANA_DEFAULT_HEIGHT-BOTTOM);if(t.state==VOIDSTRIKE_TITLE){ana_fill_rect(10,70,82,180,8);ana_fill_rect(7,92,104,136,4);ana_fill_rect(12,110,132,100,4);return;}if(t.state==VOIDSTRIKE_GAME_OVER){ana_fill_rect(15,104,105,112,8);return;}if(t.state==VOIDSTRIKE_VICTORY){ana_fill_rect(12,104,105,112,8);return;}for(i=0;i<t.lives;i++)ana_fill_rect(12,6+i*4,6,3,4);for(i=0;i<4;i++){ana_fill_rect(i==t.selected_module?10:4,112+i*25,228,20,12);if(t.installed_modules&(1u<<i))ana_fill_rect(12,118+i*25,232,8,4);}w=player_width();if(!(invul&4))ship(px,py,w);for(i=0;i<MAX_ACTORS;i++){if(bullets[i].active)ana_fill_rect(7,bullets[i].x,bullets[i].y,2,6);if(enemies[i].active)ana_fill_rect(enemies[i].type==2?15:13,enemies[i].x,enemies[i].y,14,12);if(cores[i].active)ana_fill_rect(12,cores[i].x,cores[i].y,8,8);}if(t.boss_phase){ana_fill_rect(15,boss_x,38,64,30);ana_fill_rect(t.boss_phase==2?7:14,boss_x+28,46,10,12);}}
