@@ -95,6 +95,8 @@ EXAMPLE_BINS := \
 	$(BUILD_DIR)/examples/amaze/amaze \
 	$(BUILD_DIR)/examples/byte_brothers/byte_brothers
 
+VOIDSTRIKE_HOST_HARNESS_BIN := $(BUILD_DIR)/host-harness/examples/VOIDSTRIKE/voidstrike
+
 INPUT_PROBE_SRCS := \
 	examples/input_probe/main.c
 
@@ -225,7 +227,7 @@ VOIDSTRIKE_A1200_DEBUG_ADF := $(ADF_DIR)/voidstrike-a1200-debug.adf
 VOIDSTRIKE_HARNESS_ADF := $(ADF_DIR)/voidstrike-harness.adf
 BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG := $(BUILD_DIR)/fs-uae/byte-brothers-a1200-debug.fs-uae
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-voidstrike-harness amiga-voidstrike-a1200 amiga-voidstrike-a1200-debug amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf voidstrike-a1200-adf voidstrike-a1200-debug-adf voidstrike-harness-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test voidstrike-host-harness voidstrike-host-smoke amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-voidstrike-harness amiga-voidstrike-a1200 amiga-voidstrike-a1200-debug amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf voidstrike-a1200-adf voidstrike-a1200-debug-adf voidstrike-harness-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
 
 force-byte-brothers-a1200-debug-adf:
 
@@ -250,6 +252,11 @@ examples/byte-brothers-assets: $(BYTE_BROTHERS_ASSET_STAMP)
 byte-brothers-assets: $(BYTE_BROTHERS_ASSET_STAMP)
 
 tools: $(TOOL_BINS)
+
+voidstrike-host-harness: $(VOIDSTRIKE_HOST_HARNESS_BIN)
+
+voidstrike-host-smoke: $(VOIDSTRIKE_HOST_HARNESS_BIN)
+	ANA_HOST_UNPACED=1 $(VOIDSTRIKE_HOST_HARNESS_BIN)
 
 amiga-lib: $(AMIGA_LIBANA)
 
@@ -423,6 +430,10 @@ $(BYTE_BROTHERS_ASSET_STAMP): $(TOOL_BINS) $(BYTE_BROTHERS_ASSET_SOURCES)
 $(BUILD_DIR)/examples/byte_brothers/byte_brothers: $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADERS) $(LIBANA) $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(BYTE_BROTHERS_SRCS) $(LIBANA) $(LDFLAGS) -o $@
+
+$(VOIDSTRIKE_HOST_HARNESS_BIN): $(VOIDSTRIKE_SRCS) $(VOIDSTRIKE_HEADERS) $(LIBANA)
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) -DVOIDSTRIKE_EMULATOR_HARNESS -DVOIDSTRIKE_HARNESS_SCENARIO_ID=0 -DVOIDSTRIKE_HARNESS_FRAME_LIMIT=16000 $(VOIDSTRIKE_SRCS) $(LIBANA) $(LDFLAGS) -o $@
 
 $(HOST_BYTE_BROTHERS_HARNESS_BIN): $(BYTE_BROTHERS_SRCS) $(BYTE_BROTHERS_HEADERS) $(LIBANA) $(BYTE_BROTHERS_ASSET_STAMP)
 	mkdir -p $(@D)
@@ -732,6 +743,7 @@ test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS) $(EXAMPLE_BINS)
 	set -e; for example_bin in $(EXAMPLE_BINS); do ANA_HOST_UNPACED=1 $$example_bin >/dev/null; done
 	ANA_CONVERT=$(BUILD_DIR)/tools/ana-convert/ana-convert ANA_CONVERT_PROBE=$(BUILD_DIR)/tests/ana_convert_image_test sh tests/ana_convert_test.sh
 	python3 tests/emulator_visual_test.py
+	$(MAKE) voidstrike-host-smoke
 
 clean:
 	$(RM) $(BUILD_DIR)
