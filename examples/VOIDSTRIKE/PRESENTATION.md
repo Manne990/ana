@@ -19,6 +19,7 @@ single 16-colour palette.
 | Twin Shot module | `player_twin` | 36x28 | one frame |
 | Wide Shot module | `player_wide` | 36x28 | one frame |
 | Laser module | `player_laser` | 36x28 | one frame |
+| Cumulative craft | `player_modules` | 576x28 | sixteen 36x28 frames; frame index equals installed-module bitmask |
 | Ground turret | `defense_node` | 24x20 | one frame |
 | Ground vehicle | `maintenance_crawler` | 28x16 | one frame |
 | Air formation member | `security_drone` | 60x20 | three 20x20 frames |
@@ -30,11 +31,17 @@ single 16-colour palette.
 | Bottom module dock | `module_dock` | 128x16 | four 32x16 frames |
 | Title logo | `title_wordmark` | 192x40 | one frame |
 
-The individual player assets show each installed module on a shared base-craft
-spine. If game rules allow multiple modules simultaneously, the renderer should
-compose the matching overlays or use the most recently installed asset until a
-combined-sheet follow-up is added; it must not silently change the collision
-shape to match unused transparent padding.
+The individual player assets remain as simple and backward-compatible handles.
+`player_modules` is the authoritative cumulative presentation: frame `0` is the
+base craft and frames `1` through `15` map directly to the game's installed
+module bits (`1` Speed, `2` Twin Shot, `4` Wide Shot, `8` Laser). For example,
+frame `9` displays Speed plus Laser and frame `15` visibly displays all four.
+The renderer can therefore call `ana_draw_image_frame(player_modules,
+installed_modules & 15, x, y)` without interpreting game rules.
+
+Every frame uses the same 36x28 canvas and attachment coordinates. The runtime
+collision size must continue to derive from game-owned installed bits and the
+visible module extents; transparent sheet padding is not collision mass.
 
 ## Source and provenance
 

@@ -45,7 +45,7 @@ def palette():
     write("palette.ppm", [list(range(16))])
 
 
-def player(name, modules=()):
+def player_art(modules=()):
     a = image(36, 28)
     # Narrow asymmetric spine, cockpit, stabilisers, and rear drive.
     for y, left, width, c in [(2, 16, 4, 6), (3, 15, 6, 7), (4, 14, 8, 6),
@@ -70,7 +70,34 @@ def player(name, modules=()):
         rect(a, 2, 12, 3, 3, 10); rect(a, 31, 12, 3, 3, 10)
     if "laser" in modules:
         rect(a, 16, 0, 4, 5, 10); rect(a, 17, 0, 2, 2, 7)
+    return a
+
+
+def player(name, modules=()):
+    a = player_art(modules)
     write(name, a)
+
+
+def player_module_sheet():
+    """Sixteen frames indexed by the installed-module bitmask."""
+    module_names = ("speed", "twin", "wide", "laser")
+    markers = (((16, 26), 12), ((7, 8), 10), ((2, 12), 10), ((17, 0), 7))
+    sheet = image(36 * 16, 28)
+    unique_frames = set()
+    for mask in range(16):
+        modules = tuple(module_names[bit] for bit in range(4) if mask & (1 << bit))
+        frame = player_art(modules)
+        unique_frames.add(tuple(tuple(row) for row in frame))
+        for bit, ((x, y), colour) in enumerate(markers):
+            expected = colour if mask & (1 << bit) else K
+            if frame[y][x] != expected:
+                raise RuntimeError(f"player module frame {mask} failed bit {bit} marker")
+        for y, row in enumerate(frame):
+            for x, colour in enumerate(row):
+                sheet[y][mask * 36 + x] = colour
+    if len(unique_frames) != 16:
+        raise RuntimeError("player module sheet frames are not visually distinct")
+    write("player_modules.ppm", sheet)
 
 
 def enemies():
@@ -205,7 +232,7 @@ def presentation_board():
 def main():
     palette(); player("player_base.ppm"); player("player_speed.ppm", ("speed",))
     player("player_twin.ppm", ("twin",)); player("player_wide.ppm", ("wide",))
-    player("player_laser.ppm", ("laser",)); enemies(); combat(); boss(); terrain(); hud_and_title(); presentation_board()
+    player("player_laser.ppm", ("laser",)); player_module_sheet(); enemies(); combat(); boss(); terrain(); hud_and_title(); presentation_board()
 
 
 if __name__ == "__main__":

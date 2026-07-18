@@ -8,6 +8,7 @@ image player_speed player_speed.ppm --palette voidstrike --transparent #000000
 image player_twin player_twin.ppm --palette voidstrike --transparent #000000
 image player_wide player_wide.ppm --palette voidstrike --transparent #000000
 image player_laser player_laser.ppm --palette voidstrike --transparent #000000
+image player_modules player_modules.ppm --palette voidstrike --frame-width 36 --frame-height 28 --transparent #000000
 image defense_node defense_node.ppm --palette voidstrike --transparent #000000
 image maintenance_crawler maintenance_crawler.ppm --palette voidstrike --transparent #000000
 image security_drone security_drone.ppm --palette voidstrike --frame-width 20 --frame-height 20 --transparent #000000
