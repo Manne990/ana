@@ -263,7 +263,19 @@ tools: $(TOOL_BINS)
 voidstrike-host-harness: $(VOIDSTRIKE_HOST_HARNESS_BIN)
 
 voidstrike-host-smoke: $(VOIDSTRIKE_HOST_HARNESS_BIN)
+	rm -f build/voidstrike-harness-result.txt
 	ANA_HOST_UNPACED=1 $(VOIDSTRIKE_HOST_HARNESS_BIN)
+	test -f build/voidstrike-harness-result.txt
+	rg -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
+	rg -qx 'result_complete=1' build/voidstrike-harness-result.txt
+
+voidstrike-host-restart: $(VOIDSTRIKE_SRCS) $(VOIDSTRIKE_HEADERS) $(LIBANA) $(VOIDSTRIKE_ASSET_STAMP)
+	mkdir -p build/host-harness/restart
+	$(CC) $(CFLAGS) -DVOIDSTRIKE_EMULATOR_HARNESS -DVOIDSTRIKE_HARNESS_SCENARIO_ID=1 -DVOIDSTRIKE_HARNESS_FRAME_LIMIT=200 $(VOIDSTRIKE_SRCS) $(LIBANA) $(LDFLAGS) -o build/host-harness/restart/voidstrike
+	rm -f build/voidstrike-harness-result.txt
+	ANA_HOST_UNPACED=1 build/host-harness/restart/voidstrike
+	rg -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
+	rg -qx 'restart_events=1' build/voidstrike-harness-result.txt
 
 amiga-lib: $(AMIGA_LIBANA)
 
@@ -757,6 +769,7 @@ test: $(TEST_BINS) $(TOOL_BINS) $(TOOL_TEST_HELPERS) $(EXAMPLE_BINS)
 	ANA_CONVERT=$(BUILD_DIR)/tools/ana-convert/ana-convert ANA_CONVERT_PROBE=$(BUILD_DIR)/tests/ana_convert_image_test sh tests/ana_convert_test.sh
 	python3 tests/emulator_visual_test.py
 	$(MAKE) voidstrike-host-smoke
+	$(MAKE) voidstrike-host-restart
 
 clean:
 	$(RM) $(BUILD_DIR)
