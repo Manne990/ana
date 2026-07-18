@@ -27,7 +27,7 @@
 typedef struct Actor { int active,x,y,hp,type; } Actor;
 static Actor bullets[MAX_ACTORS], hostile_bullets[MAX_ACTORS], enemies[MAX_ACTORS], cores[MAX_ACTORS], effects[MAX_ACTORS];
 static VoidstrikeTelemetry t;
-static int px,py,invul,fire_wait,scroll,boss_hp,boss_x;
+static int px,py,invul,fire_wait,scroll,boss_hp,boss_x,module_rail;
 static ANA_TileLayer terrain_layer;
 static ANA_Camera terrain_camera;
 static ANA_Rect previous_dynamic_rects[DYNAMIC_RECT_GENERATIONS][MAX_DYNAMIC_RECTS];
@@ -493,7 +493,7 @@ static ANA_Image enemy_image_for_type(int type) { return type==0?turret_image:(t
 static void free_assets(void) { ana_free_image(title_image);ana_free_image(module_dock_image);ana_free_image(null_foundry_tiles_image);ana_free_image(explosion_image);ana_free_image(core_image);ana_free_image(hostile_shot_image);ana_free_image(player_shot_image);ana_free_image(boss_image);ana_free_image(drone_image);ana_free_image(crawler_image);ana_free_image(turret_image);ana_free_image(player_laser_image);ana_free_image(player_wide_image);ana_free_image(player_twin_image);ana_free_image(player_speed_image);ana_free_image(player_base_image);ana_free_sound(victory_sound);ana_free_sound(death_sound);ana_free_sound(explosion_sound);ana_free_sound(install_sound);ana_free_sound(pickup_sound);ana_free_sound(fire_sound); }
 static void load_assets(void) { ANA_AudioConfig audio; audio.music_channels=ANA_AUDIO_CH_0|ANA_AUDIO_CH_1;audio.sfx_channels=ANA_AUDIO_CH_2|ANA_AUDIO_CH_3;audio.sfx_can_steal_music=0;audio.music_can_use_free_sfx_channels=0;ana_configure_audio(&audio);player_base_image=ana_load_image(VS_ASSET_ROOT "player_base.anaimg");player_speed_image=ana_load_image(VS_ASSET_ROOT "player_speed.anaimg");player_twin_image=ana_load_image(VS_ASSET_ROOT "player_twin.anaimg");player_wide_image=ana_load_image(VS_ASSET_ROOT "player_wide.anaimg");player_laser_image=ana_load_image(VS_ASSET_ROOT "player_laser.anaimg");turret_image=ana_load_image(VS_ASSET_ROOT "defense_node.anaimg");crawler_image=ana_load_image(VS_ASSET_ROOT "maintenance_crawler.anaimg");drone_image=ana_load_image(VS_ASSET_ROOT "security_drone.anaimg");boss_image=ana_load_image(VS_ASSET_ROOT "reactor_guardian.anaimg");player_shot_image=ana_load_image(VS_ASSET_ROOT "player_shot.anaimg");hostile_shot_image=ana_load_image(VS_ASSET_ROOT "hostile_shot.anaimg");core_image=ana_load_image(VS_ASSET_ROOT "energy_core.anaimg");explosion_image=ana_load_image(VS_ASSET_ROOT "explosion.anaimg");null_foundry_tiles_image=ana_load_image(VS_ASSET_ROOT "null_foundry_tiles.anaimg");module_dock_image=ana_load_image(VS_ASSET_ROOT "module_dock.anaimg");title_image=ana_load_image(VS_ASSET_ROOT "title_wordmark.anaimg");fire_sound=ana_load_sound(VS_ASSET_ROOT "fire.anasnd");pickup_sound=ana_load_sound(VS_ASSET_ROOT "pickup.anasnd");install_sound=ana_load_sound(VS_ASSET_ROOT "install.anasnd");explosion_sound=ana_load_sound(VS_ASSET_ROOT "explosion.anasnd");death_sound=ana_load_sound(VS_ASSET_ROOT "player_death.anasnd");victory_sound=ana_load_sound(VS_ASSET_ROOT "victory.anasnd"); }
 static int player_width(void) { return PLAYER_W+((t.installed_modules&2u)?4:0)+((t.installed_modules&4u)?10:0); }
-static void start_game(void) { t.score=0;t.lives=3;t.selected_module=-1;t.installed_modules=0;t.enemies_spawned=0;t.enemies_destroyed=0;t.boss_phase=0;t.collision_invariant_failures=0;t.world_bound_invariant_failures=0;t.state=VOIDSTRIKE_PLAYING;
+static void start_game(void) { t.score=0;t.lives=3;t.selected_module=-1;t.installed_modules=0;module_rail=0;t.enemies_spawned=0;t.enemies_destroyed=0;t.boss_phase=0;t.collision_invariant_failures=0;t.world_bound_invariant_failures=0;t.state=VOIDSTRIKE_PLAYING;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 if(h_started_once++)h_restart_events++;
 h_phase("playing");
@@ -526,7 +526,7 @@ for(i=0;i<MAX_ACTORS;i++)if(cores[i].active){cores[i].y++;if(hit(px,py,w,PLAYER_
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 h_cores_collected++;
 #endif
-t.selected_module=(t.selected_module+1)&3;
+t.selected_module=module_rail;module_rail=(module_rail+1)&3;
 #ifdef VOIDSTRIKE_EMULATOR_HARNESS
 if(t.selected_module==0)h_module_wraps++;
 #endif
