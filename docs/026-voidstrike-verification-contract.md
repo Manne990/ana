@@ -27,6 +27,11 @@ input_joystick_direction_events input_joystick_fire_events input_joystick_space_
 module_speed_installs module_twin_shot_installs module_wide_shot_installs
 module_laser_installs module_rail_wraps module_repeat_install_events
 minimum_fps_x100 average_fps_x100 minimum_five_second_fps_x100
+slowest_frame_ms_x100 slow_frame_count
+gameplay_window_count included_gameplay_window_count excluded_nongameplay_window_count
+gameplay_window_min_fps_x100
+update_stage_us draw_stage_us render_stage_us present_stage_us
+visible_enemies visible_projectiles visible_effects visible_modules
 result_complete pass failure_reasons
 ```
 
@@ -36,6 +41,15 @@ game reads and echoes its source identity, ADF hash, build ID, requested scenari
 and machine profile only after it has observed the requested path. `pass=1` requires `result_complete=1`, zero invariant
 failures, and an empty `failure_reasons` value. FPS values use hundredths of an
 FPS to avoid float formatting differences between host and m68k builds.
+
+The timing fields are measured over the reported active-gameplay sample. The
+window counts identify exactly which five-second windows were included or
+excluded, and `gameplay_window_min_fps_x100` is the floor over the included
+windows. Stage timings use microseconds; a backend without a stage measurement
+must report `0`, never omit the field. Visible counts describe the densest
+sampled active-gameplay frame for enemies, player projectiles, effects, and
+installed/visible module presentation. A completed run must have non-zero
+frames, elapsed simulated time, and at least one included gameplay window.
 
 The supported scenario names are `victory`, `game-over`, `input-keyboard`,
 `input-joystick`, `module-progression`, and `boss`. They all start on the title
@@ -75,3 +89,22 @@ python3 tools/emulator/voidstrike_result.py \
 This parser is a release gate, not a substitute for FS-UAE execution or visual
 inspection. Once the core harness lands, the Makefile targets must call the
 runner and leave a contact sheet plus the validated result next to the ADF hash.
+
+## Stable feedback commands
+
+All commands are non-interactive and write ignored evidence under
+`build/emulator-results/`. A command exits non-zero for a missing, partial,
+stale, wrong-scenario, or rejected result; `emulator-voidstrike-visual` also
+rejects missing or unusable visible captures.
+
+```sh
+make emulator-voidstrike-full-run    # stock A1200 normal victory path
+make emulator-voidstrike-performance # alias for the normal full-run gate
+make emulator-voidstrike-input       # keyboard and joystick scenarios
+make emulator-voidstrike-visual      # isolated real FS-UAE window captures + contact sheet
+make emulator-voidstrike-all         # full run, input coverage, and visual evidence
+```
+
+`emulator-voidstrike-all` is the release-feedback entry point. It intentionally
+stops at the first failed required subcommand so incomplete evidence cannot be
+mistaken for a complete release run.

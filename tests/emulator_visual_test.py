@@ -123,6 +123,20 @@ class VoidstrikeResultContractTest(unittest.TestCase):
                 "minimum_fps_x100": "4300",
                 "average_fps_x100": "4700",
                 "minimum_five_second_fps_x100": "3999",
+                "slowest_frame_ms_x100": "2500",
+                "slow_frame_count": "1",
+                "gameplay_window_count": "2",
+                "included_gameplay_window_count": "2",
+                "excluded_nongameplay_window_count": "0",
+                "gameplay_window_min_fps_x100": "3999",
+                "update_stage_us": "10",
+                "draw_stage_us": "20",
+                "render_stage_us": "30",
+                "present_stage_us": "40",
+                "visible_enemies": "3",
+                "visible_projectiles": "4",
+                "visible_effects": "2",
+                "visible_modules": "1",
                 "result_complete": "1",
                 "pass": "1",
             }
@@ -158,6 +172,20 @@ class VoidstrikeResultContractTest(unittest.TestCase):
                 "minimum_fps_x100": "4300",
                 "average_fps_x100": "4700",
                 "minimum_five_second_fps_x100": "4100",
+                "slowest_frame_ms_x100": "2500",
+                "slow_frame_count": "1",
+                "gameplay_window_count": "2",
+                "included_gameplay_window_count": "2",
+                "excluded_nongameplay_window_count": "0",
+                "gameplay_window_min_fps_x100": "4100",
+                "update_stage_us": "10",
+                "draw_stage_us": "20",
+                "render_stage_us": "30",
+                "present_stage_us": "40",
+                "visible_enemies": "3",
+                "visible_projectiles": "4",
+                "visible_effects": "2",
+                "visible_modules": "1",
                 "result_complete": "1",
                 "pass": "1",
             }
@@ -172,6 +200,45 @@ class VoidstrikeResultContractTest(unittest.TestCase):
         )
         self.assertIn("input-keyboard scenario did not observe Ctrl fire", failures)
         self.assertIn("input-keyboard scenario did not observe Space install", failures)
+
+    def test_requires_full_freshness_and_active_gameplay_telemetry(self) -> None:
+        commit = "6fca1a9f29d8967fae48886448edfa1b82b90e8f"
+        adf_sha256 = "a" * 64
+        values = {key: "1" for key in voidstrike_result.REQUIRED_FIELDS}
+        values.update(
+            {
+                "schema_version": voidstrike_result.SCHEMA_VERSION,
+                "source_commit": commit,
+                "build_id": voidstrike_result.expected_build_id(commit, adf_sha256, "normal"),
+                "adf_sha256": adf_sha256,
+                "requested_scenario": "victory",
+                "actual_scenario": "victory",
+                "machine_profile": "a1200",
+                "terminal_state": "victory",
+                "failure_reasons": "",
+                "result_complete": "1",
+                "pass": "1",
+                "total_frames": "0",
+                "simulated_time_ms": "0",
+                "gameplay_window_count": "0",
+                "included_gameplay_window_count": "0",
+                "excluded_nongameplay_window_count": "0",
+                "minimum_fps_x100": "4500",
+                "average_fps_x100": "4500",
+                "minimum_five_second_fps_x100": "4000",
+                "gameplay_window_min_fps_x100": "4000",
+            }
+        )
+        failures = voidstrike_result.validate_result(
+            values,
+            source_commit=commit,
+            adf_sha256=adf_sha256,
+            scenario="victory",
+            machine_profile="a1200",
+            build_kind="normal",
+        )
+        self.assertIn("total_frames: expected a non-zero completed gameplay measurement", failures)
+        self.assertIn("included_gameplay_window_count: expected a non-zero completed gameplay measurement", failures)
 
 
 if __name__ == "__main__":

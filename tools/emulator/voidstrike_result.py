@@ -63,6 +63,20 @@ REQUIRED_FIELDS = frozenset(
         "minimum_fps_x100",
         "average_fps_x100",
         "minimum_five_second_fps_x100",
+        "slowest_frame_ms_x100",
+        "slow_frame_count",
+        "gameplay_window_count",
+        "included_gameplay_window_count",
+        "excluded_nongameplay_window_count",
+        "gameplay_window_min_fps_x100",
+        "update_stage_us",
+        "draw_stage_us",
+        "render_stage_us",
+        "present_stage_us",
+        "visible_enemies",
+        "visible_projectiles",
+        "visible_effects",
+        "visible_modules",
         "result_complete",
         "pass",
         "failure_reasons",
@@ -83,6 +97,11 @@ INTEGER_FIELDS = REQUIRED_FIELDS - frozenset(
 )
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{7,64}$")
+
+
+def expected_build_id(source_commit: str, adf_sha256: str, build_kind: str) -> str:
+    """Return the identity written by the runner request file."""
+    return f"voidstrike-{build_kind}-{source_commit[:12]}-{adf_sha256[:12]}"
 
 
 def parse_result(path: Path) -> dict[str, str]:
@@ -155,6 +174,8 @@ def validate_result(
         )
     if not values["build_id"]:
         failures.append("build_id: must not be empty")
+    elif values["build_id"] != expected_build_id(source_commit, adf_sha256, build_kind):
+        failures.append("build_id: result does not match the runner request identity")
     if values["terminal_state"] not in TERMINAL_STATES:
         failures.append("terminal_state: expected victory or game-over")
 
@@ -173,6 +194,14 @@ def validate_result(
         failures.append("collision invariant failures were recorded")
     if integers["world_bound_invariant_failures"] != 0:
         failures.append("world-bound invariant failures were recorded")
+    for key in ("total_frames", "simulated_time_ms", "gameplay_window_count",
+                "included_gameplay_window_count"):
+        if integers[key] is not None and integers[key] <= 0:
+            failures.append(f"{key}: expected a non-zero completed gameplay measurement")
+    if (integers["included_gameplay_window_count"] is not None
+            and integers["gameplay_window_count"] is not None
+            and integers["included_gameplay_window_count"] > integers["gameplay_window_count"]):
+        failures.append("included_gameplay_window_count: cannot exceed gameplay_window_count")
     if scenario == "victory" and values["terminal_state"] != "victory":
         failures.append("victory scenario did not reach victory")
     if scenario == "game-over" and values["terminal_state"] != "game-over":
