@@ -235,7 +235,7 @@ VOIDSTRIKE_HARNESS_ADF := $(ADF_DIR)/voidstrike-harness.adf
 VOIDSTRIKE_NORMAL_HARNESS_ADF := $(ADF_DIR)/voidstrike-harness-normal.adf
 BYTE_BROTHERS_A1200_DEBUG_FS_UAE_CONFIG := $(BUILD_DIR)/fs-uae/byte-brothers-a1200-debug.fs-uae
 
-.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test voidstrike-host-harness voidstrike-host-smoke amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-voidstrike-harness amiga-voidstrike-normal-harness amiga-voidstrike-a1200 amiga-voidstrike-a1200-debug amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf voidstrike-a1200-adf voidstrike-a1200-debug-adf voidstrike-harness-adf voidstrike-harness-normal-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
+.PHONY: all lib examples assets examples/invaders-assets invaders-assets examples/amaze-assets amaze-assets examples/byte-brothers-assets byte-brothers-assets tools test voidstrike-host-harness voidstrike-host-smoke amiga-lib amiga-examples amiga-a1200-lib amiga-a1200-examples amiga-input-probe-a1200-debug amiga-input-probe-harness amiga-input-probe-synthetic-harness amiga-byte-brothers-harness amiga-voidstrike-harness amiga-voidstrike-normal-harness amiga-voidstrike-a1200 amiga-voidstrike-a1200-debug amiga-invaders-debug amiga-invaders-buffered-debug amiga-invaders-sync amiga-invaders-a1200-debug amiga-amaze-a1200-debug amiga-byte-brothers-a1200-debug adfs input-probe-a1200-debug-adf input-probe-harness-adf input-probe-synthetic-harness-adf emulator-input-probe emulator-input-probe-synthetic emulator-byte-brothers emulator-byte-brothers-scroll emulator-byte-brothers-input emulator-byte-brothers-all emulator-byte-brothers-sprite-check emulator-byte-brothers-visual emulator-byte-brothers-host-visual emulator-voidstrike-full-run emulator-voidstrike-performance invaders-debug-adf invaders-buffered-debug-adf invaders-sync-adf invaders-a1200-adf invaders-a1200-debug-adf amaze-a1200-adf amaze-a1200-debug-adf byte-brothers-a1200-adf byte-brothers-a1200-debug-adf voidstrike-a1200-adf voidstrike-a1200-debug-adf voidstrike-harness-adf voidstrike-harness-normal-adf byte-brothers-a1200-debug-fsuae-config run-byte-brothers-a1200-debug force-byte-brothers-a1200-debug-adf release-package clean-assets clean
 
 force-byte-brothers-a1200-debug-adf:
 
@@ -375,6 +375,12 @@ emulator-byte-brothers-visual:
 
 emulator-byte-brothers-host-visual:
 	python3 tools/emulator/run_byte_brothers_host_visual.py --scenario scroll
+
+emulator-voidstrike-full-run:
+	$(MAKE) voidstrike-harness-normal-adf VOIDSTRIKE_HARNESS_SCENARIO_ID=0 VOIDSTRIKE_HARNESS_FRAME_LIMIT=21000
+	python3 tools/emulator/run_voidstrike.py --adf $(VOIDSTRIKE_NORMAL_HARNESS_ADF) --scenario victory --build-kind normal --machine a1200 --source-commit $$(git rev-parse HEAD) --timeout 420
+
+emulator-voidstrike-performance: emulator-voidstrike-full-run
 
 amaze-a1200-adf: $(AMAZE_A1200_ADF)
 
