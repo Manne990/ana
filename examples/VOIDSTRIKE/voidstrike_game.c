@@ -32,8 +32,9 @@ static ANA_TileLayer terrain_layer;
 static ANA_Camera terrain_camera;
 static ANA_Rect previous_dynamic_rects[DYNAMIC_RECT_GENERATIONS][MAX_DYNAMIC_RECTS];
 static int previous_dynamic_rect_counts[DYNAMIC_RECT_GENERATIONS];
-static int previous_dynamic_camera_y[DYNAMIC_RECT_GENERATIONS];
 static int previous_dynamic_valid[DYNAMIC_RECT_GENERATIONS];
+static int previous_dynamic_draw_camera_y;
+static int previous_dynamic_draw_valid;
 static int dynamic_record_generation;
 static int dynamic_write_generation;
 static ANA_Image player_base_image,player_speed_image,player_twin_image,player_wide_image,player_laser_image;
@@ -264,7 +265,97 @@ static void h_write_result(void)
     fclose(f);
     h_phase("shutdown");
 }
-static void h_drive_input(void) { int i,dodge,target,hazard; if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2||VOIDSTRIKE_HARNESS_SCENARIO_ID==3)return;if(t.frame<8){ana_input_set_pending_key_state(ANA_KEY_CTRL,1);ana_input_advance_without_poll();return;}if(t.frame==8){ana_input_set_pending_key_state(ANA_KEY_CTRL,0);ana_input_advance_without_poll();return;}if(VOIDSTRIKE_HARNESS_SCENARIO_ID==1){if(t.frame>=VOIDSTRIKE_HARNESS_FRAME_LIMIT&&!h_restart_requested){h_restart_requested=1;ana_input_pulse_key_event(ANA_KEY_CTRL);ana_input_advance_without_poll();}return;}dodge=0;target=-1;hazard=terrain_hazard_tile(px/16,(scroll+py-TOP)/16)||terrain_hazard_tile((px+PLAYER_W)/16,(scroll+py-TOP)/16);for(i=0;i<MAX_ACTORS;i++){if(cores[i].active&&cores[i].y>py-64)target=i;if(hostile_bullets[i].active&&hostile_bullets[i].y>=py-28&&hostile_bullets[i].y<=py+PLAYER_H&&px<hostile_bullets[i].x+4&&px+PLAYER_W>hostile_bullets[i].x)dodge=1;}ana_input_pulse_key_event(ANA_KEY_CTRL);if(dodge||hazard)ana_input_pulse_key_event(px<150?ANA_KEY_RIGHT:ANA_KEY_LEFT);else if(target>=0){if(cores[target].x<px)ana_input_pulse_key_event(ANA_KEY_LEFT);else if(cores[target].x>px+PLAYER_W)ana_input_pulse_key_event(ANA_KEY_RIGHT);}else if(t.boss_phase){if(px<122)ana_input_pulse_key_event(ANA_KEY_RIGHT);else if(px>128)ana_input_pulse_key_event(ANA_KEY_LEFT);}else if(t.frame<21)ana_input_pulse_key_event(ANA_KEY_LEFT);if(t.selected_module>=0)ana_input_pulse_key_event(ANA_KEY_SPACE);if(VOIDSTRIKE_HARNESS_SCENARIO_ID==4&&(t.frame%120)==0)ana_input_pulse_key_event(ANA_KEY_SPACE);ana_input_advance_without_poll(); }
+static void h_drive_input(void)
+{
+    int i;
+    int dodge;
+    int target;
+    int hazard;
+    int threat_y;
+    int threat_direction;
+
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==2||
+            VOIDSTRIKE_HARNESS_SCENARIO_ID==3)return;
+
+    if(t.frame<8){
+        ana_input_set_pending_key_state(ANA_KEY_CTRL,1);
+        ana_input_advance_without_poll();
+        return;
+    }
+    if(t.frame==8){
+        ana_input_set_pending_key_state(ANA_KEY_CTRL,0);
+        ana_input_advance_without_poll();
+        return;
+    }
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==1){
+        if(t.frame>=VOIDSTRIKE_HARNESS_FRAME_LIMIT&&!h_restart_requested){
+            h_restart_requested=1;
+            ana_input_pulse_key_event(ANA_KEY_CTRL);
+            ana_input_advance_without_poll();
+        }
+        return;
+    }
+
+    dodge=0;
+    target=-1;
+    threat_y=-1;
+    threat_direction=0;
+    hazard=terrain_hazard_tile(px/16,(scroll+py-TOP)/16)||
+        terrain_hazard_tile((px+PLAYER_W)/16,(scroll+py-TOP)/16);
+    for(i=0;i<MAX_ACTORS;i++){
+        if(cores[i].active&&cores[i].y>py-64)target=i;
+        if(hostile_bullets[i].active&&
+                hostile_bullets[i].y>=py-28&&
+                hostile_bullets[i].y<=py+PLAYER_H&&
+                px<hostile_bullets[i].x+4&&
+                px+PLAYER_W>hostile_bullets[i].x)dodge=1;
+
+        /* Enemy bodies descend by one or two pixels in play() before its
+         * collision test.  Start moving away while the closest body is at
+         * most 48 pixels above the ship and within a 20-pixel side margin. */
+        if(enemies[i].active&&enemies[i].y>=py-48&&
+                enemies[i].y<=py+PLAYER_H&&
+                enemies[i].x+14>=px-20&&
+                enemies[i].x<=px+PLAYER_W+20&&
+                enemies[i].y>threat_y){
+            threat_y=enemies[i].y;
+            if(enemies[i].x+7<px+PLAYER_W/2)
+                threat_direction=ANA_KEY_RIGHT;
+            else
+                threat_direction=ANA_KEY_LEFT;
+            if(px<=24&&threat_direction==ANA_KEY_LEFT)
+                threat_direction=ANA_KEY_RIGHT;
+            else if(px>=ANA_DEFAULT_WIDTH-PLAYER_W-24&&
+                    threat_direction==ANA_KEY_RIGHT)
+                threat_direction=ANA_KEY_LEFT;
+        }
+    }
+
+    ana_input_pulse_key_event(ANA_KEY_CTRL);
+    if(dodge||hazard)
+        ana_input_pulse_key_event(px<150?ANA_KEY_RIGHT:ANA_KEY_LEFT);
+    else if(threat_direction)
+        ana_input_pulse_key_event(threat_direction);
+    else if(target>=0){
+        if(cores[target].x<px)
+            ana_input_pulse_key_event(ANA_KEY_LEFT);
+        else if(cores[target].x>px+PLAYER_W)
+            ana_input_pulse_key_event(ANA_KEY_RIGHT);
+    }else if(t.boss_phase){
+        if(px<122)
+            ana_input_pulse_key_event(ANA_KEY_RIGHT);
+        else if(px>128)
+            ana_input_pulse_key_event(ANA_KEY_LEFT);
+    }else if(t.frame<21){
+        ana_input_pulse_key_event(ANA_KEY_LEFT);
+    }
+
+    if(t.selected_module>=0)
+        ana_input_pulse_key_event(ANA_KEY_SPACE);
+    if(VOIDSTRIKE_HARNESS_SCENARIO_ID==4&&(t.frame%120)==0)
+        ana_input_pulse_key_event(ANA_KEY_SPACE);
+    ana_input_advance_without_poll();
+}
 static void h_observe_input(void) { ANA_InputDebug d; int direction; ana_input_debug_snapshot(&d); direction=ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_LEFT)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_RIGHT)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_UP)||ana_input_direction(ANA_INPUT_DEVICE_0,ANA_INPUT_DOWN);if(d.key_ctrl_down&&!h_prev_ctrl){h_keyboard_events++;h_ctrl_events++;}if(d.key_space_down&&!h_prev_space){h_keyboard_events++;h_space_events++;}if(!d.key_ctrl_down&&ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1)&&!h_prev_fire){h_joystick_events++;h_joy_fire_events++;}if(!d.key_ctrl_down&&direction&&!h_prev_direction){h_joystick_events++;h_joy_direction_events++;}h_prev_ctrl=d.key_ctrl_down;h_prev_space=d.key_space_down;h_prev_fire=ana_input_action(ANA_INPUT_DEVICE_0,ANA_ACTION_1);h_prev_direction=direction; }
 static void h_measure_window(void)
 {
@@ -371,9 +462,10 @@ static void restore_previous_dynamic_regions(void)
     int i;
     int screen_dy;
 
+    screen_dy=previous_dynamic_draw_valid?
+        previous_dynamic_draw_camera_y-terrain_camera.y:0;
     for(generation=0;generation<DYNAMIC_RECT_GENERATIONS;generation++){
         if(!previous_dynamic_valid[generation])continue;
-        screen_dy=previous_dynamic_camera_y[generation]-terrain_camera.y;
         for(i=0;i<previous_dynamic_rect_counts[generation];i++){
             screen_rect=previous_dynamic_rects[generation][i];
             screen_rect.y+=screen_dy;
@@ -387,9 +479,10 @@ static void restore_previous_dynamic_regions(void)
             ana_tile_layer_restore_world_rect(&terrain_layer,world_rect);
         }
     }
+    previous_dynamic_draw_camera_y=terrain_camera.y;
+    previous_dynamic_draw_valid=1;
     dynamic_record_generation=dynamic_write_generation;
     previous_dynamic_rect_counts[dynamic_record_generation]=0;
-    previous_dynamic_camera_y[dynamic_record_generation]=terrain_camera.y;
     previous_dynamic_valid[dynamic_record_generation]=1;
     dynamic_write_generation=(dynamic_write_generation+1)%
         DYNAMIC_RECT_GENERATIONS;
