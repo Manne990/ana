@@ -57,7 +57,7 @@ static const ANA_Color palette[16]={{0,0,0},{17,17,34},{34,34,51},{51,68,85},{85
 static int hit(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) { return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by; }
 static int terrain_hazard_tile(int tx,int ty) { return (ty%29)==7&&((tx%7)==2||(tx%7)==3); }
 static unsigned char terrain_tile(int tx,int ty,void *user_data) { (void)user_data; if(terrain_hazard_tile(tx,ty))return 3u;return (unsigned char)((tx + ty * 3) % 3); }
-static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; if(null_foundry_tiles_image)ana_draw_image_frame(null_foundry_tiles_image,(int)tile,x,y);else ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,16,16); }
+static void terrain_draw(unsigned char tile,int x,int y,void *user_data) { (void)user_data; if(tile==3u&&null_foundry_tiles_image)ana_draw_image_frame(null_foundry_tiles_image,3,x,y);else ana_fill_rect(tile==0?3u:(tile==1?4u:8u),x,y,16,16); }
 static void clear_actors(Actor *a) { int i; for(i=0;i<MAX_ACTORS;i++)a[i].active=0; }
 static ANA_Image player_image_for_modules(void) { if(t.installed_modules&8u)return player_laser_image;if(t.installed_modules&4u)return player_wide_image;if(t.installed_modules&2u)return player_twin_image;if(t.installed_modules&1u)return player_speed_image;return player_base_image; }
 static ANA_Image enemy_image_for_type(int type) { return type==0?turret_image:(type==1?crawler_image:drone_image); }
