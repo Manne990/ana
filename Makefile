@@ -266,16 +266,16 @@ voidstrike-host-smoke: $(VOIDSTRIKE_HOST_HARNESS_BIN)
 	rm -f build/voidstrike-harness-result.txt
 	ANA_HOST_UNPACED=1 $(VOIDSTRIKE_HOST_HARNESS_BIN)
 	test -f build/voidstrike-harness-result.txt
-	rg -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
-	rg -qx 'result_complete=1' build/voidstrike-harness-result.txt
+	grep -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
+	grep -qx 'result_complete=1' build/voidstrike-harness-result.txt
 
 voidstrike-host-restart: $(VOIDSTRIKE_SRCS) $(VOIDSTRIKE_HEADERS) $(LIBANA) $(VOIDSTRIKE_ASSET_STAMP)
 	mkdir -p build/host-harness/restart
 	$(CC) $(CFLAGS) -DVOIDSTRIKE_EMULATOR_HARNESS -DVOIDSTRIKE_HARNESS_SCENARIO_ID=1 -DVOIDSTRIKE_HARNESS_FRAME_LIMIT=200 $(VOIDSTRIKE_SRCS) $(LIBANA) $(LDFLAGS) -o build/host-harness/restart/voidstrike
 	rm -f build/voidstrike-harness-result.txt
 	ANA_HOST_UNPACED=1 build/host-harness/restart/voidstrike
-	rg -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
-	rg -qx 'restart_events=1' build/voidstrike-harness-result.txt
+	grep -qx 'terminal_state=game-over' build/voidstrike-harness-result.txt
+	grep -qx 'restart_events=1' build/voidstrike-harness-result.txt
 
 amiga-lib: $(AMIGA_LIBANA)
 
