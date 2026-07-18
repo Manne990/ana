@@ -163,7 +163,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build-kind", choices=("normal", "debug"), required=True)
     parser.add_argument("--machine", choices=sorted(MACHINE_CONFIGS), default="a1200")
     parser.add_argument("--source-commit", default=None)
-    parser.add_argument("--timeout", type=float, default=360.0)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=420.0,
+        help="Wall-clock allowance for boot plus the approximately five-minute full run.",
+    )
     return parser.parse_args()
 
 
