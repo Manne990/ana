@@ -156,6 +156,38 @@ def print_diagnostics(result_dir: Path) -> None:
             print(path.read_text(errors="replace")[-8000:])
 
 
+def write_runner_failure(
+    result_dir: Path, *, source_commit: str, adf_sha256: str, scenario: str,
+    machine: str, build_kind: str, timeout: float, elapsed: float,
+) -> Path:
+    phase_path = result_dir / PHASE_NAME
+    phase = "missing"
+    if phase_path.exists():
+        for line in phase_path.read_text(errors="replace").splitlines():
+            if line.startswith("phase="):
+                phase = line.split("=", 1)[1].strip()
+                break
+    path = result_dir / "runner_failure.txt"
+    path.write_text(
+        "\n".join(
+            (
+                "reason=no_complete_voidstrike_result",
+                f"source_commit={source_commit}",
+                f"adf_sha256={adf_sha256}",
+                f"requested_scenario={scenario}",
+                f"machine_profile={machine}",
+                f"build_kind={build_kind}",
+                f"timeout_seconds={timeout:.3f}",
+                f"elapsed_seconds={elapsed:.3f}",
+                f"last_phase={phase}",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adf", type=Path, required=True)
@@ -201,6 +233,7 @@ def main() -> int:
     config = write_config(options, result_dir)
     print(f"VOIDSTRIKE isolated result directory: {result_dir}")
     print(f"ADF SHA-256: {adf_sha256}")
+    wall_start = time.monotonic()
     process = subprocess.Popen(
         [str(FS_UAE), str(config)], cwd=ROOT,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -218,6 +251,17 @@ def main() -> int:
         terminate(process)
     if not final_result(result_path):
         print("No complete VOIDSTRIKE result was produced.", file=sys.stderr)
+        failure = write_runner_failure(
+            result_dir,
+            source_commit=source_commit,
+            adf_sha256=adf_sha256,
+            scenario=args.scenario,
+            machine=args.machine,
+            build_kind=args.build_kind,
+            timeout=args.timeout,
+            elapsed=time.monotonic() - wall_start,
+        )
+        print(f"Runner failure record: {failure}", file=sys.stderr)
         print_diagnostics(result_dir)
         return 1
     values = contract.parse_result(result_path)
