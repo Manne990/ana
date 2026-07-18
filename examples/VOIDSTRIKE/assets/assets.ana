@@ -1,0 +1,28 @@
+ANA_ASSETS 1
+
+# One original 16-colour Null Foundry palette. Index 0 is transparent.
+palette voidstrike palette.ppm --colors 16
+
+image player_base player_base.ppm --palette voidstrike --transparent #000000
+image player_speed player_speed.ppm --palette voidstrike --transparent #000000
+image player_twin player_twin.ppm --palette voidstrike --transparent #000000
+image player_wide player_wide.ppm --palette voidstrike --transparent #000000
+image player_laser player_laser.ppm --palette voidstrike --transparent #000000
+image defense_node defense_node.ppm --palette voidstrike --transparent #000000
+image maintenance_crawler maintenance_crawler.ppm --palette voidstrike --transparent #000000
+image security_drone security_drone.ppm --palette voidstrike --frame-width 20 --frame-height 20 --transparent #000000
+image reactor_guardian reactor_guardian.ppm --palette voidstrike --transparent #000000
+image player_shot player_shot.ppm --palette voidstrike --transparent #000000
+image hostile_shot hostile_shot.ppm --palette voidstrike --transparent #000000
+image energy_core energy_core.ppm --palette voidstrike --transparent #000000
+image explosion explosion.ppm --palette voidstrike --frame-width 16 --frame-height 16 --transparent #000000
+image null_foundry_tiles null_foundry_tiles.ppm --palette voidstrike --frame-width 16 --frame-height 16 --transparent #000000
+image module_dock module_dock.ppm --palette voidstrike --frame-width 32 --frame-height 16 --transparent #000000
+image title_wordmark title_wordmark.ppm --palette voidstrike --transparent #000000
+
+sound fire fire.anasfx
+sound pickup pickup.anasfx
+sound install install.anasfx
+sound explosion explosion.anasfx
+sound player_death player_death.anasfx
+sound victory victory.anasfx
