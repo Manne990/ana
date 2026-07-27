@@ -1,0 +1,10 @@
+ANA_SOUND 1
+wave noise
+rate 8000
+samples 480
+volume 44
+priority 3
+attack 3
+release 90
+amplitude 54 10
+period 7 1

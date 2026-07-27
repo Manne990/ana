@@ -841,6 +841,7 @@ void ana_input_debug_snapshot(ANA_InputDebug* debug)
         debug->current_state[i] = ana_current_input[i];
         debug->backend_state[i] = ana_backend_input[i];
     }
+    debug->key_ctrl_down = ana_pending_key_state[ANA_KEY_CTRL];
     debug->key_c_down = ana_pending_key_state[ANA_KEY_C];
     debug->key_q_down = ana_pending_key_state[ANA_KEY_Q];
     debug->key_escape_down = ana_pending_key_state[ANA_KEY_ESCAPE];
