@@ -216,6 +216,13 @@ static const unsigned char tile_test_map[2][4] = {
     {0, 3, 0, 4}
 };
 
+static const unsigned char vertical_tile_test_map[4][2] = {
+    {1, 2},
+    {3, 4},
+    {5, 6},
+    {7, 8}
+};
+
 static unsigned char tile_test_read(int tx, int ty, void* user_data)
 {
     (void)user_data;
@@ -232,6 +239,20 @@ static void tile_test_draw(unsigned char tile, int x, int y, void* user_data)
     (void)user_data;
 
     ana_fill_rect(tile, x, y, 2, 2);
+}
+
+static unsigned char vertical_tile_test_read(
+    int tx,
+    int ty,
+    void* user_data)
+{
+    (void)user_data;
+
+    if (tx < 0 || ty < 0 || tx >= 2 || ty >= 4) {
+        return 0u;
+    }
+
+    return vertical_tile_test_map[ty][tx];
 }
 
 static void write_test_image_file(const char* path)
@@ -622,6 +643,62 @@ static void test_retained_render_helpers(void)
     assert(ana_gfx_draw_pixel(12, 20) == 2);
     ana_tile_layer_redraw_world_rect(&tile_layer, ana_rect_make(2, 2, 2, 2));
     assert(ana_gfx_draw_pixel(10, 22) == 3);
+
+    /* Vertical scrolling keeps pixels outside its viewport (HUD bands),
+     * redraws the newly exposed row, and remains correct across flips. */
+    ana_clear(0);
+    ana_fill_rect(12u, 0, 0, 4, 2);
+    ana_fill_rect(13u, 0, 24, 4, 2);
+    ana_camera_init(&camera, 0, 10, 4, 4, 4, 8);
+    ana_camera_set_position(&camera, 0, 0);
+    ana_tile_layer_init(
+        &tile_layer,
+        ANA_LAYER_VERTICAL_SCROLL,
+        0,
+        2,
+        2,
+        2,
+        4);
+    ana_tile_layer_set_callbacks(
+        &tile_layer,
+        vertical_tile_test_read,
+        tile_test_draw,
+        0);
+    ana_tile_layer_set_viewport(&tile_layer, ana_rect_make(0, 10, 4, 4));
+    ana_tile_layer_set_camera(&tile_layer, &camera);
+    ana_tile_layer_set_clear_color(&tile_layer, 9u);
+    ana_tile_layer_set_scroll_backend(
+        &tile_layer,
+        ANA_SCROLL_BACKEND_HARDWARE);
+    ana_tile_layer_draw(&tile_layer);
+    assert(ana_gfx_draw_pixel(0, 10) == 1);
+    assert(ana_gfx_draw_pixel(2, 10) == 2);
+    assert(ana_gfx_draw_pixel(0, 12) == 3);
+    assert(ana_gfx_draw_pixel(0, 0) == 12);
+    assert(ana_gfx_draw_pixel(0, 24) == 13);
+    ana_camera_set_position(&camera, 0, 2);
+    ana_tile_layer_set_camera(&tile_layer, &camera);
+    ana_tile_layer_draw(&tile_layer);
+    assert(ana_gfx_draw_pixel(0, 10) == 3);
+    assert(ana_gfx_draw_pixel(2, 10) == 4);
+    assert(ana_gfx_draw_pixel(0, 12) == 5);
+    assert(ana_gfx_draw_pixel(0, 0) == 12);
+    assert(ana_gfx_draw_pixel(0, 24) == 13);
+    ana_present();
+    assert(ana_gfx_front_pixel(0, 10) == 3);
+    assert(ana_gfx_front_pixel(0, 12) == 5);
+
+    ana_layer_mark_dirty(&tile_layer.layer);
+    ana_tile_layer_draw(&tile_layer);
+    ana_fill_rect(12u, 0, 0, 4, 2);
+    ana_fill_rect(13u, 0, 24, 4, 2);
+    assert(ana_gfx_draw_pixel(0, 10) == 3);
+    assert(ana_gfx_draw_pixel(0, 12) == 5);
+    assert(ana_gfx_draw_pixel(0, 0) == 12);
+    assert(ana_gfx_draw_pixel(0, 24) == 13);
+    ana_present();
+    assert(ana_gfx_front_pixel(0, 10) == 3);
+    assert(ana_gfx_front_pixel(0, 0) == 12);
 
     ana_layer_set_redraw(&layer, retained_test_redraw, &marker);
     ana_layer_mark_dirty(&layer);

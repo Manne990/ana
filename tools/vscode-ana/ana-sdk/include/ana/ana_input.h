@@ -61,6 +61,7 @@ typedef struct ANA_InputDebug {
     unsigned int seen_key_bits;
     unsigned int current_state[ANA_INPUT_DEVICES];
     unsigned int backend_state[ANA_INPUT_DEVICES];
+    int key_ctrl_down;
     int key_c_down;
     int key_q_down;
     int key_escape_down;
